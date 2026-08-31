@@ -7,14 +7,12 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlin.math.abs
-import kotlin.math.ln
 import kotlin.math.roundToInt
 
 /**
- * UI band model used by the 10-band equalizer screen.
- * Android devices frequently expose a different physical band count, so the
- * controller interpolates the 10-band curve onto the device's real bands.
+ * 10-band UI equalizer backed by Android's platform Equalizer.
+ * Hardware EQ implementations may expose fewer bands, so the UI curve is
+ * interpolated onto the real hardware center frequencies.
  */
 data class EqBand(
     val id: Int,
@@ -29,28 +27,16 @@ class EqualizerController {
     private var bassBoostFx: BassBoost? = null
     private var loudnessEnhancer: LoudnessEnhancer? = null
 
-    /** Physical hardware EQ band frequencies in Hz. */
-    private var hardwareFrequenciesHz: IntArray = IntArray(0)
-
-    /** Frequencies shown by the 10-band UI. */
-    private val targetFrequenciesHz = intArrayOf(
-        60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000
-    )
+    private val targetFrequenciesHz = intArrayOf(60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000)
+    private var hardwareFrequenciesHz = IntArray(0)
 
     var isEnabled by mutableStateOf(false)
         private set
 
     val bands = mutableStateListOf(
-        EqBand(0, "60 Hz"),
-        EqBand(1, "170 Hz"),
-        EqBand(2, "310 Hz"),
-        EqBand(3, "600 Hz"),
-        EqBand(4, "1 kHz"),
-        EqBand(5, "3 kHz"),
-        EqBand(6, "6 kHz"),
-        EqBand(7, "12 kHz"),
-        EqBand(8, "14 kHz"),
-        EqBand(9, "16 kHz")
+        EqBand(0, "60 Hz"), EqBand(1, "170 Hz"), EqBand(2, "310 Hz"), EqBand(3, "600 Hz"),
+        EqBand(4, "1 kHz"), EqBand(5, "3 kHz"), EqBand(6, "6 kHz"), EqBand(7, "12 kHz"),
+        EqBand(8, "14 kHz"), EqBand(9, "16 kHz")
     )
 
     var bassBoostLevel by mutableStateOf(0f)
@@ -59,38 +45,29 @@ class EqualizerController {
     var selectedPreset by mutableStateOf("Flat")
         private set
 
-    val presets = listOf(
-        "Flat", "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Custom"
-    )
+    val presets = listOf("Flat", "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Custom")
 
-    /**
-     * Attach effects to the active Media3 audio session.
-     *
-     * The equalizer changes frequency content, which can make music sound
-     * quieter. A small post-EQ loudness makeup gain is therefore used only
-     * when the EQ is active and only enough to avoid the obvious volume drop.
-     * Flat stays at 0 dB makeup so the original level is preserved exactly.
-     */
     fun attachToSession(audioSessionId: Int) {
         if (audioSessionId <= 0) return
-
         try {
             releaseEffects()
 
-            val newEqualizer = Equalizer(0, audioSessionId)
-            equalizer = newEqualizer
+            val eq = Equalizer(0, audioSessionId)
+            val bass = BassBoost(0, audioSessionId)
+            val loudness = LoudnessEnhancer(audioSessionId)
 
-            hardwareFrequenciesHz = IntArray(newEqualizer.numberOfBands.toInt().coerceAtLeast(0)) { index ->
-                (newEqualizer.getCenterFreq(index.toShort()) / 1000).coerceAtLeast(1)
+            equalizer = eq
+            bassBoostFx = bass
+            loudnessEnhancer = loudness
+
+            val count = eq.numberOfBands.toInt().coerceAtLeast(0)
+            hardwareFrequenciesHz = IntArray(count) { index ->
+                eq.getCenterFreq(index.toShort()).toInt() / 1000
             }
 
-            bassBoostFx = BassBoost(0, audioSessionId)
-            loudnessEnhancer = LoudnessEnhancer(audioSessionId)
-
-            equalizer?.enabled = isEnabled
-            bassBoostFx?.enabled = isEnabled
-            loudnessEnhancer?.enabled = isEnabled
-
+            eq.enabled = isEnabled
+            bass.enabled = isEnabled
+            loudness.enabled = isEnabled
             applyAllToHardware()
             applyBassBoostToHardware()
             applyMakeupGain()
@@ -117,12 +94,8 @@ class EqualizerController {
 
     fun updateBandLevel(bandIndex: Int, levelDb: Int) {
         if (bandIndex !in bands.indices) return
-
-        val clamped = levelDb.coerceIn(
-            bands[bandIndex].minLevelDb,
-            bands[bandIndex].maxLevelDb
-        )
-        bands[bandIndex] = bands[bandIndex].copy(currentLevelDb = clamped)
+        val safe = levelDb.coerceIn(bands[bandIndex].minLevelDb, bands[bandIndex].maxLevelDb)
+        bands[bandIndex] = bands[bandIndex].copy(currentLevelDb = safe)
         selectedPreset = "Custom"
         applyAllToHardware()
         applyMakeupGain()
@@ -136,48 +109,31 @@ class EqualizerController {
 
     fun applyPreset(presetName: String) {
         selectedPreset = if (presetName in presets) presetName else "Custom"
-
-        // Conservative musical curves. They intentionally avoid excessive cuts
-        // and boosts so the EQ improves clarity without making the master sound
-        // noticeably quieter or overly compressed.
-        val presetValues = when (presetName) {
-            "Bass Boost" -> listOf(5, 4, 2, 1, 0, 0, 0, 0, -1, -1)
-            "Rock" -> listOf(4, 3, 1, 2, 3, 4, 4, 3, 2, 1)
-            "Pop" -> listOf(-1, 1, 3, 3, 2, 2, 1, 2, 3, 3)
-            "Jazz" -> listOf(3, 2, 1, 2, 2, 2, 1, 2, 3, 3)
-            "Electronic" -> listOf(5, 4, 2, 1, 2, 3, 4, 5, 4, 3)
-            "Vocal" -> listOf(-2, -1, 2, 4, 4, 3, 2, 1, 0, -1)
+        val values = when (presetName) {
+            "Bass Boost" -> listOf(8, 6, 4, 2, 1, 0, 0, 0, -1, -2)
+            "Rock" -> listOf(5, 4, 1, 3, 4, 4, 5, 4, 3, 2)
+            "Pop" -> listOf(-1, 2, 4, 4, 3, 2, 0, 2, 3, 4)
+            "Jazz" -> listOf(4, 3, 1, 2, 3, 2, 1, 3, 4, 4)
+            "Electronic" -> listOf(7, 6, 3, 1, 2, 4, 5, 6, 5, 4)
+            "Vocal" -> listOf(-2, 0, 3, 5, 5, 4, 2, 1, 0, -1)
             else -> List(10) { 0 }
         }
-
-        bands.indices.forEach { index ->
-            bands[index] = bands[index].copy(currentLevelDb = presetValues[index])
-        }
-
+        for (i in bands.indices) bands[i] = bands[i].copy(currentLevelDb = values[i])
         applyAllToHardware()
+        applyBassBoostToHardware()
         applyMakeupGain()
     }
 
-    /**
-     * Interpolate the 10-band UI curve onto the actual hardware bands.
-     * Log-frequency interpolation is used because audio pitch perception is
-     * approximately logarithmic, producing a much smoother curve than mapping
-     * every UI band to the nearest physical band.
-     */
+    /** Apply each real hardware band using a linear interpolation of the 10-band UI curve. */
     private fun applyAllToHardware() {
         val eq = equalizer ?: return
-        val count = eq.numberOfBands.toInt()
-        if (count <= 0 || hardwareFrequenciesHz.size != count) return
-
+        if (hardwareFrequenciesHz.isEmpty()) return
         try {
             val range = eq.bandLevelRange
-            for (hardwareIndex in 0 until count) {
-                val frequency = hardwareFrequenciesHz[hardwareIndex]
-                val desiredDb = interpolateUiGain(frequency)
-                val milliBels = (desiredDb * 100.0)
-                    .roundToInt()
-                    .coerceIn(range[0].toInt(), range[1].toInt())
-                    .toShort()
+            for (hardwareIndex in hardwareFrequenciesHz.indices) {
+                val desiredDb = interpolateUiGain(hardwareFrequenciesHz[hardwareIndex])
+                val milliBels = (desiredDb * 100.0).roundToInt()
+                    .coerceIn(range[0].toInt(), range[1].toInt()).toShort()
                 eq.setBandLevel(hardwareIndex.toShort(), milliBels)
             }
         } catch (t: Throwable) {
@@ -186,72 +142,49 @@ class EqualizerController {
     }
 
     private fun interpolateUiGain(frequencyHz: Int): Double {
-        val f = frequencyHz.coerceAtLeast(targetFrequenciesHz.first())
-        if (f <= targetFrequenciesHz.first()) return bands.first().currentLevelDb.toDouble()
-        if (f >= targetFrequenciesHz.last()) return bands.last().currentLevelDb.toDouble()
+        if (frequencyHz <= targetFrequenciesHz.first()) return bands.first().currentLevelDb.toDouble()
+        if (frequencyHz >= targetFrequenciesHz.last()) return bands.last().currentLevelDb.toDouble()
 
-        for (index in 0 until targetFrequenciesHz.lastIndex) {
-            val leftF = targetFrequenciesHz[index]
-            val rightF = targetFrequenciesHz[index + 1]
-            if (f in leftF..rightF) {
-                val leftGain = bands[index].currentLevelDb.toDouble()
-                val rightGain = bands[index + 1].currentLevelDb.toDouble()
-                val leftLog = ln(leftF.toDouble())
-                val rightLog = ln(rightF.toDouble())
-                val x = (ln(f.toDouble()) - leftLog) / (rightLog - leftLog)
-                return leftGain + (rightGain - leftGain) * x
+        for (i in 0 until targetFrequenciesHz.lastIndex) {
+            val leftF = targetFrequenciesHz[i]
+            val rightF = targetFrequenciesHz[i + 1]
+            if (frequencyHz <= rightF) {
+                val fraction = (frequencyHz - leftF).toDouble() / (rightF - leftF).toDouble()
+                val leftGain = bands[i].currentLevelDb.toDouble()
+                val rightGain = bands[i + 1].currentLevelDb.toDouble()
+                return leftGain + ((rightGain - leftGain) * fraction)
             }
         }
         return 0.0
     }
 
-    /** Apply bass boost without letting it silently attenuate the master. */
-    private fun applyBassBoostToHardware() {
+    /**
+     * Makeup gain is positive-only and intentionally modest so enabling EQ does
+     * not reduce the user's original master level.
+     */
+    private fun applyMakeupGain() {
+        val enhancer = loudnessEnhancer ?: return
         try {
-            // A small boost is easier to keep clean than driving the platform
-            // effect to full strength. Bass Boost remains independently enabled.
-            val strength = (bassBoostLevel * 1000f)
-                .roundToInt()
-                .coerceIn(0, 1000)
-                .toShort()
-            bassBoostFx?.setStrength(strength)
+            val nonZero = bands.any { it.currentLevelDb != 0 } || bassBoostLevel > 0f
+            val gainDb: Double = if (!isEnabled || !nonZero) {
+                0.0
+            } else {
+                val maxCutDb = bands.minOf { it.currentLevelDb }.coerceAtMost(0).let { -it }
+                val boostHeadroomDb = bands.maxOf { it.currentLevelDb }.coerceAtLeast(0)
+                val requested = 0.5 + (maxCutDb * 0.75) + (bassBoostLevel.toDouble() * 1.0) - (boostHeadroomDb * 0.15)
+                requested.coerceIn(0.0, 4.0)
+            }
+            enhancer.setTargetGain((gainDb * 1000.0).roundToInt())
+            enhancer.enabled = isEnabled
         } catch (t: Throwable) {
             t.printStackTrace()
         }
     }
 
-    /**
-     * Makeup gain is never negative, so enabling the EQ cannot lower the
-     * original master volume. Non-flat curves get a modest 0..4 dB lift,
-     * while Flat remains exactly 0 dB.
-     */
-    private fun applyMakeupGain() {
-        val enhancer = loudnessEnhancer ?: return
+    private fun applyBassBoostToHardware() {
         try {
-            if (!isEnabled) {
-                enhancer.setTargetGain(0)
-                return
-            }
-
-            val nonZeroBandCount = bands.count { it.currentLevelDb != 0 }
-            if (nonZeroBandCount == 0 && bassBoostLevel <= 0f) {
-                enhancer.setTargetGain(0)
-                return
-            }
-
-            val averageGain = bands.map { it.currentLevelDb.toDouble() }.average()
-            val minimumBandGain = bands.minOf { it.currentLevelDb }
-            val bassComponent = bassBoostLevel * 1.5
-
-            // Compensate for attenuation while keeping a small presentation
-            // lift so presets do not sound quieter than the unprocessed signal.
-            val attenuationCompensation = (-averageGain).coerceAtLeast(0.0)
-            val lowBandCompensation = (-minimumBandGain * 0.25).coerceAtLeast(0.0)
-            val desiredDb = (0.75 + attenuationCompensation + bassComponent - lowBandCompensation)
-                .coerceIn(0.0, 4.0)
-
-            enhancer.setTargetGain((desiredDb * 1000.0).roundToInt())
-            enhancer.enabled = true
+            val strength = (bassBoostLevel * 700f).roundToInt().coerceIn(0, 700).toShort()
+            bassBoostFx?.setStrength(strength)
         } catch (t: Throwable) {
             t.printStackTrace()
         }
