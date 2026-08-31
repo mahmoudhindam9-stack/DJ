@@ -35,6 +35,9 @@ jobs:
       - name: Persist DJ Audio Card
         run: python3 .github/add_dj_audio_card.py
 
+      - name: Persist notification permission request
+        run: python3 .github/add_notification_permission.py
+
       - name: Persist expanded DJ effects engine
         run: python3 .github/expand_dj_effects.py
 
@@ -61,11 +64,12 @@ jobs:
                   app/src/main/java/com/example/org/OrgController.kt \
                   app/src/main/java/com/example/org/OrgScreen.kt \
                   .github/add_org_system.py \
-                  .github/add_dj_audio_card.py
+                  .github/add_dj_audio_card.py \
+                  .github/add_notification_permission.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: add persistent DJ audio card [skip ci]"
+            git commit -m "feat: request Android notification permission [skip ci]"
             git push origin HEAD:main
           fi
 
