@@ -157,6 +157,18 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
+                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },
+                    label = { Text("Controls") },
+                    selected = currentDestination?.route == "controls",
+                    onClick = {
+                        navController.navigate("controls") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
                     label = { Text("Mic") },
                     selected = currentDestination?.route == "mic",
@@ -200,6 +212,9 @@ fun MainApp() {
             composable("mic") {
                 MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)
             }
+            composable("controls") {
+                NotificationControlScreen(context = context)
+            }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
             }
@@ -210,7 +225,6 @@ fun MainApp() {
 @Composable
 // KARAOKE_DJ_ENGLISH_V2
 fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
-    val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
 

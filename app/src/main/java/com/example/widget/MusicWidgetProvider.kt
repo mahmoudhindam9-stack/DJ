@@ -13,7 +13,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
         for (appWidgetId in appWidgetIds) {
-            updateAppWidget(context, appWidgetManager, appWidgetId, "مشغل الموسيقى", "اختر أغنية للتشغيل", false)
+            updateAppWidget(context, appWidgetManager, appWidgetId, "Music Player", "Choose a song to play", false)
         }
     }
 
