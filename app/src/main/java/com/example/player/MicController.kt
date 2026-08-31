@@ -46,10 +46,17 @@ class MicController(private val context: Context) {
     var outputDevices by mutableStateOf<List<AudioDeviceInfo>>(emptyList())
         private set
 
+    // Kept publicly writable for compatibility with the existing Compose screen.
     var selectedInputDevice by mutableStateOf<AudioDeviceInfo?>(null)
-        private set
+        set(value) {
+            field = value
+            if (isMicEnabled) applyInputRouting()
+        }
     var selectedOutputDevice by mutableStateOf<AudioDeviceInfo?>(null)
-        private set
+        set(value) {
+            field = value
+            if (isMicEnabled) applyOutputRouting()
+        }
 
     var routingStatus by mutableStateOf("جاهز لتوجيه الصوت")
         private set
@@ -66,11 +73,6 @@ class MicController(private val context: Context) {
         refreshDevices()
     }
 
-    /**
-     * Refresh the devices Android currently exposes to apps.
-     * The app can route to already-connected devices; pairing/connecting the
-     * Bluetooth peripherals is still controlled by the Android Bluetooth UI.
-     */
     @SuppressLint("MissingPermission")
     fun refreshDevices() {
         try {
@@ -90,39 +92,9 @@ class MicController(private val context: Context) {
         }
     }
 
-    fun setInputDevice(device: AudioDeviceInfo?) {
-        selectedInputDevice = device
-        routingStatus = if (device == null) {
-            "مصدر الإدخال: تلقائي"
-        } else {
-            "مصدر الإدخال: ${device.displayName()}"
-        }
-
-        if (isMicEnabled) {
-            applyInputRouting()
-        }
-    }
-
-    fun setOutputDevice(device: AudioDeviceInfo?) {
-        selectedOutputDevice = device
-        routingStatus = if (device == null) {
-            "مخرج الصوت: تلقائي"
-        } else {
-            "مخرج الصوت: ${device.displayName()}"
-        }
-
-        if (isMicEnabled) {
-            applyOutputRouting()
-        }
-    }
-
     @SuppressLint("MissingPermission")
     fun toggleMic(enabled: Boolean, coroutineScope: CoroutineScope) {
-        if (enabled) {
-            startMic(coroutineScope)
-        } else {
-            stopMic()
-        }
+        if (enabled) startMic(coroutineScope) else stopMic()
     }
 
     @SuppressLint("MissingPermission")
@@ -132,9 +104,6 @@ class MicController(private val context: Context) {
         try {
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
-
-            // Bluetooth HFP microphones are communication devices. Using
-            // VOICE_COMMUNICATION allows Android to expose the headset mic.
             val audioSource = if (useBluetoothHfp) {
                 MediaRecorder.AudioSource.VOICE_COMMUNICATION
             } else {
@@ -153,17 +122,8 @@ class MicController(private val context: Context) {
                 audioRecord?.setPreferredDevice(inputDevice)
             }
 
-            // Do not globally force the output to the microphone headset.
-            // A separate AudioTrack can use selectedOutputDevice when the OS
-            // exposes independent input/output routes.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
-                // Communication mode is needed for classic Bluetooth HFP input.
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-
-                // Only request the HFP device as the communication endpoint when
-                // the selected output is the same device. This avoids overriding
-                // a separately selected Bluetooth speaker whenever the platform
-                // permits independent routes.
                 if (selectedOutputDevice?.id == inputDevice?.id) {
                     audioManager.setCommunicationDevice(inputDevice)
                 }
@@ -194,14 +154,10 @@ class MicController(private val context: Context) {
             val sessionId = audioRecord?.audioSessionId ?: 0
             if (sessionId != 0) {
                 if (AcousticEchoCanceler.isAvailable()) {
-                    echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply {
-                        enabled = true
-                    }
+                    echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
                 }
                 if (NoiseSuppressor.isAvailable()) {
-                    noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply {
-                        enabled = true
-                    }
+                    noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
                 }
             }
 
@@ -243,7 +199,6 @@ class MicController(private val context: Context) {
                         val delaySamples = (sampleRate * 0.35).toInt()
                         val delayedIdx = (echoIdx - delaySamples + echoBuffer.size) % echoBuffer.size
                         val delayedSample = echoBuffer[delayedIdx]
-
                         val output = (input + delayedSample * effEcho) * micVolume
                         val clamped = output
                             .coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat())
@@ -319,13 +274,8 @@ class MicController(private val context: Context) {
     private fun updateRoutingStatus() {
         if (!isMicEnabled) return
 
-        val actualInput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            audioRecord?.routedDevice
-        } else null
-        val actualOutput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            audioTrack?.routedDevice
-        } else null
-
+        val actualInput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.routedDevice else null
+        val actualOutput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.routedDevice else null
         val inputName = actualInput?.displayName() ?: selectedInputDevice?.displayName() ?: "تلقائي"
         val outputName = actualOutput?.displayName() ?: selectedOutputDevice?.displayName() ?: "تلقائي"
         routingStatus = "الإدخال: $inputName  •  الإخراج: $outputName"
@@ -379,7 +329,6 @@ class MicController(private val context: Context) {
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
         AudioDeviceInfo.TYPE_BLE_HEADSET,
         AudioDeviceInfo.TYPE_BLE_SPEAKER,
-        AudioDeviceInfo.TYPE_BLE_BROADCAST,
         AudioDeviceInfo.TYPE_BLE_BROADCAST -> true
         else -> false
     }
