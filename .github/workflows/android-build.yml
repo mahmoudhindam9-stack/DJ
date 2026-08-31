@@ -20,6 +20,9 @@ jobs:
         with:
           python-version: '3.x'
 
+      - name: Restore complete Player and DJ screens baseline
+        run: python3 .github/restore_main_screens.py
+
       - name: Persist Karaoke UI and DJ effects upgrade
         run: python3 .github/upgrade_karaoke.py
 
