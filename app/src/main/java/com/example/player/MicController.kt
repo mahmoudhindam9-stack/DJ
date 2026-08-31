@@ -1,7 +1,9 @@
 package com.example.player
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -70,12 +72,39 @@ class MicController(private val context: Context) {
     private val bufferSize = minBufferSize * 2
 
     init {
+        requestBluetoothPermissionsIfNeeded()
         refreshDevices()
+    }
+
+    /** Android 12+ requires runtime Bluetooth permission to inspect connected audio devices. */
+    private fun requestBluetoothPermissionsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val activity = context as? Activity ?: return
+
+        val missing = buildList {
+            if (activity.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
+                add(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (activity.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) != PackageManager.PERMISSION_GRANTED) {
+                add(android.Manifest.permission.BLUETOOTH_SCAN)
+            }
+        }
+
+        if (missing.isNotEmpty()) {
+            activity.requestPermissions(missing.toTypedArray(), BLUETOOTH_PERMISSION_REQUEST_CODE)
+        }
     }
 
     @SuppressLint("MissingPermission")
     fun refreshDevices() {
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                routingStatus = "اسمح للتطبيق بالوصول إلى Bluetooth ثم اضغط تحديث"
+                return
+            }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 inputDevices = audioManager
                     .getDevices(AudioManager.GET_DEVICES_INPUTS)
@@ -86,6 +115,12 @@ class MicController(private val context: Context) {
                     .getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                     .filter { it.isSink }
                     .sortedWith(compareBy({ !it.isBluetoothAudio }, { it.productName?.toString() ?: "" }))
+
+                if (inputDevices.isEmpty() && outputDevices.isEmpty()) {
+                    routingStatus = "لم يجد Android أجهزة صوت متصلة"
+                } else {
+                    routingStatus = "تم تحديث أجهزة الصوت"
+                }
             }
         } catch (t: Throwable) {
             routingStatus = "تعذر قراءة أجهزة الصوت: ${t.message ?: "خطأ غير معروف"}"
@@ -94,7 +129,18 @@ class MicController(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun toggleMic(enabled: Boolean, coroutineScope: CoroutineScope) {
-        if (enabled) startMic(coroutineScope) else stopMic()
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED
+            ) {
+                requestBluetoothPermissionsIfNeeded()
+                routingStatus = "امنح إذن Bluetooth ثم شغّل الميكروفون مرة أخرى"
+                return
+            }
+            startMic(coroutineScope)
+        } else {
+            stopMic()
+        }
     }
 
     @SuppressLint("MissingPermission")
@@ -122,6 +168,10 @@ class MicController(private val context: Context) {
                 audioRecord?.setPreferredDevice(inputDevice)
             }
 
+            // Classic Bluetooth HFP microphone input is a communication route.
+            // We only select it as the communication endpoint when the same
+            // Bluetooth device is also the requested output, because Android's
+            // communication route couples the input/output endpoint.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
                 if (selectedOutputDevice?.id == inputDevice?.id) {
@@ -338,4 +388,8 @@ class MicController(private val context: Context) {
 
     private fun AudioDeviceInfo.displayName(): String =
         productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio Device $id"
+
+    companion object {
+        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 4301
+    }
 }
