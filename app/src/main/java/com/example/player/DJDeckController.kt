@@ -375,6 +375,23 @@ class DJDeck(context: Context, val deckName: String) {
         fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
     }
 
+    fun toggleEffect(effect: DJEffect) {
+        val next = !(effectStates[effect] ?: false)
+        effectStates[effect] = next
+        val processorEffect = DeckFxAudioProcessor.Effect.valueOf(effect.name)
+        fxProcessor.setEffect(processorEffect, next)
+    }
+
+    fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect] ?: false
+
+    fun setEffectAmount(value: Float) {
+        fxProcessor.amount = value.coerceIn(0f, 1f)
+    }
+
+    fun setEffectBeatDivision(value: Float) {
+        fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
+    }
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
