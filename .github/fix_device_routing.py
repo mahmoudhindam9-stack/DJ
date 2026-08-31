@@ -16,17 +16,10 @@ NEW_REFRESH = r'''    @SuppressLint("MissingPermission")
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val allInputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
                 val allOutputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
-
-                inputDevices = allInputs
-                    .filter { it.isSupportedInputDevice() }
-                    .distinctBy { it.id }
+                inputDevices = allInputs.filter { it.isSupportedInputDevice() }.distinctBy { it.id }
                     .sortedWith(compareBy({ it.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO }, { it.displayName() }))
-
-                outputDevices = allOutputs
-                    .filter { it.isSupportedOutputDevice() }
-                    .distinctBy { it.id }
+                outputDevices = allOutputs.filter { it.isSupportedOutputDevice() }.distinctBy { it.id }
                     .sortedWith(compareBy({ !it.isBluetoothOutputDevice() }, { it.displayName() }))
-
                 routingStatus = when {
                     inputDevices.isEmpty() && outputDevices.isEmpty() -> "No supported audio devices detected"
                     else -> "${inputDevices.size} input device(s) • ${outputDevices.size} output device(s)"
@@ -41,45 +34,30 @@ NEW_REFRESH = r'''    @SuppressLint("MissingPermission")
 
 HELPERS = r'''private fun AudioDeviceInfo.isSupportedInputDevice(): Boolean {
     return when (type) {
-        AudioDeviceInfo.TYPE_BUILTIN_MIC,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE,
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLE_HEADSET,
-        AudioDeviceInfo.TYPE_BLE_SPEAKER,
-        AudioDeviceInfo.TYPE_HDMI_ARC,
-        AudioDeviceInfo.TYPE_HDMI_EARC -> isSource
+        AudioDeviceInfo.TYPE_BUILTIN_MIC, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO, AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC -> isSource
         else -> isSource && !isSink
     }
 }
 
 private fun AudioDeviceInfo.isSupportedOutputDevice(): Boolean {
     return when (type) {
-        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
-        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
-        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
-        AudioDeviceInfo.TYPE_WIRED_HEADSET,
-        AudioDeviceInfo.TYPE_USB_DEVICE,
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLE_HEADSET,
-        AudioDeviceInfo.TYPE_BLE_SPEAKER,
-        AudioDeviceInfo.TYPE_HDMI,
-        AudioDeviceInfo.TYPE_HDMI_ARC,
-        AudioDeviceInfo.TYPE_HDMI_EARC -> isSink
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER, AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES, AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP, AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET, AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_HDMI, AudioDeviceInfo.TYPE_HDMI_ARC, AudioDeviceInfo.TYPE_HDMI_EARC -> isSink
         else -> isSink && !isSource
     }
 }
 
-private fun AudioDeviceInfo.isBluetoothOutputDevice(): Boolean {
-    return type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
-        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
-        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
-        type == AudioDeviceInfo.TYPE_BLE_SPEAKER
-}
+private fun AudioDeviceInfo.isBluetoothOutputDevice(): Boolean =
+    type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+    type == AudioDeviceInfo.TYPE_BLE_HEADSET || type == AudioDeviceInfo.TYPE_BLE_SPEAKER
 
 private fun AudioDeviceInfo.displayName(): String {
     val product = productName?.toString()?.trim().orEmpty()
@@ -101,40 +79,23 @@ private fun AudioDeviceInfo.displayName(): String {
 
 '''
 
-
 def patch_mic():
     text = MIC.read_text(encoding="utf-8")
     start = text.find('    @SuppressLint("MissingPermission")\n    fun refreshDevices() {')
-    if start < 0:
-        raise SystemExit("refreshDevices function not found")
+    if start < 0: raise SystemExit("refreshDevices function not found")
     end = text.find('    @SuppressLint("MissingPermission")\n    fun toggleMic', start)
-    if end < 0:
-        raise SystemExit("toggleMic anchor not found")
+    if end < 0: raise SystemExit("toggleMic anchor not found")
     text = text[:start] + NEW_REFRESH + text[end:]
-    marker = '\nclass MicController(private val context: Context) {'
     if 'private fun AudioDeviceInfo.isSupportedInputDevice()' not in text:
+        marker = '\nclass MicController(private val context: Context) {'
         text = text.replace(marker, '\n' + HELPERS + 'class MicController(private val context: Context) {', 1)
     MIC.write_text(text, encoding="utf-8")
 
-
 def patch_main():
     text = MAIN.read_text(encoding="utf-8")
-    old = 'Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedInputDevice?.productName?.toString() ?: "System Default Mic" else "System Default Mic", maxLines = 1)'
-    new = 'Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1)'
-    text = text.replace(old, new, 1)
-    old = 'Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedOutputDevice?.productName?.toString() ?: "System Default Output" else "System Default Output", maxLines = 1)'
-    new = 'Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1)'
-    text = text.replace(old, new, 1)
-    button = '''                Spacer(Modifier.height(8.dp))
-                Button(onClick = { micController.refreshDevices() }, Modifier.fillMaxWidth()) {
-                    Text("Refresh connected devices")
-                }
-'''
-    anchor = '                Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)'
-    if 'Refresh connected devices' not in text and anchor in text:
-        text = text.replace(anchor, button + anchor, 1)
+    text = text.replace('Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedInputDevice?.productName?.toString() ?: "System Default Mic" else "System Default Mic", maxLines = 1)', 'Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1)', 1)
+    text = text.replace('Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedOutputDevice?.productName?.toString() ?: "System Default Output" else "System Default Output", maxLines = 1)', 'Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1)', 1)
     MAIN.write_text(text, encoding="utf-8")
-
 
 if __name__ == "__main__":
     patch_mic()
