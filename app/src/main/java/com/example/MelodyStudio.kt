@@ -1,5 +1,6 @@
 package com.example
 
+import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -30,6 +31,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -37,8 +39,9 @@ import androidx.compose.ui.unit.dp
 private data class MelodyNote(val name: String, val frequencyHz: Double, val durationMs: Int = 260)
 
 @Composable
-fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>) {
+fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context) {
     val sequence = remember { mutableStateListOf<MelodyNote>() }
+    var lastExport by remember { mutableStateOf("") }
     val notes = remember {
         listOf(
             MelodyNote("C4", 261.63), MelodyNote("D4", 293.66), MelodyNote("E4", 329.63),
@@ -64,9 +67,7 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>) {
                 items(notes) { note ->
                     FilterChip(
                         selected = false,
-                        onClick = {
-                            if (sequence.size < 32) sequence.add(note)
-                        },
+                        onClick = { if (sequence.size < 32) sequence.add(note) },
                         label = { Text(note.name) }
                     )
                 }
@@ -80,24 +81,26 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>) {
 
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    if (sequence.isNotEmpty()) MelodyAudio.play(sequence)
-                }) { Text("تشغيل") }
+                Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence) }) { Text("تشغيل") }
                 Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence, loop = true) }) { Text("عزف متكرر") }
-                Button(onClick = { sequence.clear() }) { Text("مسح") }
+                Button(onClick = { sequence.clear(); lastExport = "" }) { Text("مسح") }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
             Button(
                 onClick = {
                     if (sequence.isNotEmpty()) {
-                        val item = MelodyAudio.export(audioLibrary, sequence)
+                        val item = MelodyAudio.export(context, audioLibrary, sequence)
                         audioLibrary.add(item)
+                        lastExport = "تم حفظ ${item.title}"
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("حفظ اللحن في مكتبة الأغاني")
+            ) { Text("حفظ اللحن في مكتبة الأغاني") }
+
+            if (lastExport.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(lastExport, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
             }
         }
     }
@@ -129,24 +132,18 @@ private object MelodyAudio {
                     .build()
                 track.write(pcm, 0, pcm.size)
                 track.play()
-                if (loop) {
-                    while (!Thread.currentThread().isInterrupted) {
-                        Thread.sleep(sequence.sumOf { it.durationMs }.toLong())
-                    }
-                } else {
-                    Thread.sleep(sequence.sumOf { it.durationMs }.toLong() + 80L)
-                }
+                if (loop) Thread.sleep(sequence.sumOf { it.durationMs }.toLong())
+                else Thread.sleep(sequence.sumOf { it.durationMs }.toLong() + 80L)
                 track.stop()
                 track.release()
-            } catch (_: Throwable) {
-            }
+            } catch (_: Throwable) { }
         }.start()
     }
 
-    fun export(audioLibrary: List<AudioItem>, sequence: List<MelodyNote>): AudioItem {
+    fun export(context: Context, audioLibrary: List<AudioItem>, sequence: List<MelodyNote>): AudioItem {
         val pcm = buildPcm(sequence)
         val fileName = "melody_${System.currentTimeMillis()}.wav"
-        val file = File(MyApplicationGlobals.context.filesDir, fileName)
+        val file = File(context.filesDir, fileName)
         FileOutputStream(file).use { out ->
             writeWavHeader(out, pcm.size)
             val bytes = ByteBuffer.allocate(pcm.size * 2).order(ByteOrder.LITTLE_ENDIAN)
