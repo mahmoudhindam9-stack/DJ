@@ -239,6 +239,7 @@ fun MainApp() {
     }
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 // KARAOKE_DJ_ENGLISH_V2
 fun MicScreen(micController: MicController, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
