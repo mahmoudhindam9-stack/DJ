@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 ORG = ROOT / "app/src/main/java/com/example/org/OrgController.kt"
@@ -47,10 +48,37 @@ if "ORG_SOUND_BANK_V2" not in text:
         raise SystemExit("triggerVoice anchor not found")
     text = text.replace(anchor, anchor + addition, 1)
 
+# ---------------- FINAL ORG SOUND MODEL NORMALIZATION ----------------
+# Some earlier generated revisions introduced triggerSpecialSound() with an incompatible
+# SpecialKind/SpecialSound model. Normalize that method to the canonical string-backed bank.
+canonical_specials = '''    // ORG_SPECIAL_SOUND_BRIDGE_V3\n    fun triggerSpecialSound(index: Int) {\n        triggerSpecial(index)\n    }\n\n'''
+text = re.sub(
+    r'\n    fun triggerSpecialSound\(index: Int\) \{.*?\n    \}\n\n',
+    '\n' + canonical_specials,
+    text,
+    count=1,
+    flags=re.S,
+)
+if "fun triggerSpecialSound(index: Int)" not in text:
+    anchor = "    fun triggerVoice() {\n"
+    if anchor not in text:
+        raise SystemExit("triggerVoice anchor missing for ORG bridge")
+    text = text.replace(anchor, canonical_specials + anchor, 1)
+
+# Ensure the string-backed special sound bank exists exactly once as the source of truth.
+if "val specialSounds = listOf(" not in text:
+    anchor = "    fun triggerVoice() {\n"
+    bank = '''    // ORG_SOUND_BANK_V2\n    val specialSounds = listOf(\n        "طبلة", "دربكة", "زفة", "زغروطة", "دف", "رق", "كسرات شعبية", "تصفيق"\n    )\n\n    fun triggerSpecial(index: Int) {\n        when (index.coerceIn(specialSounds.indices)) {\n            0 -> tabla(0.95, 0.95)\n            1 -> tabla(0.48, 0.72)\n            2 -> weddingSequence()\n            3 -> ululation()\n            4 -> noise(0.18, 0.72, 1800.0)\n            5 -> noise(0.10, 0.62, 3200.0)\n            6 -> {\n                tabla(0.62, 0.70)\n                Thread { Thread.sleep(110); tabla(0.36, 0.52) }.start()\n            }\n            else -> clap()\n        }\n    }\n\n'''
+    if anchor not in text:
+        raise SystemExit("triggerVoice anchor missing for ORG bank")
+    text = text.replace(anchor, bank + anchor, 1)
+
 ORG.write_text(text, encoding="utf-8")
 
 screen = SCREEN.read_text(encoding="utf-8")
 screen = screen.replace("engine.setBpm(it.toInt())", "engine.updateBpm(it.toInt())")
+screen = screen.replace("sound.name", "sound")
+screen = screen.replace("engine.triggerSpecialSound(idx)", "engine.triggerSpecialSound(idx)")
 
 # Add a dedicated sound bank card to the Sounds tab.
 if "SPECIAL_SOUNDS_UI_V1" not in screen:
@@ -67,4 +95,4 @@ if "ORG_REFRESH_V1" not in screen:
         screen = screen.replace(anchor2, replacement2, 1)
 
 SCREEN.write_text(screen, encoding="utf-8")
-print("ORG voice bank and Arabic performance sound bank expanded")
+print("ORG voice bank and Arabic performance sound bank normalized")
