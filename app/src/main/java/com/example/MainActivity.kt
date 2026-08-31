@@ -264,7 +264,7 @@ fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<Audi
                 Text("Input Device", style = MaterialTheme.typography.labelSmall)
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { inputExpanded = true }, Modifier.fillMaxWidth()) {
-                        Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedInputDevice?.productName?.toString() ?: "System Default Mic" else "System Default Mic", maxLines = 1)
+                        Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1)
                     }
                     DropdownMenu(inputExpanded, { inputExpanded = false }) {
                         DropdownMenuItem(text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
@@ -277,7 +277,7 @@ fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<Audi
                 Text("Output Device", style = MaterialTheme.typography.labelSmall)
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { outputExpanded = true }, Modifier.fillMaxWidth()) {
-                        Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedOutputDevice?.productName?.toString() ?: "System Default Output" else "System Default Output", maxLines = 1)
+                        Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1)
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
                         DropdownMenuItem(text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
@@ -287,6 +287,10 @@ fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<Audi
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { micController.refreshDevices() }, Modifier.fillMaxWidth()) {
+                    Text("Refresh connected devices")
+                }
                 Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }

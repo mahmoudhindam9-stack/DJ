@@ -36,6 +36,66 @@ enum class BeatFxDivision(val displayName: String, val beats: Float) {
     ONE("1 Beat", 1f)
 }
 
+private fun AudioDeviceInfo.isSupportedInputDevice(): Boolean {
+    return when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_MIC,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_HDMI_ARC,
+        AudioDeviceInfo.TYPE_HDMI_EARC -> isSource
+        else -> isSource && !isSink
+    }
+}
+
+private fun AudioDeviceInfo.isSupportedOutputDevice(): Boolean {
+    return when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_HDMI,
+        AudioDeviceInfo.TYPE_HDMI_ARC,
+        AudioDeviceInfo.TYPE_HDMI_EARC -> isSink
+        else -> isSink && !isSource
+    }
+}
+
+private fun AudioDeviceInfo.isBluetoothOutputDevice(): Boolean {
+    return type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO ||
+        type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+        type == AudioDeviceInfo.TYPE_BLE_SPEAKER
+}
+
+private fun AudioDeviceInfo.displayName(): String {
+    val product = productName?.toString()?.trim().orEmpty()
+    val fallback = when (type) {
+        AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Built-in Microphone"
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Phone Speaker"
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> "Earpiece"
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP -> "Bluetooth Audio"
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO -> "Bluetooth Headset / Mic"
+        AudioDeviceInfo.TYPE_BLE_HEADSET -> "Bluetooth LE Headset"
+        AudioDeviceInfo.TYPE_BLE_SPEAKER -> "Bluetooth LE Speaker"
+        AudioDeviceInfo.TYPE_WIRED_HEADSET -> "Wired Headset / Mic"
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired Headphones"
+        AudioDeviceInfo.TYPE_USB_DEVICE, AudioDeviceInfo.TYPE_USB_HEADSET -> "USB Audio"
+        else -> "Audio Device #$id"
+    }
+    return if (product.isNotEmpty()) product else fallback
+}
+
 class MicController(private val context: Context) {
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
 
@@ -123,26 +183,30 @@ class MicController(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
-                routingStatus = "اسمح للتطبيق بالوصول إلى Bluetooth ثم اضغط تحديث"
+                routingStatus = "Allow Bluetooth access, then refresh devices"
                 return
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
-                    .filter { it.isSource }
-                    .sortedWith(compareBy({ !it.isBluetoothAudio() }, { it.productName?.toString() ?: "" }))
+                val allInputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
+                val allOutputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
 
-                outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
-                    .filter { it.isSink }
-                    .sortedWith(compareBy({ !it.isBluetoothAudio() }, { it.productName?.toString() ?: "" }))
+                inputDevices = allInputs
+                    .filter { it.isSupportedInputDevice() }
+                    .distinctBy { it.id }
+                    .sortedWith(compareBy({ it.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO }, { it.displayName() }))
 
-                routingStatus = if (inputDevices.isEmpty() && outputDevices.isEmpty()) {
-                    "لم يجد Android أجهزة صوت متصلة"
-                } else {
-                    "تم تحديث أجهزة الصوت"
+                outputDevices = allOutputs
+                    .filter { it.isSupportedOutputDevice() }
+                    .distinctBy { it.id }
+                    .sortedWith(compareBy({ !it.isBluetoothOutputDevice() }, { it.displayName() }))
+
+                routingStatus = when {
+                    inputDevices.isEmpty() && outputDevices.isEmpty() -> "No supported audio devices detected"
+                    else -> "${inputDevices.size} input device(s) • ${outputDevices.size} output device(s)"
                 }
             }
         } catch (t: Throwable) {
-            routingStatus = "تعذر قراءة أجهزة الصوت: ${t.message ?: "خطأ غير معروف"}"
+            routingStatus = "Unable to read audio devices: ${t.message ?: "Unknown error"}"
         }
     }
 
