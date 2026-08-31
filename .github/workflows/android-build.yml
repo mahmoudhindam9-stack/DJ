@@ -11,10 +11,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Persist Karaoke UI and DJ effects upgrade
+        run: python3 .github/upgrade_karaoke.py
+      - name: Commit Karaoke upgrade
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/example/MainActivity.kt app/src/main/java/com/example/player/MicController.kt
+          if git diff --cached --quiet; then
+            echo "No Karaoke source changes to commit."
+          else
+            git commit -m "feat: upgrade karaoke studio with DJ effects [skip ci]"
+            git push origin HEAD:main
+          fi
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
@@ -25,3 +42,9 @@ jobs:
         run: chmod +x gradlew
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJ-debug-apk
+          path: app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
