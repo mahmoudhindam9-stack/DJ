@@ -17,10 +17,35 @@ import kotlinx.coroutines.*
 import kotlin.math.sin
 
 enum class DJEffect(val displayName: String) {
+    FILTER("Filter"),
+    FILTER_ROLL("Filter Roll"),
+    NOISE("Noise"),
     FLANGER("Flanger"),
-    REVERB("Studio Reverb"),
-    ECHO("Dub Echo"),
-    CRUSH("Bit Crush")
+    REVERB("Reverb"),
+    ECHO("Echo"),
+    DELAY("Delay"),
+    PHASER("Phaser"),
+    TREMOLO("Tremolo"),
+    CHOPPA("Choppa"),
+    MUTE("Mute"),
+    FADER_TONE("Fader Tone"),
+    ROLL("Roll"),
+    STUTTER("Stutter"),
+    GATE("Gate"),
+    BITCRUSH("Bit Crush"),
+    TELEPHONE("Telephone"),
+    VINYL("Vinyl"),
+    ROBOT("Robot"),
+    RING_MOD("Ring Mod"),
+    AUTO_PAN("Auto Pan"),
+    LOW_PASS("Low Pass"),
+    HIGH_PASS("High Pass"),
+    SPACE("Space"),
+    PITCH_ECHO("Pitch Echo"),
+    TAPE_STOP("Tape Stop"),
+    TRANSFORM("Transform"),
+    SLICE("Slice"),
+    BEAT_REPEAT("Beat Repeat")
 }
 
 enum class SamplerSound(val title: String, val category: String) {
@@ -272,7 +297,9 @@ class DJSoundPlayer(private val context: Context) {
 
 @OptIn(UnstableApi::class)
 class DJDeck(context: Context, val deckName: String) {
-    private val fxProcessor = DeckFxAudioProcessor()
+    val fxProcessor = DeckFxAudioProcessor()
+    val effectStates = mutableStateMapOf<DJEffect, Boolean>()
+
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(
@@ -329,6 +356,23 @@ class DJDeck(context: Context, val deckName: String) {
     fun toggleCrush() {
         isCrushActive = !isCrushActive
         fxProcessor.crushEnabled = isCrushActive
+    }
+
+    fun toggleEffect(effect: DJEffect) {
+        val next = !(effectStates[effect] ?: false)
+        effectStates[effect] = next
+        val processorEffect = DeckFxAudioProcessor.Effect.valueOf(effect.name)
+        fxProcessor.setEffect(processorEffect, next)
+    }
+
+    fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect] ?: false
+
+    fun setEffectAmount(value: Float) {
+        fxProcessor.amount = value.coerceIn(0f, 1f)
+    }
+
+    fun setEffectBeatDivision(value: Float) {
+        fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
     }
 
     init {
