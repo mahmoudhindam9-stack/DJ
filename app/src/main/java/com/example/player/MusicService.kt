@@ -60,7 +60,8 @@ class MusicService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
-            return if (MediaButtonReceiver.handleIntent(mediaSession, intent)) START_STICKY else START_NOT_STICKY
+            MediaButtonReceiver.handleIntent(mediaSession, intent)
+            return START_STICKY
         }
         when (intent?.action) {
             ACTION_TOGGLE_PLAY -> playerController?.togglePlayPause()
