@@ -81,6 +81,21 @@ fun MainApp() {
     val playlists = remember { mutableStateListOf<Playlist>() }
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
+    // NOTIFICATION_PERMISSION_V1
+    val notificationPermissionLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
+    } else null
+
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(
+                context, Manifest.permission.POST_NOTIFICATIONS
+            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher?.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
 
     val db = remember { com.example.room.AppDatabase.getDatabase(context) }
     val playlistRepo = remember { com.example.room.PlaylistRepository(db.playlistDao()) }

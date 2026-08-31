@@ -3,6 +3,12 @@ package com.example
 import android.content.Context
 import android.content.Intent
 import android.provider.Settings
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,11 +28,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
 @Composable
 fun NotificationControlScreen(context: Context) {
+    // NOTIFICATION_PERMISSION_V1
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { }
+    val notificationsAllowed = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
     val prefs = remember { context.getSharedPreferences("external_controls", Context.MODE_PRIVATE) }
     var controlsEnabled by remember { mutableStateOf(prefs.getBoolean("enabled", true)) }
     var lockScreenEnabled by remember { mutableStateOf(prefs.getBoolean("lockscreen", true)) }
@@ -82,6 +96,17 @@ fun NotificationControlScreen(context: Context) {
         ) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Android notification settings", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    if (notificationsAllowed) "Notifications are allowed" else "Notification permission is not granted",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationsAllowed) {
+                    Button(
+                        onClick = { notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS) },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Allow notifications") }
+                }
                 Button(
                     onClick = {
                         val intent = if (android.os.Build.VERSION.SDK_INT >= 26) {
