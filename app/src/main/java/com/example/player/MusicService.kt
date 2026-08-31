@@ -6,6 +6,9 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
+import androidx.media.session.MediaButtonReceiver
+import androidx.media.session.MediaSessionCompat
 import com.example.MainActivity
 import com.example.widget.MusicWidgetProvider
 import android.appwidget.AppWidgetManager
@@ -26,21 +29,47 @@ class MusicService : Service() {
     }
 
     var playerController: AudioPlayerController? = null
+    private lateinit var mediaSession: MediaSessionCompat
 
     override fun onCreate() {
         super.onCreate()
         instance = this
         createNotificationChannel()
+
+        mediaSession = MediaSessionCompat(this, "DJMusicSession").apply {
+            setFlags(
+                MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS
+            )
+            setCallback(object : MediaSessionCompat.Callback() {
+                override fun onPlay() { playerController?.togglePlayPause() }
+                override fun onPause() { playerController?.pause() }
+                override fun onSkipToNext() { playerController?.playNext() }
+                override fun onSkipToPrevious() { playerController?.playPrevious() }
+                override fun onStop() {
+                    playerController?.pause()
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                    stopSelf()
+                }
+                override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
+                    return super.onMediaButtonEvent(mediaButtonEvent)
+                }
+            })
+            setActive(true)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == Intent.ACTION_MEDIA_BUTTON) {
+            return if (MediaButtonReceiver.handleIntent(mediaSession, intent)) START_STICKY else START_NOT_STICKY
+        }
         when (intent?.action) {
             ACTION_TOGGLE_PLAY -> playerController?.togglePlayPause()
             ACTION_NEXT -> playerController?.playNext()
             ACTION_PREV -> playerController?.playPrevious()
             ACTION_STOP -> {
                 playerController?.pause()
-                stopForeground(true)
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
@@ -56,23 +85,40 @@ class MusicService : Service() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val playPauseAction = if (isPlaying) {
-            NotificationCompat.Action(
-                android.R.drawable.ic_media_pause, "Pause",
-                PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE_PLAY), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            )
-        } else {
-            NotificationCompat.Action(
-                android.R.drawable.ic_media_play, "Play",
-                PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE_PLAY), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            )
-        }
+        mediaSession.isActive = true
+        mediaSession.setMetadata(
+            android.support.v4.media.MediaMetadataCompat.Builder()
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                .build()
+        )
+        mediaSession.setPlaybackState(
+            android.support.v4.media.session.PlaybackStateCompat.Builder()
+                .setActions(
+                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
+                        android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or
+                        android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        android.support.v4.media.session.PlaybackStateCompat.ACTION_STOP
+                )
+                .setState(
+                    if (isPlaying) android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
+                    else android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED,
+                    playerController?.currentPositionMs ?: 0L,
+                    if (isPlaying) 1f else 0f
+                )
+                .build()
+        )
 
+        val playPauseAction = NotificationCompat.Action(
+            if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play,
+            if (isPlaying) "Pause" else "Play",
+            PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE_PLAY), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        )
         val prevAction = NotificationCompat.Action(
             android.R.drawable.ic_media_previous, "Previous",
             PendingIntent.getService(this, 2, Intent(this, MusicService::class.java).setAction(ACTION_PREV), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         )
-
         val nextAction = NotificationCompat.Action(
             android.R.drawable.ic_media_next, "Next",
             PendingIntent.getService(this, 3, Intent(this, MusicService::class.java).setAction(ACTION_NEXT), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -89,7 +135,8 @@ class MusicService : Service() {
             .addAction(playPauseAction)
             .addAction(nextAction)
             .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
+                MediaStyle()
+                    .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
             .build()
@@ -120,6 +167,8 @@ class MusicService : Service() {
     }
 
     override fun onDestroy() {
+        mediaSession.isActive = false
+        mediaSession.release()
         super.onDestroy()
         instance = null
     }
