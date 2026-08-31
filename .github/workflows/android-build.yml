@@ -1,5 +1,6 @@
 name: Android Build Verification
 
+# CI verification for the complete DJ feature set.
 on:
   push:
     branches: [ main ]
