@@ -144,6 +144,118 @@ class OrgEngine(private val context: Context) {
         playVoice(voice, volume, 0.80)
     }
 
+    // ORG_SOUND_BANK_V2
+    val specialSounds = listOf(
+        "طبلة", "دربكة", "زفة", "زغروطة", "دف", "رق", "كسرات شعبية", "تصفيق"
+    )
+
+    fun triggerSpecial(index: Int) {
+        when (index.coerceIn(specialSounds.indices)) {
+            0 -> tabla(0.95, 0.95)
+            1 -> tabla(0.48, 0.72)
+            2 -> weddingSequence()
+            3 -> ululation()
+            4 -> noise(0.18, 0.72, 1800.0)
+            5 -> noise(0.10, 0.62, 3200.0)
+            6 -> {
+                tabla(0.62, 0.70)
+                Thread { Thread.sleep(110); tabla(0.36, 0.52) }.start()
+            }
+            else -> clap()
+        }
+    }
+
+    fun previewAllVoices() {
+        Thread {
+            voices.forEach { voice ->
+                val sr = 44100
+                val duration = 0.24
+                val count = (sr * duration).toInt()
+                val data = ShortArray(count)
+                for (i in data.indices) {
+                    val t = i.toDouble() / sr
+                    val p = i.toDouble() / count
+                    val env = when { p < 0.02 -> p / 0.02 else -> exp(-p * 6.0) }
+                    val f = voice.baseHz
+                    val sample = sin(2.0 * PI * f * t) + voice.harmonic * sin(2.0 * PI * f * 2.0 * t)
+                    data[i] = (sample * 8500.0 * volume * env).toInt()
+                        .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                }
+                playPcm(data, sr)
+                Thread.sleep(55L)
+            }
+        }.start()
+    }
+
+    private fun tabla(low: Double, high: Double) {
+        Thread {
+            val sr = 44100
+            val duration = 0.32
+            val count = (sr * duration).toInt()
+            val data = ShortArray(count)
+            for (i in data.indices) {
+                val t = i.toDouble() / sr
+                val p = i.toDouble() / count
+                val env = exp(-p * 8.0)
+                val body = sin(2.0 * PI * (82.0 + 38.0 * low) * t) + 0.55 * sin(2.0 * PI * (165.0 + 70.0 * high) * t)
+                val slap = sin(2.0 * PI * (2100.0 + 1200.0 * high) * t) * exp(-p * 22.0)
+                val n = (Random.nextDouble() * 2.0 - 1.0) * 0.10
+                data[i] = ((body * 0.72 + slap * 0.22 + n) * 15000.0 * env).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+            playPcm(data, sr)
+        }.start()
+    }
+
+    private fun weddingSequence() {
+        Thread {
+            val notes = doubleArrayOf(261.63, 293.66, 329.63, 349.23, 392.00, 440.00)
+            notes.forEachIndexed { i, f ->
+                playTone(f, 0.18, volume * 0.55f, 0.32, 1)
+                if (i % 2 == 1) { Thread.sleep(30L); tabla(0.72, 0.68) }
+                Thread.sleep(105L)
+            }
+        }.start()
+    }
+
+    private fun ululation() {
+        Thread {
+            val sr = 44100
+            val duration = 1.35
+            val count = (sr * duration).toInt()
+            val data = ShortArray(count)
+            for (i in data.indices) {
+                val t = i.toDouble() / sr
+                val p = i.toDouble() / count
+                val vibrato = 6.0 * sin(2.0 * PI * 6.2 * t)
+                val f = 720.0 + 55.0 * sin(2.0 * PI * 1.2 * t) + vibrato
+                val carrier = sin(2.0 * PI * f * t) + 0.42 * sin(2.0 * PI * f * 2.0 * t)
+                val trill = 0.45 * sin(2.0 * PI * (f * 2.05) * t)
+                val gate = if (((t * 11.0).toInt() % 2) == 0) 1.0 else 0.72
+                val env = minOf(1.0, p * 20.0) * exp(-p * 0.45)
+                data[i] = ((carrier + trill) * gate * 8500.0 * volume * env).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+            playPcm(data, sr)
+        }.start()
+    }
+
+    private fun clap() {
+        Thread {
+            val sr = 44100
+            val duration = 0.24
+            val count = (sr * duration).toInt()
+            val data = ShortArray(count)
+            for (i in data.indices) {
+                val p = i.toDouble() / count
+                val env = exp(-p * 15.0)
+                val n = Random.nextDouble() * 2.0 - 1.0
+                data[i] = (n * 12000.0 * volume * env).toInt().toShort()
+            }
+            playPcm(data, sr)
+        }.start()
+    }
+
     private fun playVoice(voice: Voice, amp: Float, duration: Double) {
         Thread {
             val sr = 44100

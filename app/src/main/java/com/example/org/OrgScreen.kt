@@ -107,6 +107,21 @@ fun OrgScreen() {
                             Text("PLAY ${engine.voices[engine.voiceIndex].name.uppercase()}")
                         }
                         Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { engine.previewAllVoices() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("TEST ALL WESTERN + ORIENTAL VOICES")
+                        }
+                        Spacer(Modifier.height(14.dp))
+                        // SPECIAL_SOUNDS_UI_V1
+                        Text("Arabic Performance & Wedding SFX", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text("Tabla • Darbuka • Daf • Riqq • Wedding • Ululation • Claps", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(engine.specialSounds) { sound ->
+                                val idx = engine.specialSounds.indexOf(sound)
+                                FilterChip(selected = false, onClick = { engine.triggerSpecial(idx) }, label = { Text(sound) })
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
                         Text("Volume ${(engine.volume * 100).toInt()}%")
                         Slider(value = engine.volume, onValueChange = { engine.volume = it }, valueRange = 0f..1f)
                     }
