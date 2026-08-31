@@ -30,7 +30,7 @@ jobs:
       - name: Persist safe EQ and Dolby integration
         run: python3 .github/upgrade_equalizer_dolby.py
 
-      - name: Persist Melody Studio upgrade
+      - name: Persist Melody Studio, notifications and external controls
         run: python3 .github/upgrade_melody_studio.py
 
       - name: Commit app upgrades
@@ -40,11 +40,14 @@ jobs:
           git add app/src/main/java/com/example/MainActivity.kt \
                   app/src/main/java/com/example/player/MicController.kt \
                   app/src/main/java/com/example/player/EqualizerController.kt \
-                  app/src/main/java/com/example/MelodyStudio.kt
+                  app/src/main/java/com/example/MelodyStudio.kt \
+                  app/src/main/java/com/example/player/MusicService.kt \
+                  app/src/main/java/com/example/widget/MusicWidgetProvider.kt \
+                  app/src/main/java/com/example/NotificationControlScreen.kt
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: persist karaoke routing EQ Dolby and melody studio [skip ci]"
+            git commit -m "feat: add melody notifications and external playback controls [skip ci]"
             git push origin HEAD:main
           fi
 
