@@ -1,134 +1,124 @@
 name: Patch Equalizer Fader
-
 on:
   push:
     branches: [ main ]
-
 permissions:
   contents: write
-
 jobs:
   patch:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Replace fader implementation
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Patch source
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = 'app/src/main/java/com/example/MainActivity.kt';
+            const text = fs.readFileSync(path, 'utf8');
+            const start = text.indexOf('@Composable\nfun VerticalFader(');
+            if (start < 0) throw new Error('VerticalFader not found');
+            const current = text.slice(start);
+            const alreadyPatched = current.includes('var workingValue = latestValue') && current.includes('onVerticalDrag = { change, dragAmount ->');
+            if (!alreadyPatched) {
+              const replacement = [
+                '@Composable',
+                'fun VerticalFader(',
+                '    value: Float,',
+                '    onValueChange: (Float) -> Unit,',
+                '    modifier: Modifier = Modifier',
+                ') {',
+                '    val latestValue by rememberUpdatedState(value)',
+                '',
+                '    Box(',
+                '        modifier = modifier',
+                '            .fillMaxHeight()',
+                '            .width(44.dp)',
+                '            .pointerInput(Unit) {',
+                '                var workingValue = latestValue',
+                '                detectVerticalDragGestures(',
+                '                    onDragStart = {',
+                '                        workingValue = latestValue',
+                '                    },',
+                '                    onVerticalDrag = { change, dragAmount ->',
+                '                        change.consume()',
+                '                        val height = size.height.toFloat()',
+                '                        if (height > 0f) {',
+                '                            val delta = -dragAmount / height * 24f',
+                '                            workingValue = (workingValue + delta).coerceIn(-12f, 12f)',
+                '                            onValueChange(workingValue)',
+                '                        }',
+                '                    },',
+                '                    onDragEnd = {},',
+                '                    onDragCancel = {}',
+                '                )',
+                '            }',
+                '            .pointerInput(Unit) {',
+                '                detectTapGestures { offset ->',
+                '                    val height = size.height.toFloat()',
+                '                    if (height > 0f) {',
+                '                        val fraction = 1f - (offset.y / height)',
+                '                        val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)',
+                '                        onValueChange(newVal)',
+                '                    }',
+                '                }',
+                '            },',
+                '        contentAlignment = Alignment.Center',
+                '    ) {',
+                '        Box(',
+                '            modifier = Modifier',
+                '                .width(6.dp)',
+                '                .fillMaxHeight(0.85f)',
+                '                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))',
+                '        )',
+                '        Box(',
+                '            modifier = Modifier',
+                '                .width(14.dp)',
+                '                .height(2.dp)',
+                '                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))',
+                '        )',
+                '        val fraction = ((latestValue + 12f) / 24f).coerceIn(0f, 1f)',
+                '        BoxWithConstraints(',
+                '            modifier = Modifier',
+                '                .fillMaxHeight(0.85f)',
+                '                .width(44.dp),',
+                '            contentAlignment = Alignment.BottomCenter',
+                '        ) {',
+                '            val trackH = maxHeight',
+                '            val thumbY = trackH * fraction - 14.dp',
+                '            Box(',
+                '                modifier = Modifier',
+                '                    .size(28.dp)',
+                '                    .offset(y = -thumbY)',
+                '                    .shadow(4.dp, CircleShape)',
+                '                    .background(MaterialTheme.colorScheme.primary, CircleShape),',
+                '                contentAlignment = Alignment.Center',
+                '            ) {',
+                '                Box(',
+                '                    modifier = Modifier',
+                '                        .size(8.dp)',
+                '                        .background(MaterialTheme.colorScheme.onPrimary, CircleShape)',
+                '                )',
+                '            }',
+                '        }',
+                '    }',
+                '}'
+              ].join('\n') + '\n';
+              fs.writeFileSync(path, text.slice(0, start) + replacement, 'utf8');
+              core.setOutput('changed', 'true');
+            } else {
+              core.setOutput('changed', 'false');
+            }
+      - name: Commit patched source
         shell: bash
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('app/src/main/java/com/example/MainActivity.kt')
-          text = path.read_text(encoding='utf-8')
-          start = text.find('@Composable\nfun VerticalFader(')
-          if start < 0:
-              raise SystemExit('VerticalFader not found')
-
-          # If the improved local-accumulation implementation is already present,
-          # leave the source untouched so the follow-up workflow run is a no-op.
-          if 'var workingValue = latestValue' in text[start:] and 'onVerticalDrag = { change, dragAmount ->' in text[start:]:
-              print('Fader already patched')
-              raise SystemExit(0)
-
-          replacement = '''@Composable
-fun VerticalFader(
-    value: Float,
-    onValueChange: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val latestValue by rememberUpdatedState(value)
-
-    Box(
-        modifier = modifier
-            .fillMaxHeight()
-            .width(44.dp)
-            .pointerInput(Unit) {
-                var workingValue = latestValue
-                detectVerticalDragGestures(
-                    onDragStart = {
-                        workingValue = latestValue
-                    },
-                    onVerticalDrag = { change, dragAmount ->
-                        change.consume()
-                        val height = size.height.toFloat()
-                        if (height > 0f) {
-                            // Accumulate every drag event from the same gesture,
-                            // like a normal Material Slider.
-                            val delta = -dragAmount / height * 24f
-                            workingValue = (workingValue + delta).coerceIn(-12f, 12f)
-                            onValueChange(workingValue)
-                        }
-                    },
-                    onDragEnd = {},
-                    onDragCancel = {}
-                )
-            }
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    val height = size.height.toFloat()
-                    if (height > 0f) {
-                        val fraction = 1f - (offset.y / height)
-                        val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
-                        onValueChange(newVal)
-                    }
-                }
-            },
-        contentAlignment = Alignment.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .width(6.dp)
-                .fillMaxHeight(0.85f)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))
-        )
-        Box(
-            modifier = Modifier
-                .width(14.dp)
-                .height(2.dp)
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
-        )
-
-        val fraction = ((latestValue + 12f) / 24f).coerceIn(0f, 1f)
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxHeight(0.85f)
-                .width(44.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            val trackH = maxHeight
-            val thumbY = trackH * fraction - 14.dp
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .offset(y = -thumbY)
-                    .shadow(4.dp, CircleShape)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
-                )
-            }
-        }
-    }
-}
-'''
-          path.write_text(text[:start] + replacement, encoding='utf-8')
-          print('Fader patched')
-          PY
-
-      - name: Commit patch
-        shell: bash
-        run: |
+          if git diff --quiet; then
+            echo "No source changes"
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/example/MainActivity.kt
-          if git diff --cached --quiet; then
-            echo "No changes to commit"
-            exit 0
-          fi
           git commit -m "fix: make equalizer faders smooth like bass slider [eq-fader-patch]"
           git push
