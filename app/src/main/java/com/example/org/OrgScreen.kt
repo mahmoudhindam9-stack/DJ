@@ -128,6 +128,20 @@ fun OrgScreen() {
                 }
                 Spacer(Modifier.height(12.dp))
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text("Wedding / Event Sounds", fontWeight = FontWeight.Bold)
+                        Text("Oriental drum, zaffa, zaghrouta and celebration effects.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.height(8.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items(engine.specialSounds) { sound ->
+                                val idx = engine.specialSounds.indexOf(sound)
+                                Button(onClick = { engine.triggerSpecialSound(idx) }) { Text(sound.name) }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(12.dp))
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
                     Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text("Automatic Accompaniment", fontWeight = FontWeight.Bold)

@@ -139,6 +139,17 @@ class OrgEngine(private val context: Context) {
         playTone(freq, 0.30, 0.72f, 0.18, 5)
     }
 
+    fun triggerSpecialSound(index: Int) {
+        when (specialSounds[index.coerceIn(specialSounds.indices)].kind) {
+            SpecialKind.TABLA -> playPercussion(3)
+            SpecialKind.DARBUKA -> playPercussion(0)
+            SpecialKind.ZAFFA -> playZaffa()
+            SpecialKind.ULULATION -> playUlulation()
+            SpecialKind.CLAPS -> playClaps()
+            SpecialKind.TAKHTA -> playTone(98.0, 0.28, 0.82f, 0.05, 5)
+        }
+    }
+
     fun triggerVoice() {
         val voice = voices[voiceIndex]
         playVoice(voice, volume, 0.80)
@@ -347,6 +358,45 @@ class OrgEngine(private val context: Context) {
         playTone(root, 0.33, volume * 0.36f, 0.20, effectIndex)
         playTone(root * 1.25, 0.26, volume * 0.20f, 0.12, effectIndex)
         playTone(root * 1.50, 0.22, volume * 0.16f, 0.10, effectIndex)
+    }
+
+    private fun playZaffa() {
+        Thread {
+            val notes = doubleArrayOf(146.83, 174.61, 196.00, 233.08, 196.00, 174.61)
+            notes.forEachIndexed { i, freq ->
+                playTone(freq, 0.22, 0.72f, if (i % 2 == 0) 0.32 else 0.18, 1)
+                playPercussion(if (i % 3 == 0) 3 else 0)
+                Thread.sleep(120L)
+            }
+        }.start()
+    }
+
+    private fun playUlulation() {
+        Thread {
+            val sr = 44100
+            val duration = 1.55
+            val count = (sr * duration).toInt()
+            val data = ShortArray(count)
+            for (i in data.indices) {
+                val t = i.toDouble() / sr
+                val wobble = 430.0 + 55.0 * sin(2.0 * PI * 5.2 * t)
+                val wave = sin(2.0 * PI * wobble * t) + 0.55 * sin(2.0 * PI * (wobble * 2.01) * t)
+                val env = if (t < 0.10) t / 0.10 else exp(-(t - 0.10) * 0.75)
+                val trill = 0.72 + 0.28 * sin(2.0 * PI * 11.0 * t)
+                data[i] = (wave * trill * 10000.0 * env).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+            playPcm(data, sr)
+        }.start()
+    }
+
+    private fun playClaps() {
+        Thread {
+            repeat(5) {
+                noise(0.10, 0.72, 1900.0)
+                Thread.sleep(170L)
+            }
+        }.start()
     }
 
     private fun playPercussion(kind: Int) {
