@@ -1,0 +1,35 @@
+{
+  "name": "dj-desktop",
+  "version": "1.0.0",
+  "description": "DJ desktop workstation for Windows",
+  "main": "main.js",
+  "author": "DJ",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis portable",
+    "pack": "electron-builder --win dir"
+  },
+  "devDependencies": {
+    "electron": "^37.2.6",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "com.dj.workstation",
+    "productName": "DJ Workstation",
+    "asar": true,
+    "directories": { "output": "dist" },
+    "files": ["**/*"],
+    "win": {
+      "target": ["nsis", "portable"],
+      "artifactName": "DJ-Workstation-${version}-${arch}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    }
+  }
+}
