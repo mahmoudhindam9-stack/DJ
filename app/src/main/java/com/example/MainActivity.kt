@@ -1643,69 +1643,74 @@ fun VerticalFader(
 
     Box(
         modifier = modifier
-  .fillMaxHeight()
-  .width(44.dp)
-  .pointerInput(Unit) {
-      detectVerticalDragGestures { change, dragAmount ->
-          change.consume()
-          val height = size.height.toFloat()
-          if (height > 0f) {
-              // Keep a live working value for the current gesture.
-              // This makes the fader accumulate movement like a normal Slider.
-              val current = latestValue
-              val delta = -dragAmount / height * 24f
-              onValueChange((current + delta).coerceIn(-12f, 12f))
-          }
-      }
-  }
-  .pointerInput(Unit) {
-      detectTapGestures { offset ->
-          val height = size.height.toFloat()
-          if (height > 0f) {
-              val fraction = 1f - (offset.y / height)
-              val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
-              onValueChange(newVal)
-          }
-      }
-  },
+            .fillMaxHeight()
+            .width(44.dp)
+            .pointerInput(Unit) {
+                var workingValue = latestValue
+                detectVerticalDragGestures(
+                    onDragStart = {
+                        workingValue = latestValue
+                    },
+                    onVerticalDrag = { change, dragAmount ->
+                        change.consume()
+                        val height = size.height.toFloat()
+                        if (height > 0f) {
+                            val delta = -dragAmount / height * 24f
+                            workingValue = (workingValue + delta).coerceIn(-12f, 12f)
+                            onValueChange(workingValue)
+                        }
+                    },
+                    onDragEnd = {},
+                    onDragCancel = {}
+                )
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { offset ->
+                    val height = size.height.toFloat()
+                    if (height > 0f) {
+                        val fraction = 1f - (offset.y / height)
+                        val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
+                        onValueChange(newVal)
+                    }
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Box(
-  modifier = Modifier
-      .width(6.dp)
-      .fillMaxHeight(0.85f)
-      .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))
+            modifier = Modifier
+                .width(6.dp)
+                .fillMaxHeight(0.85f)
+                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))
         )
         Box(
-  modifier = Modifier
-      .width(14.dp)
-      .height(2.dp)
-      .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+            modifier = Modifier
+                .width(14.dp)
+                .height(2.dp)
+                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         )
-
         val fraction = ((latestValue + 12f) / 24f).coerceIn(0f, 1f)
         BoxWithConstraints(
-  modifier = Modifier
-      .fillMaxHeight(0.85f)
-      .width(44.dp),
-  contentAlignment = Alignment.BottomCenter
+            modifier = Modifier
+                .fillMaxHeight(0.85f)
+                .width(44.dp),
+            contentAlignment = Alignment.BottomCenter
         ) {
-  val trackH = maxHeight
-  val thumbY = trackH * fraction - 14.dp
-  Box(
-      modifier = Modifier
-          .size(28.dp)
-          .offset(y = -thumbY)
-          .shadow(4.dp, CircleShape)
-          .background(MaterialTheme.colorScheme.primary, CircleShape),
-      contentAlignment = Alignment.Center
-  ) {
-      Box(
-          modifier = Modifier
-              .size(8.dp)
-              .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
-      )
-  }
+            val trackH = maxHeight
+            val thumbY = trackH * fraction - 14.dp
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .offset(y = -thumbY)
+                    .shadow(4.dp, CircleShape)
+                    .background(MaterialTheme.colorScheme.primary, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
+                )
+            }
         }
     }
 }
