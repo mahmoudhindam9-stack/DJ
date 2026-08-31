@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DJ Workstation</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><div class="logo">★</div><div><strong>DJ</strong><span>WORKSTATION</span></div></div>
+    <div class="master"><span>MASTER</span><div class="meter"><i id="masterMeter"></i></div><output id="masterDb">0 dB</output></div>
+    <div class="top-actions"><button id="recordBtn" class="danger">● REC</button><button id="openRecordings">Recordings</button><button id="settingsBtn">⚙</button></div>
+  </header>
+
+  <main class="workspace">
+    <aside class="library">
+      <div class="section-title">LIBRARY <button id="addTracks" class="icon-btn">＋</button></div>
+      <input id="search" class="search" placeholder="Search tracks..." />
+      <div class="library-tabs"><button class="active">Tracks</button><button>Playlists</button></div>
+      <div id="trackList" class="track-list"></div>
+    </aside>
+
+    <section class="center">
+      <div class="decks">
+        <section class="deck" data-deck="a">
+          <div class="deck-head"><b>A</b><span id="titleA">Deck A — empty</span><small id="timeA">00:00</small></div>
+          <div class="waveform"><canvas id="waveA"></canvas><div class="playhead" id="headA"></div></div>
+          <div class="transport"><button data-action="prev" data-deck="a">◀◀</button><button class="play" data-action="play" data-deck="a">▶</button><button data-action="next" data-deck="a">▶▶</button><button data-action="cue" data-deck="a">CUE</button></div>
+          <div class="deck-controls"><label>Pitch <input id="pitchA" type="range" min="-8" max="8" value="0" step="0.1"></label><label>Gain <input id="gainA" type="range" min="0" max="1.2" value="1" step="0.01"></label><button data-action="loadB" data-deck="a">LOAD A</button></div>
+          <audio id="audioA" preload="metadata"></audio>
+        </section>
+
+        <section class="deck" data-deck="b">
+          <div class="deck-head"><b>B</b><span id="titleB">Deck B — empty</span><small id="timeB">00:00</small></div>
+          <div class="waveform"><canvas id="waveB"></canvas><div class="playhead" id="headB"></div></div>
+          <div class="transport"><button data-action="prev" data-deck="b">◀◀</button><button class="play" data-action="play" data-deck="b">▶</button><button data-action="next" data-deck="b">▶▶</button><button data-action="cue" data-deck="b">CUE</button></div>
+          <div class="deck-controls"><label>Pitch <input id="pitchB" type="range" min="-8" max="8" value="0" step="0.1"></label><label>Gain <input id="gainB" type="range" min="0" max="1.2" value="1" step="0.01"></label><button data-action="loadA" data-deck="b">LOAD B</button></div>
+          <audio id="audioB" preload="metadata"></audio>
+        </section>
+      </div>
+
+      <section class="mixer-panel">
+        <div class="channel"><h3>DECK A</h3><label>LOW <input id="lowA" type="range" min="-12" max="12" value="0"></label><label>MID <input id="midA" type="range" min="-12" max="12" value="0"></label><label>HIGH <input id="highA" type="range" min="-12" max="12" value="0"></label><label>VOL <input id="volA" type="range" min="0" max="1" value="1" step="0.01"></label></div>
+        <div class="cross"><h3>CROSSFADER</h3><input id="crossfader" type="range" min="0" max="1" value="0.5" step="0.001"><label>Crossfade <span id="crossVal">50%</span></label></div>
+        <div class="channel"><h3>DECK B</h3><label>LOW <input id="lowB" type="range" min="-12" max="12" value="0"></label><label>MID <input id="midB" type="range" min="-12" max="12" value="0"></label><label>HIGH <input id="highB" type="range" min="-12" max="12" value="0"></label><label>VOL <input id="volB" type="range" min="0" max="1" value="1" step="0.01"></label></div>
+      </section>
+
+      <section class="fx-panel">
+        <div class="section-title">29 EFFECTS <span id="fxStatus">READY</span></div>
+        <div id="effects" class="effects"></div>
+      </section>
+
+      <section class="org-panel">
+        <div class="section-title">ORG WORKSTATION <span id="bpmLabel">BPM 120</span></div>
+        <div class="org-row"><div id="sounds" class="chips"></div><div class="pads" id="pads"></div><button id="orgRecord">ORG REC</button></div>
+      </section>
+    </section>
+
+    <aside class="rightbar">
+      <div class="section-title">NOW PLAYING</div><div class="now-card"><div class="cover">♫</div><h2 id="nowTitle">Nothing playing</h2><p id="nowArtist">Choose a track</p></div>
+      <div class="section-title">MASTER CONTROLS</div><label>Volume <input id="masterVolume" type="range" min="0" max="1" value="1" step="0.01"></label><label>Crossfade Time <input id="fadeTime" type="range" min="0" max="10" value="3" step="0.1"></label>
+      <div class="quick"><button id="shuffle">SHUFFLE</button><button id="repeat">REPEAT</button><button id="orgOpen">OPEN ORG</button><button id="stopAll">STOP ALL</button></div>
+      <div class="status"><div>Audio Engine <b>Web Audio</b></div><div>Output <b>System Default</b></div><div>Recorder <b id="recState">Idle</b></div></div>
+    </aside>
+  </main>
+  <footer class="statusbar"><span id="footerStatus">Ready</span><span>Windows Desktop • DJ Workstation</span></footer>
+  <script src="renderer.js"></script>
+</body>
+</html>
