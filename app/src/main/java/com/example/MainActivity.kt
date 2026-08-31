@@ -1556,7 +1556,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                   VerticalFader(
                       value = band.currentLevelDb.toFloat(),
                       onValueChange = { newVal ->
-                          eqController.updateBandLevel(index, newVal.roundToInt())
+                          eqController.updateBandLevel(index, newVal.toInt())
                       },
                       modifier = Modifier
                           .weight(1f)
