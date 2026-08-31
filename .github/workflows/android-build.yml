@@ -50,6 +50,9 @@ jobs:
       - name: Wire ORG workstation and output recorder
         run: python3 .github/add_org_system.py
 
+      - name: Apply ORG functionality fixes
+        run: python3 .github/fix_org_functionality.py
+
       - name: Commit app upgrades
         run: |
           git config user.name "github-actions[bot]"
@@ -65,11 +68,12 @@ jobs:
                   app/src/main/java/com/example/org/OrgScreen.kt \
                   .github/add_org_system.py \
                   .github/add_dj_audio_card.py \
-                  .github/add_notification_permission.py
+                  .github/add_notification_permission.py \
+                  .github/fix_org_functionality.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: request Android notification permission [skip ci]"
+            git commit -m "fix: make ORG workstation functional [skip ci]"
             git push origin HEAD:main
           fi
 
