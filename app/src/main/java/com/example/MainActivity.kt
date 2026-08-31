@@ -1383,13 +1383,13 @@ fun DJDeckItem(
             Spacer(modifier = Modifier.height(4.dp))
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                DJPadButton("Flanger", deck.isFlangerActive) { deck.isFlangerActive = !deck.isFlangerActive }
-                DJPadButton("Reverb", deck.isReverbActive) { deck.isReverbActive = !deck.isReverbActive }
+                DJPadButton("Flanger", deck.isFlangerActive) { deck.toggleFlanger() }
+                DJPadButton("Reverb", deck.isReverbActive) { deck.toggleReverb() }
             }
             Spacer(modifier = Modifier.height(4.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                DJPadButton("Echo", deck.isEchoActive) { deck.isEchoActive = !deck.isEchoActive }
-                DJPadButton("Crush", deck.isCrushActive) { deck.isCrushActive = !deck.isCrushActive }
+                DJPadButton("Echo", deck.isEchoActive) { deck.toggleEcho() }
+                DJPadButton("Crush", deck.isCrushActive) { deck.toggleCrush() }
             }
         }
     }
