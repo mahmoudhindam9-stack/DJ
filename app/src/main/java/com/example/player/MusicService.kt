@@ -8,7 +8,9 @@ import android.os.IBinder
 import androidx.core.app.NotificationCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
-import androidx.media.session.MediaSessionCompat
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import com.example.MainActivity
 import com.example.widget.MusicWidgetProvider
 import android.appwidget.AppWidgetManager
@@ -51,9 +53,6 @@ class MusicService : Service() {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     stopSelf()
                 }
-                override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
-                    return super.onMediaButtonEvent(mediaButtonEvent)
-                }
             })
             setActive(true)
         }
@@ -87,23 +86,23 @@ class MusicService : Service() {
 
         mediaSession.isActive = true
         mediaSession.setMetadata(
-            android.support.v4.media.MediaMetadataCompat.Builder()
-                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_TITLE, title)
-                .putString(android.support.v4.media.MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+            MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
                 .build()
         )
         mediaSession.setPlaybackState(
-            android.support.v4.media.session.PlaybackStateCompat.Builder()
+            PlaybackStateCompat.Builder()
                 .setActions(
-                    android.support.v4.media.session.PlaybackStateCompat.ACTION_PLAY or
-                        android.support.v4.media.session.PlaybackStateCompat.ACTION_PAUSE or
-                        android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
-                        android.support.v4.media.session.PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
-                        android.support.v4.media.session.PlaybackStateCompat.ACTION_STOP
+                    PlaybackStateCompat.ACTION_PLAY or
+                        PlaybackStateCompat.ACTION_PAUSE or
+                        PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                        PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                        PlaybackStateCompat.ACTION_STOP
                 )
                 .setState(
-                    if (isPlaying) android.support.v4.media.session.PlaybackStateCompat.STATE_PLAYING
-                    else android.support.v4.media.session.PlaybackStateCompat.STATE_PAUSED,
+                    if (isPlaying) PlaybackStateCompat.STATE_PLAYING
+                    else PlaybackStateCompat.STATE_PAUSED,
                     playerController?.currentPositionMs ?: 0L,
                     if (isPlaying) 1f else 0f
                 )
