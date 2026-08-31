@@ -53,6 +53,9 @@ jobs:
       - name: Apply ORG functionality fixes
         run: python3 .github/fix_org_functionality.py
 
+      - name: Apply final launcher/audio batch fixes
+        run: python3 .github/apply_final_audio_batch.py
+
       - name: Commit app upgrades
         run: |
           git config user.name "github-actions[bot]"
@@ -66,14 +69,16 @@ jobs:
                   app/src/main/java/com/example/NotificationControlScreen.kt \
                   app/src/main/java/com/example/org/OrgController.kt \
                   app/src/main/java/com/example/org/OrgScreen.kt \
+                  app/src/main/AndroidManifest.xml \
                   .github/add_org_system.py \
                   .github/add_dj_audio_card.py \
                   .github/add_notification_permission.py \
-                  .github/fix_org_functionality.py
+                  .github/fix_org_functionality.py \
+                  .github/apply_final_audio_batch.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "fix: make ORG workstation functional [skip ci]"
+            git commit -m "feat: batch audio controls, ORG sounds, notifications, and launcher reuse [skip ci]"
             git push origin HEAD:main
           fi
 
