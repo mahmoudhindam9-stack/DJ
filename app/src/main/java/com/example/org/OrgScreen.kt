@@ -135,7 +135,7 @@ fun OrgScreen() {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(engine.specialSounds) { sound ->
                                 val idx = engine.specialSounds.indexOf(sound)
-                                Button(onClick = { engine.triggerSpecialSound(idx) }) { Text(sound.name) }
+                                Button(onClick = { engine.triggerSpecialSound(idx) }) { Text(sound) }
                             }
                         }
                     }

@@ -139,15 +139,9 @@ class OrgEngine(private val context: Context) {
         playTone(freq, 0.30, 0.72f, 0.18, 5)
     }
 
+    // ORG_SPECIAL_SOUND_BRIDGE_V3
     fun triggerSpecialSound(index: Int) {
-        when (specialSounds[index.coerceIn(specialSounds.indices)].kind) {
-            SpecialKind.TABLA -> playPercussion(3)
-            SpecialKind.DARBUKA -> playPercussion(0)
-            SpecialKind.ZAFFA -> playZaffa()
-            SpecialKind.ULULATION -> playUlulation()
-            SpecialKind.CLAPS -> playClaps()
-            SpecialKind.TAKHTA -> playTone(98.0, 0.28, 0.82f, 0.05, 5)
-        }
+        triggerSpecial(index)
     }
 
     fun triggerVoice() {
