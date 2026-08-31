@@ -252,9 +252,9 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                         Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedInputDevice?.productName?.toString() ?: "System Default Mic" else "System Default Mic", maxLines = 1)
                     }
                     DropdownMenu(inputExpanded, { inputExpanded = false }) {
-                        DropdownMenuItem(text = { Text("System Default Mic") }, onClick = { micController.selectedInputDevice = null; inputExpanded = false })
+                        DropdownMenuItem(text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.inputDevices.forEach { device ->
-                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Input ${device.id}" } ?: "Audio Input ${device.id}") }, onClick = { micController.selectedInputDevice = device; inputExpanded = false })
+                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Input ${device.id}" } ?: "Audio Input ${device.id}") }, onClick = { micController.selectInputDevice(device, scope); inputExpanded = false })
                         }
                     }
                 }
@@ -265,9 +265,9 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                         Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedOutputDevice?.productName?.toString() ?: "System Default Output" else "System Default Output", maxLines = 1)
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
-                        DropdownMenuItem(text = { Text("System Default Output") }, onClick = { micController.selectedOutputDevice = null; outputExpanded = false })
+                        DropdownMenuItem(text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
-                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Output ${device.id}" } ?: "Audio Output ${device.id}") }, onClick = { micController.selectedOutputDevice = device; outputExpanded = false })
+                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Output ${device.id}" } ?: "Audio Output ${device.id}") }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
                         }
                     }
                 }

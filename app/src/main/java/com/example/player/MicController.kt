@@ -309,6 +309,25 @@ class MicController(private val context: Context) {
         routingStatus = "الإدخال: $inputName  •  الإخراج: $outputName"
     }
 
+    /** Apply an input selection immediately. If live monitoring is active, the recorder is restarted
+     * so Android gets a fresh preferred input route instead of keeping the previous device. */
+    fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope) {
+        selectedInputState = device
+        if (isMicEnabled) {
+            stopMic()
+            startMic(coroutineScope)
+        } else {
+            routingStatus = if (device == null) "Input: System Default Mic" else "Input: ${device.displayName()}"
+        }
+    }
+
+    /** Apply an output selection to both the live mic monitor and the Media3 music player. */
+    fun selectOutputDevice(device: AudioDeviceInfo?) {
+        selectedOutputState = device
+        if (isMicEnabled) applyOutputRouting() else AudioPlayerController.updateGlobalPreferredAudioDevice(device)
+        routingStatus = if (device == null) "Output: System Default" else "Output: ${device.displayName()}"
+    }
+
     private fun stopMic() {
         isMicEnabled = false
         recordingJob?.cancel()
