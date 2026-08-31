@@ -232,6 +232,7 @@ fun MainApp() {
                 DJMixerScreen(
                     djMixerController = djMixerController,
                     audioLibrary = audioLibrary,
+                    micController = micController,
                     onPauseMainPlayer = { playerController.pause() }
                 )
             }
@@ -254,7 +255,6 @@ fun MainApp() {
     }
 }
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 // KARAOKE_DJ_ENGLISH_V2
 fun MicScreen(micController: MicController, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
@@ -330,123 +330,7 @@ fun MicScreen(micController: MicController, context: Context, scope: kotlinx.cor
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                // DJ_AUDIO_CARD_V1
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(18.dp)
-                ) {
-                    Column(Modifier.padding(14.dp)) {
-                        Row(
-                            Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Audio Card", style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    "Independent DJ input / output routing",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(onClick = { micController.refreshDevices() }) {
-                                Icon(Icons.Default.Refresh, contentDescription = "Refresh audio devices")
-                            }
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-                        Text("INPUT • Microphone", style = MaterialTheme.typography.labelMedium)
-                        Spacer(Modifier.height(4.dp))
-                        var djInputExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = djInputExpanded,
-                            onExpandedChange = { djInputExpanded = !djInputExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = micController.selectedInputDevice?.displayName() ?: "System Default Mic",
-                                onValueChange = {},
-                                readOnly = true,
-                                modifier = Modifier.fillMaxWidth().menuAnchor(),
-                                label = { Text("Input device") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = djInputExpanded) }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = djInputExpanded,
-                                onDismissRequest = { djInputExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("System Default Mic") },
-                                    onClick = {
-                                        micController.selectInputDevice(null, scope)
-                                        djInputExpanded = false
-                                    }
-                                )
-                                micController.inputDevices.forEach { device ->
-                                    DropdownMenuItem(
-                                        text = { Text(device.displayName()) },
-                                        onClick = {
-                                            micController.selectInputDevice(device, scope)
-                                            djInputExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Text("OUTPUT • Master", style = MaterialTheme.typography.labelMedium)
-                        Spacer(Modifier.height(4.dp))
-                        var djOutputExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
-                            expanded = djOutputExpanded,
-                            onExpandedChange = { djOutputExpanded = !djOutputExpanded }
-                        ) {
-                            OutlinedTextField(
-                                value = micController.selectedOutputDevice?.displayName() ?: "System Default Output",
-                                onValueChange = {},
-                                readOnly = true,
-                                modifier = Modifier.fillMaxWidth().menuAnchor(),
-                                label = { Text("Output device") },
-                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = djOutputExpanded) }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = djOutputExpanded,
-                                onDismissRequest = { djOutputExpanded = false }
-                            ) {
-                                DropdownMenuItem(
-                                    text = { Text("System Default Output") },
-                                    onClick = {
-                                        micController.selectOutputDevice(null)
-                                        djOutputExpanded = false
-                                    }
-                                )
-                                micController.outputDevices.forEach { device ->
-                                    DropdownMenuItem(
-                                        text = { Text(device.displayName()) },
-                                        onClick = {
-                                            micController.selectOutputDevice(device)
-                                            djOutputExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(10.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.GraphicEq, contentDescription = null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                micController.routingStatus,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                }
-                Spacer(Modifier.height(12.dp))
-
-Text("DJ Effects", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("DJ Effects", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(micController.echoFxEnabled, { micController.echoFxEnabled = !micController.echoFxEnabled }, label = { Text("Echo") }, modifier = Modifier.weight(1f))
@@ -1138,9 +1022,11 @@ fun NowPlayingCard(
 }
 
 @Composable
+// DJ_AUDIO_CARD_V2
 fun DJMixerScreen(
     djMixerController: DJMixerController,
     audioLibrary: SnapshotStateList<AudioItem>,
+    micController: MicController,
     onPauseMainPlayer: () -> Unit
 ) {
     val context = LocalContext.current
@@ -1175,6 +1061,120 @@ fun DJMixerScreen(
         )
 
         Spacer(modifier = Modifier.height(16.dp))
+
+        // DJ_AUDIO_CARD_V2
+        val routingScope = rememberCoroutineScope()
+        var djInputExpanded by remember { mutableStateOf(false) }
+        var djOutputExpanded by remember { mutableStateOf(false) }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(18.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Audio Card", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "DJ Input / Master Output",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { micController.refreshDevices() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh audio devices")
+                    }
+                }
+
+                Spacer(Modifier.height(8.dp))
+                Text("INPUT • Microphone", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { djInputExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1)
+                    }
+                    DropdownMenu(
+                        expanded = djInputExpanded,
+                        onDismissRequest = { djInputExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("System Default Mic") },
+                            onClick = {
+                                micController.selectInputDevice(null, routingScope)
+                                djInputExpanded = false
+                            }
+                        )
+                        micController.inputDevices.forEach { device ->
+                            DropdownMenuItem(
+                                text = { Text(device.displayName()) },
+                                onClick = {
+                                    micController.selectInputDevice(device, routingScope)
+                                    djInputExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Text("OUTPUT • Master", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = { djOutputExpanded = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1)
+                    }
+                    DropdownMenu(
+                        expanded = djOutputExpanded,
+                        onDismissRequest = { djOutputExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("System Default Output") },
+                            onClick = {
+                                micController.selectOutputDevice(null)
+                                djOutputExpanded = false
+                            }
+                        )
+                        micController.outputDevices.forEach { device ->
+                            DropdownMenuItem(
+                                text = { Text(device.displayName()) },
+                                onClick = {
+                                    micController.selectOutputDevice(device)
+                                    djOutputExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(10.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        micController.routingStatus,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(16.dp))
 
         // Dual Decks A & B
         Row(
