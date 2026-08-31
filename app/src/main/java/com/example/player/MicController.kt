@@ -1,6 +1,7 @@
 package com.example.player
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.content.Context
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
@@ -45,28 +46,17 @@ class MicController(private val context: Context) {
     var outputDevices by mutableStateOf<List<AudioDeviceInfo>>(emptyList())
         private set
 
-    // Public for compatibility with the current Compose screen.
-    // Changing a selection immediately updates the active audio routes.
-    var selectedInputDevice: AudioDeviceInfo?
-        get() = _selectedInputDevice
+    var selectedInputDevice by mutableStateOf<AudioDeviceInfo?>(null)
         set(value) {
-            _selectedInputDevice = value
-            routingStatus = if (value == null) "مصدر الإدخال: تلقائي" else "مصدر الإدخال: ${value.displayName()}"
+            field = value
             if (isMicEnabled) applyInputRouting()
         }
 
-    var selectedOutputDevice: AudioDeviceInfo?
-        get() = _selectedOutputDevice
+    var selectedOutputDevice by mutableStateOf<AudioDeviceInfo?>(null)
         set(value) {
-            _selectedOutputDevice = value
-            routingStatus = if (value == null) "مخرج الصوت: تلقائي" else "مخرج الصوت: ${value.displayName()}"
-            // Media3 music playback uses the exact same selected output route.
-            AudioPlayerController.updateGlobalPreferredAudioDevice(value)
+            field = value
             if (isMicEnabled) applyOutputRouting()
         }
-
-    private var _selectedInputDevice: AudioDeviceInfo? by mutableStateOf(null)
-    private var _selectedOutputDevice: AudioDeviceInfo? by mutableStateOf(null)
 
     var routingStatus by mutableStateOf("جاهز لتوجيه الصوت")
         private set
@@ -80,7 +70,22 @@ class MicController(private val context: Context) {
     private val bufferSize = minBufferSize * 2
 
     init {
+        requestBluetoothPermissionsIfNeeded()
         refreshDevices()
+    }
+
+    private fun requestBluetoothPermissionsIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        val activity = context as? Activity ?: return
+        val missing = buildList {
+            if (activity.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                add(android.Manifest.permission.BLUETOOTH_CONNECT)
+            }
+            if (activity.checkSelfPermission(android.Manifest.permission.BLUETOOTH_SCAN) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                add(android.Manifest.permission.BLUETOOTH_SCAN)
+            }
+        }
+        if (missing.isNotEmpty()) activity.requestPermissions(missing.toTypedArray(), BLUETOOTH_PERMISSION_REQUEST_CODE)
     }
 
     @SuppressLint("MissingPermission")
@@ -92,21 +97,14 @@ class MicController(private val context: Context) {
                 routingStatus = "اسمح للتطبيق بالوصول إلى Bluetooth ثم اضغط تحديث"
                 return
             }
-
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 inputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS)
                     .filter { it.isSource }
-                    .sortedWith(compareBy({ !it.isBluetoothAudio }, { it.productName?.toString() ?: "" }))
-
+                    .sortedWith(compareBy({ !it.isBluetoothAudio() }, { it.productName?.toString() ?: "" }))
                 outputDevices = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
                     .filter { it.isSink }
-                    .sortedWith(compareBy({ !it.isBluetoothAudio }, { it.productName?.toString() ?: "" }))
-
-                routingStatus = if (inputDevices.isEmpty() && outputDevices.isEmpty()) {
-                    "لم يجد Android أجهزة صوت متصلة"
-                } else {
-                    "تم تحديث أجهزة الصوت"
-                }
+                    .sortedWith(compareBy({ !it.isBluetoothAudio() }, { it.productName?.toString() ?: "" }))
+                routingStatus = if (inputDevices.isEmpty() && outputDevices.isEmpty()) "لم يجد Android أجهزة صوت متصلة" else "تم تحديث أجهزة الصوت"
             }
         } catch (t: Throwable) {
             routingStatus = "تعذر قراءة أجهزة الصوت: ${t.message ?: "خطأ غير معروف"}"
@@ -115,75 +113,58 @@ class MicController(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     fun toggleMic(enabled: Boolean, coroutineScope: CoroutineScope) {
-        if (enabled) startMic(coroutineScope) else stopMic()
+        if (enabled) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            ) {
+                requestBluetoothPermissionsIfNeeded()
+                routingStatus = "امنح إذن Bluetooth ثم شغّل الميكروفون مرة أخرى"
+                return
+            }
+            startMic(coroutineScope)
+        } else stopMic()
     }
 
     @SuppressLint("MissingPermission")
     private fun startMic(coroutineScope: CoroutineScope) {
         if (isMicEnabled) return
-
         try {
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
-            val audioSource = if (useBluetoothHfp) {
-                // HFP/SCO microphones are communication sources on Android.
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION
-            } else {
-                MediaRecorder.AudioSource.MIC
-            }
+            val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
 
-            audioRecord = AudioRecord(
-                audioSource,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
+            audioRecord = AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.setPreferredDevice(inputDevice)
 
-            // Prefer exactly the selected input endpoint. Do not call
-            // setCommunicationDevice here because that couples the output route
-            // to the communication endpoint and would defeat a separate speaker.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioRecord?.setPreferredDevice(inputDevice)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                if (selectedOutputDevice?.id == inputDevice?.id) audioManager.setCommunicationDevice(inputDevice)
             }
 
             audioTrack = AudioTrack.Builder()
-                .setAudioAttributes(
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
+                .setAudioAttributes(android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build())
+                .setAudioFormat(AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build())
                 .setBufferSizeInBytes(bufferSize)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioTrack?.setPreferredDevice(selectedOutputDevice)
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.setPreferredDevice(selectedOutputDevice)
 
             val sessionId = audioRecord?.audioSessionId ?: 0
             if (sessionId != 0) {
-                if (AcousticEchoCanceler.isAvailable()) {
-                    echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
-                }
-                if (NoiseSuppressor.isAvailable()) {
-                    noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
-                }
+                if (AcousticEchoCanceler.isAvailable()) echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
+                if (NoiseSuppressor.isAvailable()) noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
             }
 
             audioRecord?.startRecording()
-            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                throw IllegalStateException("AudioRecord failed to start")
-            }
-
+            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("AudioRecord failed to start")
             audioTrack?.play()
             isMicEnabled = true
             updateRoutingStatus()
@@ -192,18 +173,11 @@ class MicController(private val context: Context) {
                 val buffer = ShortArray(bufferSize / 2)
                 val echoBuffer = ShortArray(sampleRate)
                 var echoIdx = 0
-
                 while (isActive && isMicEnabled) {
                     val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     if (read <= 0) continue
-
                     val activeFilter = currentFilter
-                    val effEcho = if (activeFilter == MicFilter.STUDIO_REVERB) {
-                        echoLevel.coerceAtLeast(0.4f)
-                    } else {
-                        echoLevel
-                    }
-
+                    val effEcho = if (activeFilter == MicFilter.STUDIO_REVERB) echoLevel.coerceAtLeast(0.4f) else echoLevel
                     for (i in 0 until read) {
                         var input = buffer[i].toFloat()
                         when (activeFilter) {
@@ -212,21 +186,13 @@ class MicController(private val context: Context) {
                             MicFilter.ROBOT -> input *= if ((i / 20) % 2 == 0) 1f else 0.5f
                             else -> Unit
                         }
-
                         val delaySamples = (sampleRate * 0.35).toInt()
                         val delayedIdx = (echoIdx - delaySamples + echoBuffer.size) % echoBuffer.size
-                        val delayedSample = echoBuffer[delayedIdx]
-                        val output = (input + delayedSample * effEcho) * micVolume
-
-                        val clamped = output
-                            .coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat())
-                            .toInt().toShort()
-
-                        buffer[i] = clamped
-                        echoBuffer[echoIdx] = clamped
+                        val output = (input + echoBuffer[delayedIdx] * effEcho) * micVolume
+                        buffer[i] = output.coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat()).toInt().toShort()
+                        echoBuffer[echoIdx] = buffer[i]
                         echoIdx = (echoIdx + 1) % echoBuffer.size
                     }
-
                     audioTrack?.write(buffer, 0, read)
                 }
             }
@@ -241,13 +207,17 @@ class MicController(private val context: Context) {
     private fun applyInputRouting() {
         try {
             val record = audioRecord ?: return
-            val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                record.setPreferredDevice(selectedInputDevice)
-            } else true
-
-            if (!accepted && selectedInputDevice != null) {
-                routingStatus = "تعذر توجيه الميكروفون إلى ${selectedInputDevice?.displayName()}"
-                return
+            val device = selectedInputDevice
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val accepted = record.setPreferredDevice(device)
+                if (!accepted && device != null) {
+                    routingStatus = "تعذر توجيه الميكروفون إلى ${device.displayName()}"
+                    return
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device?.isBluetoothSco() == true) {
+                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                if (selectedOutputDevice?.id == device.id) audioManager.setCommunicationDevice(device)
             }
             updateRoutingStatus()
         } catch (t: Throwable) {
@@ -258,13 +228,20 @@ class MicController(private val context: Context) {
     private fun applyOutputRouting() {
         try {
             val track = audioTrack ?: return
-            val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                track.setPreferredDevice(selectedOutputDevice)
-            } else true
-
-            if (!accepted && selectedOutputDevice != null) {
-                routingStatus = "تعذر توجيه صوت الميكروفون إلى ${selectedOutputDevice?.displayName()}"
-                return
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val accepted = track.setPreferredDevice(selectedOutputDevice)
+                if (!accepted && selectedOutputDevice != null) {
+                    routingStatus = "تعذر توجيه الصوت إلى ${selectedOutputDevice?.displayName()}"
+                    return
+                }
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                val input = selectedInputDevice
+                if (input?.isBluetoothSco() == true && selectedOutputDevice?.id == input.id) {
+                    audioManager.setCommunicationDevice(input)
+                } else if (selectedOutputDevice == null && audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) {
+                    audioManager.clearCommunicationDevice()
+                }
             }
             updateRoutingStatus()
         } catch (t: Throwable) {
@@ -272,7 +249,6 @@ class MicController(private val context: Context) {
         }
     }
 
-    @SuppressLint("MissingPermission")
     private fun updateRoutingStatus() {
         if (!isMicEnabled) return
         val actualInput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.routedDevice else null
@@ -286,34 +262,14 @@ class MicController(private val context: Context) {
         isMicEnabled = false
         recordingJob?.cancel()
         recordingJob = null
-
-        try {
-            echoCanceler?.enabled = false
-            echoCanceler?.release()
-            echoCanceler = null
-            noiseSuppressor?.enabled = false
-            noiseSuppressor?.release()
-            noiseSuppressor = null
-        } catch (t: Throwable) {
-            t.printStackTrace()
-        }
-
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (t: Throwable) {
-            t.printStackTrace()
-        }
+        try { echoCanceler?.enabled = false; echoCanceler?.release(); echoCanceler = null } catch (_: Throwable) { }
+        try { noiseSuppressor?.enabled = false; noiseSuppressor?.release(); noiseSuppressor = null } catch (_: Throwable) { }
+        try { audioRecord?.stop(); audioRecord?.release() } catch (_: Throwable) { }
         audioRecord = null
-
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (t: Throwable) {
-            t.printStackTrace()
-        }
+        try { audioTrack?.stop(); audioTrack?.release() } catch (_: Throwable) { }
         audioTrack = null
-
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) try { audioManager.clearCommunicationDevice() } catch (_: Throwable) { }
+        audioManager.mode = AudioManager.MODE_NORMAL
         routingStatus = "تم إيقاف الميكروفون"
     }
 
@@ -326,9 +282,10 @@ class MicController(private val context: Context) {
         else -> false
     }
 
-    private fun AudioDeviceInfo.isBluetoothSco(): Boolean =
-        type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+    private fun AudioDeviceInfo.isBluetoothSco(): Boolean = type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+    private fun AudioDeviceInfo.displayName(): String = productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio Device $id"
 
-    private fun AudioDeviceInfo.displayName(): String =
-        productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio Device $id"
+    companion object {
+        private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 4301
+    }
 }
