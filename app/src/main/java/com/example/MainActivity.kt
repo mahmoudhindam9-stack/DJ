@@ -198,7 +198,7 @@ fun MainApp() {
                 EqualizerScreen(eqController = eqController)
             }
             composable("mic") {
-                MicScreen(micController = micController, scope = scope)
+                MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
@@ -209,7 +209,7 @@ fun MainApp() {
 
 @Composable
 // KARAOKE_DJ_ENGLISH_V2
-fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
+fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
