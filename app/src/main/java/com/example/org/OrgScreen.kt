@@ -52,6 +52,22 @@ fun OrgScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Text("ORG Workstation", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Text("Full arranger • Oriental + Western voices • Effects • Pads • Recorder", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        // ORG_REFRESH_V1
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = {
+                engine.stopRhythm()
+                engine.startRhythm(scope)
+            }, modifier = Modifier.weight(1f)) {
+                Text("Restart Engine")
+            }
+            OutlinedButton(onClick = {
+                engine.stopRhythm()
+                accompaniment = false
+                engine.accompanimentEnabled = false
+            }, modifier = Modifier.weight(1f)) {
+                Text("Reset Rhythm")
+            }
+        }
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

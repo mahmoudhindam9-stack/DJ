@@ -8,6 +8,9 @@ import android.media.AudioTrack
 import android.media.projection.MediaProjection
 import android.os.Build
 import androidx.annotation.RequiresApi
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -84,15 +87,15 @@ class OrgEngine(private val context: Context) {
     val effects = listOf("Clean", "Reverb", "Echo", "Chorus", "Delay", "Distortion", "Tremolo", "Octave")
 
     private var rhythmJob: Job? = null
-    var rhythm: Rhythm = rhythms.first()
+    var rhythm: Rhythm by mutableStateOf(rhythms.first())
         private set
-    var bpm: Int = rhythm.bpm
+    var bpm: Int by mutableStateOf(rhythm.bpm)
         private set
-    var volume: Float = 0.8f
-    var voiceIndex: Int = 0
-    var accompanimentEnabled: Boolean = false
-    var rhythmEnabled: Boolean = false
-    var effectIndex: Int = 0
+    var volume: Float by mutableStateOf(0.8f)
+    var voiceIndex: Int by mutableStateOf(0)
+    var accompanimentEnabled: Boolean by mutableStateOf(false)
+    var rhythmEnabled: Boolean by mutableStateOf(false)
+    var effectIndex: Int by mutableStateOf(0)
 
     fun setRhythm(index: Int) {
         rhythm = rhythms[index.coerceIn(rhythms.indices)]
@@ -196,10 +199,34 @@ class OrgEngine(private val context: Context) {
     }
 
     private fun playTone(freq: Double, duration: Double, amp: Float, harmonic: Double, effect: Int) {
-        val old = effectIndex
-        effectIndex = effect.coerceIn(effects.indices)
-        playVoice(Voice("Pad", "Pad", freq, harmonic, Character.SYNTH), amp, duration)
-        effectIndex = old
+        val selectedEffect = effect.coerceIn(effects.indices)
+        Thread {
+            val sr = 44100
+            val count = max(1, (sr * duration).toInt())
+            val data = ShortArray(count)
+            for (i in data.indices) {
+                val t = i.toDouble() / sr
+                val p = i.toDouble() / count
+                val env = when {
+                    p < 0.015 -> p / 0.015
+                    else -> exp(-p * 4.0)
+                }
+                val wave = sin(2.0 * PI * freq * t) + harmonic * sin(2.0 * PI * freq * 2.0 * t)
+                val effected = when (selectedEffect) {
+                    0 -> wave
+                    1 -> wave * (0.88 + 0.12 * sin(2.0 * PI * 2.3 * t))
+                    2 -> wave + wave * 0.30 * sin(2.0 * PI * 3.7 * t)
+                    3 -> wave + wave * 0.22 * sin(2.0 * PI * 0.7 * t)
+                    4 -> wave + wave * 0.18 * sin(2.0 * PI * 5.0 * t)
+                    5 -> tanh(wave * 1.7)
+                    6 -> wave * (0.70 + 0.30 * (0.5 + 0.5 * sin(2.0 * PI * 5.0 * t)))
+                    else -> wave + 0.35 * sin(2.0 * PI * 2.0 * t)
+                }
+                data[i] = (effected * 10500.0 * amp * env).toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+            }
+            playPcm(data, sr)
+        }.start()
     }
 
     private fun playAccompaniment(index: Int) {
@@ -259,9 +286,9 @@ class OrgEngine(private val context: Context) {
 
 @RequiresApi(Build.VERSION_CODES.Q)
 class OrgOutputRecorder(private val context: Context) {
-    var isRecording: Boolean = false
+    var isRecording: Boolean by mutableStateOf(false)
         private set
-    var lastFile: File? = null
+    var lastFile: File? by mutableStateOf(null)
         private set
     private var projection: MediaProjection? = null
     private var recordJob: Job? = null
