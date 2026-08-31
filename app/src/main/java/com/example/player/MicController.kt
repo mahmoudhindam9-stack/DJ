@@ -189,17 +189,10 @@ class MicController(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val allInputs = audioManager.getDevices(AudioManager.GET_DEVICES_INPUTS).toList()
                 val allOutputs = audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS).toList()
-
-                inputDevices = allInputs
-                    .filter { it.isSupportedInputDevice() }
-                    .distinctBy { it.id }
+                inputDevices = allInputs.filter { it.isSupportedInputDevice() }.distinctBy { it.id }
                     .sortedWith(compareBy({ it.type != AudioDeviceInfo.TYPE_BLUETOOTH_SCO }, { it.displayName() }))
-
-                outputDevices = allOutputs
-                    .filter { it.isSupportedOutputDevice() }
-                    .distinctBy { it.id }
+                outputDevices = allOutputs.filter { it.isSupportedOutputDevice() }.distinctBy { it.id }
                     .sortedWith(compareBy({ !it.isBluetoothOutputDevice() }, { it.displayName() }))
-
                 routingStatus = when {
                     inputDevices.isEmpty() && outputDevices.isEmpty() -> "No supported audio devices detected"
                     else -> "${inputDevices.size} input device(s) • ${outputDevices.size} output device(s)"
