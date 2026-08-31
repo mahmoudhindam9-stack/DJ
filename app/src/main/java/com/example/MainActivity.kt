@@ -208,245 +208,135 @@ fun MainApp() {
 }
 
 @Composable
+// KARAOKE_DJ_ENGLISH_V2
 fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
-    var filterExpanded by remember { mutableStateOf(false) }
 
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            micController.toggleMic(true, scope)
-        } else {
-            Toast.makeText(context, "Mic permission required", Toast.LENGTH_SHORT).show()
-        }
+    val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) micController.toggleMic(true, scope)
+        else Toast.makeText(context, "Microphone permission is required", Toast.LENGTH_SHORT).show()
     }
 
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(20.dp),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("استوديو الكاريوكي والميكروفون", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "تحكم في مصدر الصوت، الفلاتر، ومنع الارتداد (Anti-Feedback)",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-        )
+        Text("Karaoke Studio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Live vocal monitor with DJ-style effects", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(14.dp))
 
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Mic Power Button
         Box(
-            modifier = Modifier
-                .size(120.dp)
-                .clip(CircleShape)
+            modifier = Modifier.size(116.dp).clip(CircleShape)
                 .background(if (micController.isMicEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant)
                 .clickable {
-                    if (micController.isMicEnabled) {
-                        micController.toggleMic(false, scope)
-                    } else {
-                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                    }
+                    if (micController.isMicEnabled) micController.toggleMic(false, scope)
+                    else permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
                 },
             contentAlignment = Alignment.Center
         ) {
-            Icon(
-                if (micController.isMicEnabled) Icons.Filled.Mic else Icons.Filled.MicOff,
-                contentDescription = null,
-                modifier = Modifier.size(48.dp),
-                tint = if (micController.isMicEnabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-            )
+            Icon(if (micController.isMicEnabled) Icons.Filled.Mic else Icons.Filled.MicOff, null, Modifier.size(46.dp))
+        }
+        Spacer(Modifier.height(6.dp))
+        Text(if (micController.isMicEnabled) "LIVE MONITOR ON" else "Tap to enable microphone", fontWeight = FontWeight.SemiBold)
+        Spacer(Modifier.height(14.dp))
+
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("Audio Routing", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Text("Input Device", style = MaterialTheme.typography.labelSmall)
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { inputExpanded = true }, Modifier.fillMaxWidth()) {
+                        Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedInputDevice?.productName?.toString() ?: "System Default Mic" else "System Default Mic", maxLines = 1)
+                    }
+                    DropdownMenu(inputExpanded, { inputExpanded = false }) {
+                        DropdownMenuItem(text = { Text("System Default Mic") }, onClick = { micController.selectedInputDevice = null; inputExpanded = false })
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.inputDevices.forEach { device ->
+                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Input ${device.id}" } ?: "Audio Input ${device.id}") }, onClick = { micController.selectedInputDevice = device; inputExpanded = false })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("Output Device", style = MaterialTheme.typography.labelSmall)
+                Box(Modifier.fillMaxWidth()) {
+                    OutlinedButton(onClick = { outputExpanded = true }, Modifier.fillMaxWidth()) {
+                        Text(if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.selectedOutputDevice?.productName?.toString() ?: "System Default Output" else "System Default Output", maxLines = 1)
+                    }
+                    DropdownMenu(outputExpanded, { outputExpanded = false }) {
+                        DropdownMenuItem(text = { Text("System Default Output") }, onClick = { micController.selectedOutputDevice = null; outputExpanded = false })
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
+                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Output ${device.id}" } ?: "Audio Output ${device.id}") }, onClick = { micController.selectedOutputDevice = device; outputExpanded = false })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = if (micController.isMicEnabled) "الميكروفون مفعل (مباشر)" else "اضغط للتفعيل",
-            style = MaterialTheme.typography.labelMedium,
-            color = if (micController.isMicEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Device Selection Card
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("أجهزة الصوت المتصلة", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                    IconButton(onClick = { micController.refreshDevices() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh Devices", modifier = Modifier.size(20.dp))
-                    }
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("DJ Effects", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(micController.echoFxEnabled, { micController.echoFxEnabled = !micController.echoFxEnabled }, label = { Text("Echo") }, modifier = Modifier.weight(1f))
+                    FilterChip(micController.reverbFxEnabled, { micController.reverbFxEnabled = !micController.reverbFxEnabled }, label = { Text("Reverb") }, modifier = Modifier.weight(1f))
                 }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Input Device Dropdown
-                Text("مصدر الإدخال (Mic/Headset):", style = MaterialTheme.typography.labelSmall)
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { inputExpanded = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                micController.selectedInputDevice?.productName?.toString() ?: "افتراضي (Built-in Mic)"
-                            } else "افتراضي",
-                            maxLines = 1
-                        )
-                    }
-                    DropdownMenu(expanded = inputExpanded, onDismissRequest = { inputExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("افتراضي (Built-in Mic)") },
-                            onClick = {
-                                micController.selectedInputDevice = null
-                                inputExpanded = false
-                            }
-                        )
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                            micController.inputDevices.forEach { device ->
-                                DropdownMenuItem(
-                                    text = { Text(device.productName.toString().ifEmpty { "Audio Input ${device.id}" }) },
-                                    onClick = {
-                                        micController.selectedInputDevice = device
-                                        inputExpanded = false
-                                    }
-                                )
-                            }
-                        }
-                    }
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(micController.flangerFxEnabled, { micController.flangerFxEnabled = !micController.flangerFxEnabled }, label = { Text("Flanger") }, modifier = Modifier.weight(1f))
+                    FilterChip(micController.beatFxEnabled, { micController.beatFxEnabled = !micController.beatFxEnabled }, label = { Text("Beat FX") }, modifier = Modifier.weight(1f))
                 }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Output Device Dropdown
-                Text("مخرج الصوت (Speaker/Bluetooth):", style = MaterialTheme.typography.labelSmall)
-                Spacer(modifier = Modifier.height(4.dp))
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { outputExpanded = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(
-                            text = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                                micController.selectedOutputDevice?.productName?.toString() ?: "افتراضي (Speaker/Media)"
-                            } else "افتراضي",
-                            maxLines = 1
-                        )
-                    }
-                    DropdownMenu(expanded = outputExpanded, onDismissRequest = { outputExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("افتراضي (Speaker/Media)") },
-                            onClick = {
-                                micController.selectedOutputDevice = null
-                                outputExpanded = false
-                            }
-                        )
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
-                            micController.outputDevices.forEach { device ->
-                                DropdownMenuItem(
-                                    text = { Text(device.productName.toString().ifEmpty { "Audio Output ${device.id}" }) },
-                                    onClick = {
-                                        micController.selectedOutputDevice = device
-                                        outputExpanded = false
-                                    }
-                                )
-                            }
-                        }
+                Spacer(Modifier.height(8.dp))
+                Text("Vocal Preset", style = MaterialTheme.typography.labelSmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(MicFilter.values().toList()) { filter ->
+                        FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) })
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("Mix & FX Amount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text("Mic Volume: ${(micController.micVolume * 100).toInt()}%")
+                Slider(micController.micVolume, { micController.micVolume = it }, valueRange = 0f..2f)
+                Text("Echo: ${(micController.echoLevel * 100).toInt()}%")
+                Slider(micController.echoLevel, { micController.echoLevel = it }, valueRange = 0f..1f)
+                Text("Reverb: ${(micController.reverbLevel * 100).toInt()}%")
+                Slider(micController.reverbLevel, { micController.reverbLevel = it }, valueRange = 0f..1f)
+                Text("Flanger: ${(micController.flangerMix * 100).toInt()}%")
+                Slider(micController.flangerMix, { micController.flangerMix = it }, valueRange = 0f..1f)
+                Text("Filter: ${(micController.filterMix * 100).toInt()}%")
+                Slider(micController.filterMix, { micController.filterMix = it }, valueRange = 0f..1f)
+            }
+        }
 
-        // Voice Filter Selection
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("فلتر وتأثير الصوت:", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleSmall)
-                Spacer(modifier = Modifier.height(8.dp))
-                Box(modifier = Modifier.fillMaxWidth()) {
-                    OutlinedButton(
-                        onClick = { filterExpanded = true },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text(text = micController.currentFilter.displayName)
-                    }
-                    DropdownMenu(expanded = filterExpanded, onDismissRequest = { filterExpanded = false }) {
-                        MicFilter.values().forEach { filter ->
-                            DropdownMenuItem(
-                                text = { Text(filter.displayName) },
-                                onClick = {
-                                    micController.currentFilter = filter
-                                    filterExpanded = false
-                                }
-                            )
-                        }
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(6.dp))
+                Text("BPM: ${micController.bpm.toInt()}")
+                Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(BeatFxDivision.values().toList()) { div ->
+                        FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) })
                     }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Volume & Echo Controls
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text("مستوى صوت الميكروفون: ${(micController.micVolume * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = micController.micVolume,
-                    onValueChange = { micController.micVolume = it },
-                    valueRange = 0f..2f
-                )
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                Text("مستوى صدى الكاريوكي (Echo): ${(micController.echoLevel * 100).toInt()}%", style = MaterialTheme.typography.bodyMedium)
-                Slider(
-                    value = micController.echoLevel,
-                    onValueChange = { micController.echoLevel = it },
-                    valueRange = 0f..1f
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Anti-Feedback Indicator
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(Icons.Filled.CheckCircle, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(18.dp))
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                "نظام إلغاء الارتداد والصفير (AEC & Noise Suppression) مدمج وفعال",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("AEC & Noise Suppression enabled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

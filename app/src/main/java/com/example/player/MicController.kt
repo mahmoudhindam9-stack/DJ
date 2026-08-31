@@ -1,3 +1,4 @@
+// KARAOKE_DSP_V2
 package com.example.player
 
 import android.annotation.SuppressLint
@@ -16,13 +17,23 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import kotlinx.coroutines.*
+import kotlin.math.PI
+import kotlin.math.sin
+
 
 enum class MicFilter(val displayName: String) {
-    NORMAL("عادي (طبيعي)"),
-    STUDIO_REVERB("صدى استوديو (كاريوكي)"),
-    CHIPMUNK("صوت كرتون (سنجاب)"),
-    MONSTER("صوت عميق (وحش)"),
-    ROBOT("صوت إلكتروني (روبوت)")
+    NORMAL("Clean"),
+    STUDIO_REVERB("Studio Reverb"),
+    CHIPMUNK("Chipmunk"),
+    MONSTER("Monster"),
+    ROBOT("Robot")
+}
+
+enum class BeatFxDivision(val displayName: String, val beats: Float) {
+    HALF("1/2 Beat", 0.5f),
+    QUARTER("1/4 Beat", 0.25f),
+    THREE_QUARTER("3/4 Beat", 0.75f),
+    ONE("1 Beat", 1f)
 }
 
 class MicController(private val context: Context) {
@@ -40,6 +51,15 @@ class MicController(private val context: Context) {
     var micVolume by mutableStateOf(1.2f)
     var echoLevel by mutableStateOf(0.3f)
     var currentFilter by mutableStateOf(MicFilter.STUDIO_REVERB)
+    var echoFxEnabled by mutableStateOf(true)
+    var reverbFxEnabled by mutableStateOf(true)
+    var flangerFxEnabled by mutableStateOf(false)
+    var beatFxEnabled by mutableStateOf(false)
+    var reverbLevel by mutableStateOf(0.28f)
+    var flangerMix by mutableStateOf(0.35f)
+    var filterMix by mutableStateOf(0.55f)
+    var bpm by mutableStateOf(120f)
+    var beatFxDivision by mutableStateOf(BeatFxDivision.QUARTER)
 
     var inputDevices by mutableStateOf<List<AudioDeviceInfo>>(emptyList())
         private set
@@ -145,118 +165,83 @@ class MicController(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun startMic(coroutineScope: CoroutineScope) {
         if (isMicEnabled) return
-
         try {
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
-            val audioSource = if (useBluetoothHfp) {
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION
-            } else {
-                MediaRecorder.AudioSource.MIC
-            }
-
-            audioRecord = AudioRecord(
-                audioSource,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize
-            )
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioRecord?.setPreferredDevice(inputDevice)
-            }
-
+            val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
+            audioRecord = AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.setPreferredDevice(inputDevice)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == inputDevice?.id) {
-                    audioManager.setCommunicationDevice(inputDevice)
-                }
+                if (selectedOutputDevice?.id == inputDevice?.id) audioManager.setCommunicationDevice(inputDevice)
             }
-
             audioTrack = AudioTrack.Builder()
-                .setAudioAttributes(
-                    android.media.AudioAttributes.Builder()
-                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
-                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build()
-                )
-                .setAudioFormat(
-                    AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                        .setSampleRate(sampleRate)
-                        .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
-                        .build()
-                )
-                .setBufferSizeInBytes(bufferSize)
-                .setTransferMode(AudioTrack.MODE_STREAM)
-                .build()
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                audioTrack?.setPreferredDevice(selectedOutputDevice)
-            }
-
+                .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+                .setBufferSizeInBytes(bufferSize).setTransferMode(AudioTrack.MODE_STREAM).build()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.setPreferredDevice(selectedOutputDevice)
             val sessionId = audioRecord?.audioSessionId ?: 0
             if (sessionId != 0) {
-                if (AcousticEchoCanceler.isAvailable()) {
-                    echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
-                }
-                if (NoiseSuppressor.isAvailable()) {
-                    noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
-                }
+                if (AcousticEchoCanceler.isAvailable()) echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
+                if (NoiseSuppressor.isAvailable()) noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
             }
-
             audioRecord?.startRecording()
-            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) {
-                throw IllegalStateException("AudioRecord failed to start")
-            }
-
+            if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("AudioRecord failed to start")
             audioTrack?.play()
             isMicEnabled = true
             AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
             updateRoutingStatus()
-
             recordingJob = coroutineScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(bufferSize / 2)
-                val echoBuffer = ShortArray(sampleRate)
-                var echoIdx = 0
-
+                val delayBuffer = ShortArray(sampleRate)
+                var writeIdx = 0
+                var lowPass = 0f
                 while (isActive && isMicEnabled) {
                     val read = audioRecord?.read(buffer, 0, buffer.size) ?: 0
                     if (read <= 0) continue
-
                     val activeFilter = currentFilter
-                    val effEcho = if (activeFilter == MicFilter.STUDIO_REVERB) {
-                        echoLevel.coerceAtLeast(0.4f)
-                    } else {
-                        echoLevel
-                    }
-
+                    val currentBpm = bpm.coerceIn(70f, 180f)
+                    val beatDelay = ((sampleRate * 60f / currentBpm) * beatFxDivision.beats).toInt().coerceIn(1, delayBuffer.size - 1)
                     for (i in 0 until read) {
-                        var input = buffer[i].toFloat()
+                        var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
                         when (activeFilter) {
-                            MicFilter.CHIPMUNK -> input *= if (i % 2 == 0) 1.2f else 0.8f
-                            MicFilter.MONSTER -> input *= 0.7f
-                            MicFilter.ROBOT -> input *= if ((i / 20) % 2 == 0) 1f else 0.5f
+                            MicFilter.CHIPMUNK -> sample *= 1.12f
+                            MicFilter.MONSTER -> sample *= 0.72f
+                            MicFilter.ROBOT -> sample *= if ((i / 24) % 2 == 0) 1f else 0.55f
                             else -> Unit
                         }
-
-                        val delaySamples = (sampleRate * 0.35).toInt()
-                        val delayedIdx = (echoIdx - delaySamples + echoBuffer.size) % echoBuffer.size
-                        val output = (input + echoBuffer[delayedIdx] * effEcho) * micVolume
-                        buffer[i] = output
-                            .coerceIn(Short.MIN_VALUE.toFloat(), Short.MAX_VALUE.toFloat())
-                            .toInt()
-                            .toShort()
-                        echoBuffer[echoIdx] = buffer[i]
-                        echoIdx = (echoIdx + 1) % echoBuffer.size
+                        val readDelay = fun(frames: Int): Float {
+                            val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size
+                            return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat()
+                        }
+                        val echo = if (echoFxEnabled) readDelay((sampleRate * 0.24f).toInt()) * echoLevel else 0f
+                        val reverb = if (reverbFxEnabled) (readDelay((sampleRate * 0.045f).toInt()) * 0.24f + readDelay((sampleRate * 0.085f).toInt()) * 0.16f) * reverbLevel else 0f
+                        val flanger = if (flangerFxEnabled) {
+                            val lfo = (sin(2.0 * PI * (writeIdx.toDouble() / sampleRate) * 0.35) + 1.0) * 0.5
+                            val d = (sampleRate * (0.001 + 0.004 * lfo)).toInt().coerceIn(1, delayBuffer.size - 1)
+                            readDelay(d) * flangerMix
+                        } else 0f
+                        val combined = sample + echo + reverb + flanger
+                        lowPass += 0.12f * (combined - lowPass)
+                        val filtered = when (activeFilter) {
+                            MicFilter.STUDIO_REVERB -> combined
+                            else -> when {
+                                filterMix <= 0f -> combined
+                                else -> combined * (1f - filterMix) + lowPass * filterMix
+                            }
+                        }
+                        val beatEcho = if (beatFxEnabled) readDelay(beatDelay) * 0.35f else 0f
+                        val output = (filtered + beatEcho).coerceIn(-1f, 1f) * micVolume
+                        val outShort = (output.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
+                        buffer[i] = outShort
+                        delayBuffer[writeIdx] = outShort
+                        writeIdx = (writeIdx + 1) % delayBuffer.size
                     }
-
                     audioTrack?.write(buffer, 0, read)
                 }
             }
         } catch (t: Throwable) {
-            routingStatus = "فشل تشغيل الميكروفون: ${t.message ?: "خطأ غير معروف"}"
+            routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"
             t.printStackTrace()
             stopMic()
         }
