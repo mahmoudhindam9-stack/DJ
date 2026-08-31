@@ -84,3 +84,13 @@ jobs:
           name: DJ-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
+
+      - name: Record successful Android build
+        shell: bash
+        run: |
+          printf 'SUCCESS\nCommit: %s\nWorkflow: Android Build Verification\nArtifact: DJ-debug-apk\n' "$GITHUB_SHA" > .github/android-build-success.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/android-build-success.txt
+          git commit -m "ci: record successful Android build [skip ci]"
+          git push origin HEAD:main
