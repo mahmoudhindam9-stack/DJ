@@ -42,6 +42,9 @@ class EqualizerController {
     var bassBoostLevel by mutableStateOf(0f)
         private set
 
+    var trebleBoostLevel by mutableStateOf(0f)
+        private set
+
     var selectedPreset by mutableStateOf("Flat")
         private set
 
@@ -107,8 +110,16 @@ class EqualizerController {
         applyMakeupGain()
     }
 
+    fun updateTrebleBoost(level: Float) {
+        trebleBoostLevel = level.coerceIn(0f, 1f)
+        selectedPreset = if (selectedPreset == "Flat") "Custom" else selectedPreset
+        applyAllToHardware()
+        applyMakeupGain()
+    }
+
     fun applyPreset(presetName: String) {
         selectedPreset = if (presetName in presets) presetName else "Custom"
+        trebleBoostLevel = 0f
         val values = when (presetName) {
             "Bass Boost" -> listOf(8, 6, 4, 2, 1, 0, 0, 0, -1, -2)
             "Rock" -> listOf(5, 4, 1, 3, 4, 4, 5, 4, 3, 2)
@@ -132,7 +143,13 @@ class EqualizerController {
             val range = eq.bandLevelRange
             for (hardwareIndex in hardwareFrequenciesHz.indices) {
                 val desiredDb = interpolateUiGain(hardwareFrequenciesHz[hardwareIndex])
-                val milliBels = (desiredDb * 100.0).roundToInt()
+                val trebleAdditionDb = if (hardwareFrequenciesHz[hardwareIndex] >= 6000) {
+                    trebleBoostLevel.toDouble() * 6.0
+                } else {
+                    0.0
+                }
+                val totalDb = desiredDb + trebleAdditionDb
+                val milliBels = (totalDb * 100.0).roundToInt()
                     .coerceIn(range[0].toInt(), range[1].toInt()).toShort()
                 eq.setBandLevel(hardwareIndex.toShort(), milliBels)
             }
@@ -158,20 +175,16 @@ class EqualizerController {
         return 0.0
     }
 
-    /**
-     * Makeup gain is positive-only and intentionally modest so enabling EQ does
-     * not reduce the user's original master level.
-     */
     private fun applyMakeupGain() {
         val enhancer = loudnessEnhancer ?: return
         try {
-            val nonZero = bands.any { it.currentLevelDb != 0 } || bassBoostLevel > 0f
-            val gainDb: Double = if (!isEnabled || !nonZero) {
+            val nonZero = bands.any { it.currentLevelDb != 0 } || bassBoostLevel > 0f || trebleBoostLevel > 0f
+            val gainDb = if (!isEnabled || !nonZero) {
                 0.0
             } else {
                 val maxCutDb = bands.minOf { it.currentLevelDb }.coerceAtMost(0).let { -it }
                 val boostHeadroomDb = bands.maxOf { it.currentLevelDb }.coerceAtLeast(0)
-                val requested = 0.5 + (maxCutDb * 0.75) + (bassBoostLevel.toDouble() * 1.0) - (boostHeadroomDb * 0.15)
+                val requested = 0.5 + (maxCutDb * 0.75) + (bassBoostLevel.toDouble() * 1.0) + (trebleBoostLevel.toDouble() * 0.5) - (boostHeadroomDb * 0.15)
                 requested.coerceIn(0.0, 4.0)
             }
             enhancer.setTargetGain((gainDb * 1000.0).roundToInt())
