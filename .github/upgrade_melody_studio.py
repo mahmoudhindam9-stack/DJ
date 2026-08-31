@@ -131,30 +131,27 @@ def patch_main():
     text = MAIN.read_text(encoding="utf-8")
     changed = False
 
-    # Fix the previous build blocker: MicScreen receives Context as a parameter,
-    # so it must not redeclare LocalContext with the same name.
+    if 'import android.content.Context\n' not in text:
+        text = text.replace('import android.Manifest\n', 'import android.Manifest\nimport android.content.Context\n', 1)
+        changed = True
+
     duplicate = 'fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {\n    val context = LocalContext.current\n'
     fixed = 'fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {\n'
     if duplicate in text:
         text = text.replace(duplicate, fixed, 1)
         changed = True
 
-    if MARK not in text:
-        nav_anchor = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },'''
-        control_item = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },\n                    label = { Text("Controls") },\n                    selected = currentDestination?.route == "controls",\n                    onClick = {\n                        navController.navigate("controls") {\n                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n                            launchSingleTop = true\n                            restoreState = true\n                        }\n                    }\n                )\n'''
-        if nav_anchor in text:
-            text = text.replace(nav_anchor, control_item + nav_anchor, 1)
-            changed = True
+    nav_anchor = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },'''
+    control_item = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },\n                    label = { Text("Controls") },\n                    selected = currentDestination?.route == "controls",\n                    onClick = {\n                        navController.navigate("controls") {\n                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n                            launchSingleTop = true\n                            restoreState = true\n                        }\n                    }\n                )\n'''
+    if 'currentDestination?.route == "controls"' not in text and nav_anchor in text:
+        text = text.replace(nav_anchor, control_item + nav_anchor, 1)
+        changed = True
 
-        route_anchor = '''            composable("mic") {\n                MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)\n            }\n'''
-        route_insert = route_anchor + '''            composable("controls") {\n                NotificationControlScreen(context = context)\n            }\n'''
-        if route_anchor in text:
-            text = text.replace(route_anchor, route_insert, 1)
-            changed = True
-
-        text = text.replace('fun NotificationControlScreen(context: Context)', 'fun NotificationControlScreen(context: Context)', 1)
-        if CONTROL.exists() or True:
-            pass
+    route_anchor = '''            composable("mic") {\n                MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)\n            }\n'''
+    route_insert = route_anchor + '''            composable("controls") {\n                NotificationControlScreen(context = context)\n            }\n'''
+    if 'composable("controls")' not in text and route_anchor in text:
+        text = text.replace(route_anchor, route_insert, 1)
+        changed = True
 
     MAIN.write_text(text, encoding="utf-8")
     return changed
