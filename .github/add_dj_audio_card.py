@@ -161,8 +161,13 @@ if marker not in text:
 
 # ---------------- launcher/task reuse ----------------
 manifest = MANIFEST.read_text(encoding="utf-8")
-activity_re = r'(<activity\s+android:name="\.MainActivity"\s+android:exported="true"\s+android:label="@string/app_name"\s+android:theme="@style/Theme\.MyApplication")'
-manifest = re.sub(activity_re, r'\1\n            android:launchMode="singleTask"', manifest, count=1)
+activity_pattern = r'(<activity\s+android:name="\.MainActivity"[^>]*?)(\s*/>|>)'
+match = re.search(activity_pattern, manifest, flags=re.DOTALL)
+if match:
+    activity = match.group(1)
+    activity = re.sub(r'\s+android:launchMode="[^"]*"', '', activity)
+    activity += '\n            android:launchMode="singleTask"'
+    manifest = manifest[:match.start(1)] + activity + match.group(2) + manifest[match.end(2):]
 MANIFEST.write_text(manifest, encoding="utf-8")
 
 # ---------------- ORG sounds: real playable Western/Oriental banks + wedding/event sounds ----------------
@@ -200,7 +205,6 @@ if 'Text("Wedding / Event Sounds"' not in screen:
     pos = screen.find(anchor)
     if pos < 0:
         raise SystemExit("ORG sound card insertion anchor not found")
-    # Insert immediately before the accompaniment card; this keeps controls visible on the Sounds tab.
     event_card = '''                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {\n                    Column(Modifier.padding(16.dp)) {\n                        Text("Wedding / Event Sounds", fontWeight = FontWeight.Bold)\n                        Text("Oriental drum, zaffa, zaghrouta and celebration effects.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)\n                        Spacer(Modifier.height(8.dp))\n                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n                            items(engine.specialSounds) { sound ->\n                                val idx = engine.specialSounds.indexOf(sound)\n                                Button(onClick = { engine.triggerSpecialSound(idx) }) { Text(sound.name) }\n                            }\n                        }\n                    }\n                }\n                Spacer(Modifier.height(12.dp))\n'''
     screen = screen[:pos] + event_card + screen[pos:]
 SCREEN.write_text(screen, encoding="utf-8")
