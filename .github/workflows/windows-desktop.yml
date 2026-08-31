@@ -1,0 +1,47 @@
+name: Windows Desktop Build
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'desktop/**'
+      - '.github/workflows/windows-desktop.yml'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build Windows EXE and installer
+        run: npm run dist
+
+      - name: Verify artifacts
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path dist -File -Include *.exe
+          if (-not $files) { throw 'No Windows EXE artifacts were produced.' }
+          $files | ForEach-Object { Write-Host "ARTIFACT: $($_.FullName) ($($_.Length) bytes)" }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJ-Workstation-Windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+          retention-days: 30
