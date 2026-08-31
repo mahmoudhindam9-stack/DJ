@@ -22,8 +22,6 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: desktop/package-lock.json
 
       - name: Install dependencies
         run: npm install
@@ -34,7 +32,7 @@ jobs:
       - name: Verify artifacts
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path dist -File -Include *.exe
+          $files = Get-ChildItem -Path dist -File -Filter *.exe
           if (-not $files) { throw 'No Windows EXE artifacts were produced.' }
           $files | ForEach-Object { Write-Host "ARTIFACT: $($_.FullName) ($($_.Length) bytes)" }
 
