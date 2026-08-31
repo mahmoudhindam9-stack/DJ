@@ -41,6 +41,9 @@ jobs:
       - name: Remove Melody Studio completely
         run: python3 .github/remove_melody_studio.py
 
+      - name: Wire ORG workstation and output recorder
+        run: python3 .github/add_org_system.py
+
       - name: Commit app upgrades
         run: |
           git config user.name "github-actions[bot]"
@@ -51,11 +54,14 @@ jobs:
                   app/src/main/java/com/example/player/DJDeckController.kt \
                   app/src/main/java/com/example/player/MusicService.kt \
                   app/src/main/java/com/example/widget/MusicWidgetProvider.kt \
-                  app/src/main/java/com/example/NotificationControlScreen.kt
+                  app/src/main/java/com/example/NotificationControlScreen.kt \
+                  app/src/main/java/com/example/org/OrgController.kt \
+                  app/src/main/java/com/example/org/OrgScreen.kt \
+                  .github/add_org_system.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: finalize karaoke routing EQ Dolby DJ effects and external controls [skip ci]"
+            git commit -m "feat: add ORG workstation and master output recorder [skip ci]"
             git push origin HEAD:main
           fi
 
