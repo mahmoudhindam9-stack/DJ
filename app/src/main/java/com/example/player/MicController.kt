@@ -230,14 +230,24 @@ class MicController(private val context: Context) {
     private fun startMic(coroutineScope: CoroutineScope) {
         if (isMicEnabled) return
         try {
+            // INDEPENDENT_BT_ROUTING_V1
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
+            // SCO/HFP input needs communication mode, but we deliberately do NOT call
+            // setCommunicationDevice() here because that API selects a matching output too.
+            // AudioRecord.setPreferredDevice() and AudioTrack.setPreferredDevice() are used
+            // independently so Bluetooth input and Bluetooth output can be selected separately
+            // whenever the Android device/audio stack supports that combination.
             val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
             audioRecord = AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.setPreferredDevice(inputDevice)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                val accepted = audioRecord?.setPreferredDevice(inputDevice) ?: false
+                if (inputDevice != null && !accepted) {
+                    routingStatus = "تعذر اختيار مدخل الصوت: ${inputDevice.displayName()}"
+                }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == inputDevice?.id) audioManager.setCommunicationDevice(inputDevice)
             }
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
@@ -325,11 +335,11 @@ class MicController(private val context: Context) {
             }
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device?.isBluetoothSco() == true) {
+                // Keep communication mode for SCO/HFP capture, but do not bind the output
+                // to this same device. The output is routed independently below.
                 audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == device.id) {
-                    audioManager.setCommunicationDevice(device)
-                }
             }
+            applyOutputRouting()
             updateRoutingStatus()
         } catch (t: Throwable) {
             routingStatus = "تعذر تغيير مصدر الإدخال: ${t.message ?: "خطأ"}"
@@ -351,11 +361,13 @@ class MicController(private val context: Context) {
             AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val input = selectedInputDevice
-                if (input?.isBluetoothSco() == true && selectedOutputDevice?.id == input.id) {
-                    audioManager.setCommunicationDevice(input)
-                } else if (selectedOutputDevice == null && audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) {
-                    audioManager.clearCommunicationDevice()
+                val inputNeedsCommunicationMode = selectedInputDevice?.isBluetoothSco() == true
+                if (inputNeedsCommunicationMode) {
+                    audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
+                } else if (audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) {
+                    audioManager.mode = AudioManager.MODE_NORMAL
+                    // Do not call clearCommunicationDevice(): this implementation no longer
+                    // uses a global communication-device lock for independent routing.
                 }
             }
             updateRoutingStatus()
@@ -370,7 +382,9 @@ class MicController(private val context: Context) {
         val actualOutput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.routedDevice else null
         val inputName = actualInput?.displayName() ?: selectedInputDevice?.displayName() ?: "تلقائي"
         val outputName = actualOutput?.displayName() ?: selectedOutputDevice?.displayName() ?: "تلقائي"
-        routingStatus = "الإدخال: $inputName  •  الإخراج: $outputName"
+        val independent = selectedInputDevice != null && selectedOutputDevice != null && selectedInputDevice?.id != selectedOutputDevice?.id
+        val suffix = if (independent) "  •  مستقل" else ""
+        routingStatus = "الإدخال: $inputName  •  الإخراج: $outputName$suffix"
     }
 
     /** Apply an input selection immediately. If live monitoring is active, the recorder is restarted
@@ -417,10 +431,13 @@ class MicController(private val context: Context) {
         } catch (_: Throwable) { }
         audioTrack = null
 
+        // We do not own a global communication-device selection anymore; only reset the
+        // communication mode used to make SCO/HFP capture available.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try { audioManager.clearCommunicationDevice() } catch (_: Throwable) { }
+            audioManager.mode = AudioManager.MODE_NORMAL
+        } else {
+            audioManager.mode = AudioManager.MODE_NORMAL
         }
-        audioManager.mode = AudioManager.MODE_NORMAL
         routingStatus = "تم إيقاف الميكروفون"
     }
 
