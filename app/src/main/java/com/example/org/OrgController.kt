@@ -21,7 +21,6 @@ import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.sin
 import kotlin.random.Random
 
@@ -30,12 +29,18 @@ class OrgEngine(private val context: Context) {
     data class Rhythm(val name: String, val bpm: Int, val steps: IntArray)
 
     val voices = listOf(
-        Voice("Grand Organ", "Organ", 261.63, 0.52), Voice("Warm Organ", "Organ", 220.0, 0.34),
-        Voice("Accordion", "Accordion", 293.66, 0.44), Voice("Hammond", "Organ", 174.61, 0.63),
-        Voice("Strings", "Orchestral", 261.63, 0.26), Voice("Brass", "Orchestral", 196.00, 0.56),
-        Voice("Sax", "Wind", 233.08, 0.68), Voice("Flute", "Wind", 329.63, 0.20),
-        Voice("Synth Lead", "Synth", 261.63, 0.74), Voice("Synth Pad", "Synth", 174.61, 0.48),
-        Voice("Guitar", "Keys/Strings", 196.00, 0.36), Voice("Mallet", "Percussion", 392.00, 0.24)
+        Voice("Grand Organ", "Organ", 261.63, 0.52),
+        Voice("Warm Organ", "Organ", 220.0, 0.34),
+        Voice("Accordion", "Accordion", 293.66, 0.44),
+        Voice("Hammond", "Organ", 174.61, 0.63),
+        Voice("Strings", "Orchestral", 261.63, 0.26),
+        Voice("Brass", "Orchestral", 196.00, 0.56),
+        Voice("Sax", "Wind", 233.08, 0.68),
+        Voice("Flute", "Wind", 329.63, 0.20),
+        Voice("Synth Lead", "Synth", 261.63, 0.74),
+        Voice("Synth Pad", "Synth", 174.61, 0.48),
+        Voice("Guitar", "Keys/Strings", 196.00, 0.36),
+        Voice("Mallet", "Percussion", 392.00, 0.24)
     )
 
     val rhythms = listOf(
@@ -50,16 +55,27 @@ class OrgEngine(private val context: Context) {
     )
 
     private var rhythmJob: Job? = null
-    var rhythm: Rhythm = rhythms.first(); private set
-    var bpm: Int = rhythm.bpm; private set
+    var rhythm: Rhythm = rhythms.first()
+        private set
+    var bpm: Int = rhythm.bpm
+        private set
     var volume: Float = 0.8f
     var voiceIndex: Int = 0
     var accompanimentEnabled: Boolean = false
     var rhythmEnabled: Boolean = false
 
-    fun setRhythm(index: Int) { rhythm = rhythms[index.coerceIn(rhythms.indices)]; bpm = rhythm.bpm }
-    fun setBpm(value: Int) { bpm = value.coerceIn(50, 180) }
-    fun selectVoice(index: Int) { voiceIndex = index.coerceIn(voices.indices) }
+    fun setRhythm(index: Int) {
+        rhythm = rhythms[index.coerceIn(rhythms.indices)]
+        bpm = rhythm.bpm
+    }
+
+    fun setBpm(value: Int) {
+        bpm = value.coerceIn(50, 180)
+    }
+
+    fun selectVoice(index: Int) {
+        voiceIndex = index.coerceIn(voices.indices)
+    }
 
     fun startRhythm(scope: CoroutineScope) {
         rhythmJob?.cancel()
@@ -68,18 +84,24 @@ class OrgEngine(private val context: Context) {
             var step = 0
             while (isActive && rhythmEnabled) {
                 playPercussion(rhythm.steps[step % rhythm.steps.size])
-                if (accompanimentEnabled && step % 2 == 0) playAccompaniment(step / 2)
+                if (accompanimentEnabled && step % 2 == 0) {
+                    playAccompaniment(step / 2)
+                }
                 step++
                 delay((60000L / bpm).coerceAtLeast(50L) / 2L)
             }
         }
     }
 
-    fun stopRhythm() { rhythmEnabled = false; rhythmJob?.cancel(); rhythmJob = null }
+    fun stopRhythm() {
+        rhythmEnabled = false
+        rhythmJob?.cancel()
+        rhythmJob = null
+    }
 
     fun triggerPad(pad: Int) {
         val freq = doubleArrayOf(130.81, 164.81, 196.00, 220.00, 261.63, 329.63, 392.00, 523.25)[pad.coerceIn(0, 7)]
-        playTone(freq, 0.30, 0.72, 0.18)
+        playTone(freq, 0.30, 0.72f, 0.18)
     }
 
     fun triggerVoice() {
@@ -98,9 +120,9 @@ class OrgEngine(private val context: Context) {
     private fun playPercussion(kind: Int) {
         when (kind) {
             0 -> noise(0.08, 0.85, 110.0)
-            1 -> toneClick(110.0, 0.12, 0.75)
+            1 -> toneClick(110.0, 0.12, 0.75f)
             2 -> noise(0.16, 0.55, 2800.0)
-            else -> toneClick(65.4, 0.20, 0.72)
+            else -> toneClick(65.4, 0.20, 0.72f)
         }
     }
 
@@ -113,14 +135,22 @@ class OrgEngine(private val context: Context) {
                 val t = i.toDouble() / sr
                 val p = i.toDouble() / count
                 val env = if (p < 0.02) p / 0.02 else exp(-p * 3.0)
-                val s = sin(2.0 * PI * freq * t) + harmonic * sin(2.0 * PI * freq * 2.0 * t) + harmonic * 0.42 * sin(2.0 * PI * freq * 3.0 * t)
-                data[i] = (s * 12000.0 * amp * env).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                val s =
+                    sin(2.0 * PI * freq * t) +
+                    harmonic * sin(2.0 * PI * freq * 2.0 * t) +
+                    harmonic * 0.42 * sin(2.0 * PI * freq * 3.0 * t)
+                data[i] = (s * 12000.0 * amp * env)
+                    .toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
             }
             playPcm(data, sr)
         }.start()
     }
 
-    private fun toneClick(freq: Double, duration: Double, amp: Float) = playTone(freq, duration, amp, 0.08)
+    private fun toneClick(freq: Double, duration: Double, amp: Float) {
+        playTone(freq, duration, amp, 0.08)
+    }
 
     private fun noise(duration: Double, amp: Double, centerHz: Double) {
         Thread {
@@ -134,23 +164,45 @@ class OrgEngine(private val context: Context) {
                 val env = exp(-p * 6.0)
                 phase += step
                 val n = (Random.nextDouble() * 2.0 - 1.0) * 0.72 + sin(phase) * 0.28
-                data[i] = (n * 12000.0 * amp * env).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                data[i] = (n * 12000.0 * amp * env)
+                    .toInt()
+                    .coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt())
+                    .toShort()
             }
             playPcm(data, sr)
         }.start()
     }
 
     private fun playPcm(samples: ShortArray, sampleRate: Int) {
-        val minBuffer = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_MONO, AudioFormat.ENCODING_PCM_16BIT)
+        val minBuffer = AudioTrack.getMinBufferSize(
+            sampleRate,
+            AudioFormat.CHANNEL_OUT_MONO,
+            AudioFormat.ENCODING_PCM_16BIT
+        )
         val track = AudioTrack.Builder()
-            .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-            .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .build()
+            )
+            .setAudioFormat(
+                AudioFormat.Builder()
+                    .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                    .setSampleRate(sampleRate)
+                    .setChannelMask(AudioFormat.CHANNEL_OUT_MONO)
+                    .build()
+            )
             .setBufferSizeInBytes(max(minBuffer, samples.size * 2))
             .setTransferMode(AudioTrack.MODE_STATIC)
             .build()
         try {
-            track.write(samples, 0, samples.size); track.play(); Thread.sleep((samples.size * 1000L / sampleRate) + 35L)
-        } finally { track.release() }
+            track.write(samples, 0, samples.size)
+            track.play()
+            Thread.sleep((samples.size * 1000L / sampleRate) + 35L)
+        } finally {
+            track.release()
+        }
     }
 }
 
@@ -158,59 +210,87 @@ class OrgEngine(private val context: Context) {
 class OrgOutputRecorder(private val context: Context) {
     var isRecording: Boolean = false
         private set
+
     var lastFile: File? = null
         private set
 
     private var projection: MediaProjection? = null
     private var recordJob: Job? = null
 
-    fun start(projection: MediaProjection, scope: CoroutineScope) {
+    fun start(captureProjection: MediaProjection, scope: CoroutineScope) {
         stop()
-        this.projection = projection
+        projection = captureProjection
         val dir = File(context.getExternalFilesDir(null), "recordings").apply { mkdirs() }
         val file = File(dir, "ORG_${System.currentTimeMillis()}.wav")
         lastFile = file
         isRecording = true
+
         recordJob = scope.launch(Dispatchers.IO) {
             val sampleRate = 48000
             val channelMask = AudioFormat.CHANNEL_IN_STEREO
-            val config = android.media.AudioPlaybackCaptureConfiguration.Builder(projection)
+            val config = android.media.AudioPlaybackCaptureConfiguration.Builder(captureProjection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .build()
-            val min = AudioRecord.getMinBufferSize(sampleRate, channelMask, AudioFormat.ENCODING_PCM_16BIT)
+            val min = AudioRecord.getMinBufferSize(
+                sampleRate,
+                channelMask,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+
             val recorder = AudioRecord.Builder()
-                .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(channelMask).build())
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setSampleRate(sampleRate)
+                        .setChannelMask(channelMask)
+                        .build()
+                )
                 .setBufferSizeInBytes(max(min * 2, sampleRate))
                 .setAudioPlaybackCaptureConfig(config)
                 .build()
+
             val out = FileOutputStream(file)
             var totalBytes = 0L
             val buffer = ShortArray(sampleRate / 2)
-            writeWavHeader(out, sampleRate, 2, 16, 0)
+            writeWavHeader(out)
+
             try {
                 recorder.startRecording()
                 while (isRecording) {
                     val n = recorder.read(buffer, 0, buffer.size)
                     if (n > 0) {
                         val bytes = ByteBuffer.allocate(n * 2).order(ByteOrder.LITTLE_ENDIAN)
-                        for (i in 0 until n) bytes.putShort(buffer[i])
-                        out.write(bytes.array()); totalBytes += n * 2L
+                        for (i in 0 until n) {
+                            bytes.putShort(buffer[i])
+                        }
+                        out.write(bytes.array())
+                        totalBytes += n * 2L
                     }
                 }
             } finally {
-                try { recorder.stop() } catch (_: Exception) { }
+                try {
+                    recorder.stop()
+                } catch (_: Exception) {
+                }
                 recorder.release()
                 out.close()
                 RandomAccessWav.patchHeader(file, totalBytes, sampleRate, 2, 16)
-                projection.stop()
+                captureProjection.stop()
                 this@OrgOutputRecorder.projection = null
             }
         }
     }
 
-    fun stop() { if (!isRecording && recordJob == null) return; isRecording = false; recordJob?.cancel(); recordJob = null; projection?.stop(); projection = null }
+    fun stop() {
+        if (!isRecording && recordJob == null) return
+        isRecording = false
+        recordJob?.cancel()
+        recordJob = null
+        projection?.stop()
+        projection = null
+    }
 
-    private fun writeWavHeader(out: FileOutputStream, sampleRate: Int, channels: Int, bits: Int, dataLength: Long) {
+    private fun writeWavHeader(out: FileOutputStream) {
         out.write(ByteArray(44))
     }
 }
@@ -222,12 +302,26 @@ private object RandomAccessWav {
             raf.writeBytes("RIFF")
             writeLE32(raf, (36L + dataLength).toInt())
             raf.writeBytes("WAVEfmt ")
-            writeLE32(raf, 16); writeLE16(raf, 1); writeLE16(raf, channels)
-            writeLE32(raf, sampleRate); writeLE32(raf, sampleRate * channels * bits / 8)
-            writeLE16(raf, channels * bits / 8); writeLE16(raf, bits)
-            raf.writeBytes("data"); writeLE32(raf, dataLength.toInt())
+            writeLE32(raf, 16)
+            writeLE16(raf, 1)
+            writeLE16(raf, channels)
+            writeLE32(raf, sampleRate)
+            writeLE32(raf, sampleRate * channels * bits / 8)
+            writeLE16(raf, channels * bits / 8)
+            writeLE16(raf, bits)
+            raf.writeBytes("data")
+            writeLE32(raf, dataLength.toInt())
         }
     }
-    private fun writeLE16(raf: java.io.RandomAccessFile, v: Int) { raf.write(v and 255); raf.write((v ushr 8) and 255) }
-    private fun writeLE32(raf: java.io.RandomAccessFile, v: Int) { for (s in 0..3) raf.write((v ushr (8 * s)) and 255) }
+
+    private fun writeLE16(raf: java.io.RandomAccessFile, v: Int) {
+        raf.write(v and 255)
+        raf.write((v ushr 8) and 255)
+    }
+
+    private fun writeLE32(raf: java.io.RandomAccessFile, v: Int) {
+        for (s in 0..3) {
+            raf.write((v ushr (8 * s)) and 255)
+        }
+    }
 }
