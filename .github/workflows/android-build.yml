@@ -1,6 +1,5 @@
 name: Android Build Verification
 
-# CI verification for the complete DJ feature set.
 on:
   push:
     branches: [ main ]
@@ -45,8 +44,7 @@ jobs:
                   app/src/main/java/com/example/player/EqualizerController.kt \
                   app/src/main/java/com/example/player/MusicService.kt \
                   app/src/main/java/com/example/widget/MusicWidgetProvider.kt \
-                  app/src/main/java/com/example/NotificationControlScreen.kt \
-                  app/src/main/java/com/example/MelodyStudio.kt
+                  app/src/main/java/com/example/NotificationControlScreen.kt
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
