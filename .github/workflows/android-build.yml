@@ -29,6 +29,9 @@ jobs:
       - name: Fix audio device classification and Bluetooth routing
         run: python3 .github/fix_device_routing.py
 
+      - name: Persist expanded DJ effects engine
+        run: python3 .github/expand_dj_effects.py
+
       - name: Persist safe EQ and Dolby integration
         run: python3 .github/upgrade_equalizer_dolby.py
 
@@ -42,13 +45,14 @@ jobs:
           git add app/src/main/java/com/example/MainActivity.kt \
                   app/src/main/java/com/example/player/MicController.kt \
                   app/src/main/java/com/example/player/EqualizerController.kt \
+                  app/src/main/java/com/example/player/DJDeckController.kt \
                   app/src/main/java/com/example/player/MusicService.kt \
                   app/src/main/java/com/example/widget/MusicWidgetProvider.kt \
                   app/src/main/java/com/example/NotificationControlScreen.kt
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: finalize karaoke routing EQ Dolby and external controls [skip ci]"
+            git commit -m "feat: finalize karaoke routing EQ Dolby DJ effects and external controls [skip ci]"
             git push origin HEAD:main
           fi
 
