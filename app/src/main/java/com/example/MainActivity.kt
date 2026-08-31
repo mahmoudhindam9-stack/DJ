@@ -32,7 +32,6 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.snapshots.SnapshotStateList
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -211,7 +210,7 @@ fun MainApp() {
                 EqualizerScreen(eqController = eqController)
             }
             composable("mic") {
-                MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)
+                MicScreen(micController = micController, context = context, scope = scope)
             }
             composable("controls") {
                 NotificationControlScreen(context = context)
@@ -225,7 +224,7 @@ fun MainApp() {
 
 @Composable
 // KARAOKE_DJ_ENGLISH_V2
-fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+fun MicScreen(micController: MicController, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
 
@@ -352,9 +351,6 @@ fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<Audi
         }
 
         Spacer(Modifier.height(12.dp))
-        // MELODY_STUDIO_V2
-        MelodyStudioCard(audioLibrary, context)
-
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp))
