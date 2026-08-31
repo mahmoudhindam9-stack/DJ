@@ -2,9 +2,12 @@ package com.example.player
 
 import android.content.Context
 import android.content.Intent
+import android.media.AudioDeviceInfo
+import androidx.annotation.OptIn
 import androidx.compose.runtime.*
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import com.example.model.AudioItem
 import kotlinx.coroutines.delay
@@ -45,6 +48,13 @@ class AudioPlayerController(private val context: Context) {
         private set
 
     init {
+        activeInstance = this
+        // Re-apply a preferred output if the user selected one before this
+        // player finished constructing or after a player reset.
+        activePreferredAudioDevice?.let { device ->
+            setPreferredAudioDevice(device)
+        }
+
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
@@ -98,6 +108,7 @@ class AudioPlayerController(private val context: Context) {
             val mediaItems = playlist.map { MediaItem.fromUri(it.uri) }
             exoPlayer.setMediaItems(mediaItems, startIndex, 0L)
             exoPlayer.prepare()
+            applyPreferredAudioDevice()
         }
     }
 
@@ -111,6 +122,7 @@ class AudioPlayerController(private val context: Context) {
             val mediaItems = playlist.map { MediaItem.fromUri(it.uri) }
             exoPlayer.setMediaItems(mediaItems, targetIndex, 0L)
             exoPlayer.prepare()
+            applyPreferredAudioDevice()
             exoPlayer.play()
             currentSongIndex = targetIndex
             currentSong = song
@@ -124,6 +136,7 @@ class AudioPlayerController(private val context: Context) {
             if (exoPlayer.playbackState == Player.STATE_ENDED) {
                 exoPlayer.seekTo(0)
             }
+            applyPreferredAudioDevice()
             exoPlayer.play()
         }
     }
@@ -143,6 +156,7 @@ class AudioPlayerController(private val context: Context) {
         currentSong = playlist.getOrNull(currentSongIndex)
         currentSong?.let {
             exoPlayer.seekTo(currentSongIndex, 0L)
+            applyPreferredAudioDevice()
             exoPlayer.play()
         }
     }
@@ -162,6 +176,7 @@ class AudioPlayerController(private val context: Context) {
         currentSong = playlist.getOrNull(currentSongIndex)
         currentSong?.let {
             exoPlayer.seekTo(currentSongIndex, 0L)
+            applyPreferredAudioDevice()
             exoPlayer.play()
         }
     }
@@ -194,10 +209,29 @@ class AudioPlayerController(private val context: Context) {
         exoPlayer.volume = volume
     }
 
+    /**
+     * Route the music player's actual Media3 output to a chosen Android audio device.
+     * This is separate from the microphone's AudioTrack routing.
+     */
+    @OptIn(UnstableApi::class)
+    fun setPreferredAudioDevice(device: AudioDeviceInfo?) {
+        activePreferredAudioDevice = device
+        try {
+            exoPlayer.setPreferredAudioDevice(device)
+        } catch (t: Throwable) {
+            t.printStackTrace()
+        }
+    }
+
+    private fun applyPreferredAudioDevice() {
+        activePreferredAudioDevice?.let { setPreferredAudioDevice(it) }
+    }
+
     private fun handleTrackEnded() {
         when (repeatOption) {
             RepeatOption.ONE -> {
                 exoPlayer.seekTo(0)
+                applyPreferredAudioDevice()
                 exoPlayer.play()
             }
             RepeatOption.ALL -> {
@@ -223,6 +257,28 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun release() {
+        try {
+            exoPlayer.setPreferredAudioDevice(null)
+        } catch (_: Throwable) {
+        }
+        if (activeInstance === this) activeInstance = null
         exoPlayer.release()
+    }
+
+    companion object {
+        /** Shared route used by the Mic/Karaoke page without changing MainActivity's wiring. */
+        @JvmStatic
+        var activeInstance: AudioPlayerController? = null
+            private set
+
+        @JvmStatic
+        var activePreferredAudioDevice: AudioDeviceInfo? = null
+            private set
+
+        @JvmStatic
+        fun updateGlobalPreferredAudioDevice(device: AudioDeviceInfo?) {
+            activePreferredAudioDevice = device
+            activeInstance?.setPreferredAudioDevice(device)
+        }
     }
 }
