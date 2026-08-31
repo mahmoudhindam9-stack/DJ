@@ -138,7 +138,7 @@ fun OrgScreen() {
                 }
                 Spacer(Modifier.height(14.dp))
                 Text("Tempo: ${engine.bpm} BPM")
-                Slider(value = engine.bpm.toFloat(), onValueChange = { engine.setBpm(it.toInt()) }, valueRange = 50f..180f)
+                Slider(value = engine.bpm.toFloat(), onValueChange = { engine.updateBpm(it.toInt()) }, valueRange = 50f..180f)
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { engine.startRhythm(scope) }, modifier = Modifier.weight(1f)) { Text("START") }
                     OutlinedButton(onClick = { engine.stopRhythm() }, modifier = Modifier.weight(1f)) { Text("STOP") }

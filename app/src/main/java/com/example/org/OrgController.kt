@@ -102,7 +102,7 @@ class OrgEngine(private val context: Context) {
         bpm = rhythm.bpm
     }
 
-    fun setBpm(value: Int) {
+    fun updateBpm(value: Int) {
         bpm = value.coerceIn(50, 180)
     }
 
