@@ -45,7 +45,8 @@ class MicController(private val context: Context) {
     var outputDevices by mutableStateOf<List<AudioDeviceInfo>>(emptyList())
         private set
 
-    // Public for compatibility with the existing Compose UI; setters now perform routing.
+    // Public for compatibility with the current Compose screen.
+    // Changing a selection immediately updates the active audio routes.
     var selectedInputDevice: AudioDeviceInfo?
         get() = _selectedInputDevice
         set(value) {
@@ -59,7 +60,7 @@ class MicController(private val context: Context) {
         set(value) {
             _selectedOutputDevice = value
             routingStatus = if (value == null) "مخرج الصوت: تلقائي" else "مخرج الصوت: ${value.displayName()}"
-            // Route the actual Media3 music player to the same selected output.
+            // Media3 music playback uses the exact same selected output route.
             AudioPlayerController.updateGlobalPreferredAudioDevice(value)
             if (isMicEnabled) applyOutputRouting()
         }
@@ -125,6 +126,7 @@ class MicController(private val context: Context) {
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
             val audioSource = if (useBluetoothHfp) {
+                // HFP/SCO microphones are communication sources on Android.
                 MediaRecorder.AudioSource.VOICE_COMMUNICATION
             } else {
                 MediaRecorder.AudioSource.MIC
@@ -138,17 +140,11 @@ class MicController(private val context: Context) {
                 bufferSize
             )
 
+            // Prefer exactly the selected input endpoint. Do not call
+            // setCommunicationDevice here because that couples the output route
+            // to the communication endpoint and would defeat a separate speaker.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 audioRecord?.setPreferredDevice(inputDevice)
-            }
-
-            // For classic Bluetooth HFP, Android communication routing is coupled.
-            // Only select the communication device when it is also the requested output.
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == inputDevice?.id) {
-                    audioManager.setCommunicationDevice(inputDevice)
-                }
             }
 
             audioTrack = AudioTrack.Builder()
@@ -245,20 +241,13 @@ class MicController(private val context: Context) {
     private fun applyInputRouting() {
         try {
             val record = audioRecord ?: return
-            val device = selectedInputDevice
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val accepted = record.setPreferredDevice(device)
-                if (!accepted && device != null) {
-                    routingStatus = "تعذر توجيه الميكروفون إلى ${device.displayName()}"
-                    return
-                }
-            }
+            val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                record.setPreferredDevice(selectedInputDevice)
+            } else true
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device?.isBluetoothSco() == true) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == device.id) {
-                    audioManager.setCommunicationDevice(device)
-                }
+            if (!accepted && selectedInputDevice != null) {
+                routingStatus = "تعذر توجيه الميكروفون إلى ${selectedInputDevice?.displayName()}"
+                return
             }
             updateRoutingStatus()
         } catch (t: Throwable) {
@@ -269,21 +258,13 @@ class MicController(private val context: Context) {
     private fun applyOutputRouting() {
         try {
             val track = audioTrack ?: return
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val accepted = track.setPreferredDevice(selectedOutputDevice)
-                if (!accepted && selectedOutputDevice != null) {
-                    routingStatus = "تعذر توجيه صوت الميكروفون إلى ${selectedOutputDevice?.displayName()}"
-                    return
-                }
-            }
+            val accepted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                track.setPreferredDevice(selectedOutputDevice)
+            } else true
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val input = selectedInputDevice
-                if (input?.isBluetoothSco() == true && selectedOutputDevice?.id == input.id) {
-                    audioManager.setCommunicationDevice(input)
-                } else if (selectedOutputDevice == null && audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) {
-                    audioManager.clearCommunicationDevice()
-                }
+            if (!accepted && selectedOutputDevice != null) {
+                routingStatus = "تعذر توجيه صوت الميكروفون إلى ${selectedOutputDevice?.displayName()}"
+                return
             }
             updateRoutingStatus()
         } catch (t: Throwable) {
@@ -333,10 +314,6 @@ class MicController(private val context: Context) {
         }
         audioTrack = null
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            try { audioManager.clearCommunicationDevice() } catch (t: Throwable) { t.printStackTrace() }
-        }
-        audioManager.mode = AudioManager.MODE_NORMAL
         routingStatus = "تم إيقاف الميكروفون"
     }
 
