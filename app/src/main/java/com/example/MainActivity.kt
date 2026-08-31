@@ -1345,6 +1345,8 @@ fun DJPadButton(label: String, isActive: Boolean, onClick: () -> Unit) {
 
 @Composable
 fun EqualizerScreen(eqController: EqualizerController) {
+    // SAFE_EQ_DOLBY_V3
+    val context = LocalContext.current
     Column(
         modifier = Modifier
   .fillMaxSize()
@@ -1371,6 +1373,23 @@ fun EqualizerScreen(eqController: EqualizerController) {
       checked = eqController.isEnabled,
       onCheckedChange = { eqController.toggleEnable() }
   )
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
+            Row(Modifier.fillMaxWidth().padding(12.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Dolby Atmos", fontWeight = FontWeight.Bold)
+                    Text("Use the phone's hardware/vendor audio processing without stacking aggressive EQ.", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Button(onClick = {
+                    val packages = listOf("com.dolby.daxappui2", "com.dolby.daxappui")
+                    val intent = packages.asSequence().mapNotNull { pkg -> context.packageManager.getLaunchIntentForPackage(pkg) }.firstOrNull()
+                    if (intent != null) context.startActivity(intent)
+                    else Toast.makeText(context, "Dolby Atmos is not available on this device", Toast.LENGTH_SHORT).show()
+                }) { Text("Open Dolby") }
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -1545,8 +1564,8 @@ fun VerticalFader(
                         change.consume()
                         val height = size.height.toFloat()
                         if (height > 0f) {
-                            val delta = -dragAmount / height * 24f
-                            workingValue = (workingValue + delta).coerceIn(-12f, 12f)
+                            val delta = -dragAmount / height * 12f
+                            workingValue = (workingValue + delta).coerceIn(-6f, 6f)
                             onValueChange(workingValue)
                         }
                     },
@@ -1559,7 +1578,7 @@ fun VerticalFader(
                     val height = size.height.toFloat()
                     if (height > 0f) {
                         val fraction = 1f - (offset.y / height)
-                        val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
+                        val newVal = (-6f + fraction * 12f).coerceIn(-12f, 12f)
                         onValueChange(newVal)
                     }
                 }
@@ -1578,7 +1597,7 @@ fun VerticalFader(
                 .height(2.dp)
                 .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         )
-        val fraction = ((latestValue + 12f) / 24f).coerceIn(0f, 1f)
+        val fraction = ((latestValue + 6f) / 12f).coerceIn(0f, 1f)
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxHeight(0.85f)
