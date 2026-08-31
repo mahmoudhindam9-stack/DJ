@@ -190,7 +190,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     private fun applyPreferredAudioDevice() {
-        activePreferredAudioDevice?.let(::setPreferredAudioDevice)
+        activePreferredAudioDevice?.let { setPreferredAudioDevice(it) }
     }
 
     private fun handleTrackEnded() {
@@ -212,6 +212,7 @@ class AudioPlayerController(private val context: Context) {
         }
     }
 
+    @OptIn(UnstableApi::class)
     fun release() {
         try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
         if (activeInstance === this) activeInstance = null
@@ -228,6 +229,7 @@ class AudioPlayerController(private val context: Context) {
             private set
 
         @JvmStatic
+        @OptIn(UnstableApi::class)
         fun updateGlobalPreferredAudioDevice(device: AudioDeviceInfo?) {
             activePreferredAudioDevice = device
             activeInstance?.setPreferredAudioDevice(device)
