@@ -17,35 +17,13 @@ import kotlinx.coroutines.*
 import kotlin.math.sin
 
 enum class DJEffect(val displayName: String) {
-    FILTER("Filter"),
-    FILTER_ROLL("Filter Roll"),
-    NOISE("Noise"),
-    FLANGER("Flanger"),
-    REVERB("Reverb"),
-    ECHO("Echo"),
-    DELAY("Delay"),
-    PHASER("Phaser"),
-    TREMOLO("Tremolo"),
-    CHOPPA("Choppa"),
-    MUTE("Mute"),
-    FADER_TONE("Fader Tone"),
-    ROLL("Roll"),
-    STUTTER("Stutter"),
-    GATE("Gate"),
-    BITCRUSH("Bit Crush"),
-    TELEPHONE("Telephone"),
-    VINYL("Vinyl"),
-    ROBOT("Robot"),
-    RING_MOD("Ring Mod"),
-    AUTO_PAN("Auto Pan"),
-    LOW_PASS("Low Pass"),
-    HIGH_PASS("High Pass"),
-    SPACE("Space"),
-    PITCH_ECHO("Pitch Echo"),
-    TAPE_STOP("Tape Stop"),
-    TRANSFORM("Transform"),
-    SLICE("Slice"),
-    BEAT_REPEAT("Beat Repeat")
+    FILTER("Filter"), FILTER_ROLL("Filter Roll"), NOISE("Noise"), FLANGER("Flanger"),
+    REVERB("Reverb"), ECHO("Echo"), DELAY("Delay"), PHASER("Phaser"), TREMOLO("Tremolo"),
+    CHOPPA("Choppa"), MUTE("Mute"), FADER_TONE("Fader Tone"), ROLL("Roll"), STUTTER("Stutter"),
+    GATE("Gate"), BITCRUSH("Bit Crush"), TELEPHONE("Telephone"), VINYL("Vinyl"), ROBOT("Robot"),
+    RING_MOD("Ring Mod"), AUTO_PAN("Auto Pan"), LOW_PASS("Low Pass"), HIGH_PASS("High Pass"),
+    SPACE("Space"), PITCH_ECHO("Pitch Echo"), TAPE_STOP("Tape Stop"), TRANSFORM("Transform"),
+    SLICE("Slice"), BEAT_REPEAT("Beat Repeat")
 }
 
 enum class SamplerSound(val title: String, val category: String) {
@@ -361,8 +339,7 @@ class DJDeck(context: Context, val deckName: String) {
     fun toggleEffect(effect: DJEffect) {
         val next = !(effectStates[effect] ?: false)
         effectStates[effect] = next
-        val processorEffect = DeckFxAudioProcessor.Effect.valueOf(effect.name)
-        fxProcessor.setEffect(processorEffect, next)
+        fxProcessor.setEffect(DeckFxAudioProcessor.Effect.valueOf(effect.name), next)
     }
 
     fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect] ?: false
@@ -375,22 +352,7 @@ class DJDeck(context: Context, val deckName: String) {
         fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
     }
 
-    fun toggleEffect(effect: DJEffect) {
-        val next = !(effectStates[effect] ?: false)
-        effectStates[effect] = next
-        val processorEffect = DeckFxAudioProcessor.Effect.valueOf(effect.name)
-        fxProcessor.setEffect(processorEffect, next)
-    }
 
-    fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect] ?: false
-
-    fun setEffectAmount(value: Float) {
-        fxProcessor.amount = value.coerceIn(0f, 1f)
-    }
-
-    fun setEffectBeatDivision(value: Float) {
-        fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
-    }
 
     init {
         exoPlayer.addListener(object : Player.Listener {
