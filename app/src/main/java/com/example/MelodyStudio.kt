@@ -5,7 +5,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import com.example.model.AudioItem
-import com.example.player.DJMixerController
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -41,7 +40,7 @@ import androidx.compose.ui.unit.dp
 private data class MelodyNote(val name: String, val frequencyHz: Double, val durationMs: Int = 260)
 
 @Composable
-fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context, djMixerController: DJMixerController) {
+fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context) {
     val sequence = remember { mutableStateListOf<MelodyNote>() }
     var lastExport by remember { mutableStateOf("") }
     var lastExportedItem by remember { mutableStateOf<AudioItem?>(null) }
@@ -61,7 +60,7 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context, djM
         Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Text("MELODY STUDIO", style = MaterialTheme.typography.titleMedium)
             Text(
-                "ألّف لحن بالنقر على النغمات ثم شغّله أو احفظه كأغنية جديدة داخل المكتبة.",
+                "Compose a melody by tapping notes, then play it or save it as a new song in your library.",
                 style = MaterialTheme.typography.bodySmall
             )
 
@@ -78,15 +77,15 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context, djM
 
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                if (sequence.isEmpty()) "اللحن فارغ" else "اللحن: ${sequence.joinToString(" – ") { it.name }}",
+                if (sequence.isEmpty()) "Melody is empty" else "Melody: ${sequence.joinToString(" – ") { it.name }}",
                 style = MaterialTheme.typography.bodySmall
             )
 
             Spacer(modifier = Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence) }) { Text("تشغيل") }
-                Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence, loop = true) }) { Text("عزف متكرر") }
-                Button(onClick = { sequence.clear(); lastExport = "" }) { Text("مسح") }
+                Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence) }) { Text("Play") }
+                Button(onClick = { if (sequence.isNotEmpty()) MelodyAudio.play(sequence, loop = true) }) { Text("Loop") }
+                Button(onClick = { sequence.clear(); lastExport = "" }) { Text("Clear") }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
@@ -95,12 +94,12 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context, djM
                     if (sequence.isNotEmpty()) {
                         val item = MelodyAudio.export(context, audioLibrary, sequence)
                         audioLibrary.add(item)
-                        lastExport = "تم حفظ ${item.title}"
+                        lastExport = "Saved ${item.title}"
                         lastExportedItem = item
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
-            ) { Text("حفظ اللحن في مكتبة الأغاني") }
+            ) { Text("Save to Music Library") }
 
             if (lastExport.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(6.dp))

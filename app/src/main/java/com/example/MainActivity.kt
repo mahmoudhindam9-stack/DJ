@@ -333,6 +333,10 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         }
 
         Spacer(Modifier.height(12.dp))
+        // MELODY_STUDIO_V2
+        MelodyStudioCard(audioLibrary, context)
+
+        Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp))
             Spacer(Modifier.width(6.dp))
