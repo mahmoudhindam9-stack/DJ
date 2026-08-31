@@ -54,7 +54,7 @@ jobs:
         run: python3 .github/fix_org_functionality.py
 
       - name: Apply final launcher/audio batch fixes
-        run: python3 .github/apply_final_audio_batch.py
+        run: python3 .github/add_dj_audio_card.py
 
       - name: Commit app upgrades
         run: |
@@ -73,8 +73,7 @@ jobs:
                   .github/add_org_system.py \
                   .github/add_dj_audio_card.py \
                   .github/add_notification_permission.py \
-                  .github/fix_org_functionality.py \
-                  .github/apply_final_audio_batch.py
+                  .github/fix_org_functionality.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
