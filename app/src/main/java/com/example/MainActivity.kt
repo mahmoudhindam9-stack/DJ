@@ -1457,151 +1457,178 @@ fun DJPadButton(label: String, isActive: Boolean, onClick: () -> Unit) {
 fun EqualizerScreen(eqController: EqualizerController) {
     Column(
         modifier = Modifier
-            .fillMaxSize()
-            .padding(16.dp)
+  .fillMaxSize()
+  .padding(16.dp)
     ) {
-        // Header with Master Toggle
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+  modifier = Modifier.fillMaxWidth(),
+  horizontalArrangement = Arrangement.SpaceBetween,
+  verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
-                Text(
-                    text = "Detailed Equalizer",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "5-Band Audio Frequency Processor",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            Switch(
-                checked = eqController.isEnabled,
-                onCheckedChange = { eqController.toggleEnable() }
-            )
+  Column {
+      Text(
+          text = "Detailed Equalizer",
+          style = MaterialTheme.typography.headlineMedium,
+          fontWeight = FontWeight.Bold
+      )
+      Text(
+          text = "10-Band Audio Frequency Processor",
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant
+      )
+  }
+  Switch(
+      checked = eqController.isEnabled,
+      onCheckedChange = { eqController.toggleEnable() }
+  )
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Preset Selector Chips
         Text("EQ Presets", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(6.dp))
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            items(eqController.presets) { preset ->
-                FilterChip(
-                    selected = eqController.selectedPreset == preset,
-                    onClick = { eqController.applyPreset(preset) },
-                    label = { Text(preset) }
-                )
-            }
+  items(eqController.presets) { preset ->
+      FilterChip(
+          selected = eqController.selectedPreset == preset,
+          onClick = { eqController.applyPreset(preset) },
+          label = { Text(preset) }
+      )
+  }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
-        // Vertical Sliders Band Section
         Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+  modifier = Modifier
+      .fillMaxWidth()
+      .weight(1f),
+  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = "10-BAND EQ (dB GAIN)",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        text = if (eqController.isEnabled) "ACTIVE" else "BYPASSED (High Quality)",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = if (eqController.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+  Column(
+      modifier = Modifier
+          .fillMaxSize()
+          .padding(12.dp),
+      horizontalAlignment = Alignment.CenterHorizontally
+  ) {
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically
+      ) {
+          Text(
+              text = "10-BAND EQ (dB GAIN)",
+              style = MaterialTheme.typography.labelMedium,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
+          )
+          Text(
+              text = if (eqController.isEnabled) "ACTIVE" else "BYPASSED (High Quality)",
+              style = MaterialTheme.typography.labelSmall,
+              color = if (eqController.isEnabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+          )
+      }
 
-                Spacer(modifier = Modifier.height(12.dp))
+      Spacer(modifier = Modifier.height(12.dp))
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    eqController.bands.forEachIndexed { index, band ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight(),
-                            verticalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = if (band.currentLevelDb > 0) "+${band.currentLevelDb}" else "${band.currentLevelDb}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+      Row(
+          modifier = Modifier
+              .fillMaxWidth()
+              .weight(1f),
+          horizontalArrangement = Arrangement.SpaceEvenly,
+          verticalAlignment = Alignment.CenterVertically
+      ) {
+          eqController.bands.forEachIndexed { index, band ->
+              Column(
+                  horizontalAlignment = Alignment.CenterHorizontally,
+                  modifier = Modifier
+                      .weight(1f)
+                      .fillMaxHeight(),
+                  verticalArrangement = Arrangement.SpaceBetween
+              ) {
+                  Text(
+                      text = if (band.currentLevelDb > 0) "+${band.currentLevelDb}" else "${band.currentLevelDb}",
+                      style = MaterialTheme.typography.labelSmall,
+                      fontSize = 9.sp,
+                      fontWeight = FontWeight.Bold
+                  )
 
-                            VerticalFader(
-                                value = band.currentLevelDb.toFloat(),
-                                onValueChange = { newVal ->
-                                    eqController.updateBandLevel(index, newVal.toInt())
-                                },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                            )
+                  VerticalFader(
+                      value = band.currentLevelDb.toFloat(),
+                      onValueChange = { newVal ->
+                          eqController.updateBandLevel(index, newVal.roundToInt())
+                      },
+                      modifier = Modifier
+                          .weight(1f)
+                          .fillMaxHeight()
+                  )
 
-                            Text(
-                                text = band.name,
-                                style = androidx.compose.ui.text.TextStyle(fontSize = 8.sp),
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
+                  Text(
+                      text = band.name,
+                      style = androidx.compose.ui.text.TextStyle(fontSize = 8.sp),
+                      fontWeight = FontWeight.Bold,
+                      maxLines = 1
+                  )
+              }
+          }
+      }
+  }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        // Bass Boost Slider
         Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+  modifier = Modifier.fillMaxWidth(),
+  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("BASS BOOST", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                    Text("${(eqController.bassBoostLevel * 100).toInt()}%", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                }
+  Column(modifier = Modifier.padding(16.dp)) {
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+          Text("BASS BOOST", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+          Text(
+              "${(eqController.bassBoostLevel * 100).toInt()}%",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
+          )
+      }
+      Slider(
+          value = eqController.bassBoostLevel,
+          onValueChange = { eqController.updateBassBoost(it) },
+          valueRange = 0f..1f,
+          modifier = Modifier.fillMaxWidth()
+      )
+  }
+        }
 
-                Slider(
-                    value = eqController.bassBoostLevel,
-                    onValueChange = { eqController.updateBassBoost(it) },
-                    valueRange = 0f..1f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Card(
+  modifier = Modifier.fillMaxWidth(),
+  colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        ) {
+  Column(modifier = Modifier.padding(16.dp)) {
+      Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.SpaceBetween
+      ) {
+          Text("TREBLE BOOST", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+          Text(
+              "${(eqController.trebleBoostLevel * 100).toInt()}%",
+              style = MaterialTheme.typography.labelSmall,
+              fontWeight = FontWeight.Bold,
+              color = MaterialTheme.colorScheme.primary
+          )
+      }
+      Slider(
+          value = eqController.trebleBoostLevel,
+          onValueChange = { eqController.updateTrebleBoost(it) },
+          valueRange = 0f..1f,
+          modifier = Modifier.fillMaxWidth()
+      )
+  }
         }
     }
 }
@@ -1612,69 +1639,73 @@ fun VerticalFader(
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val latestValue by rememberUpdatedState(value)
+
     Box(
         modifier = modifier
-            .fillMaxHeight()
-            .width(44.dp)
-            .pointerInput(Unit) {
-                detectVerticalDragGestures { change, dragAmount ->
-                    change.consume()
-                    val height = size.height.toFloat()
-                    if (height > 0f) {
-                        val range = 24f
-                        val delta = -dragAmount / height * range
-                        val newVal = (value + delta).coerceIn(-12f, 12f)
-                        onValueChange(newVal)
-                    }
-                }
-            }
-            .pointerInput(Unit) {
-                detectTapGestures { offset ->
-                    val height = size.height.toFloat()
-                    if (height > 0f) {
-                        val fraction = 1f - (offset.y / height)
-                        val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
-                        onValueChange(newVal)
-                    }
-                }
-            },
+  .fillMaxHeight()
+  .width(44.dp)
+  .pointerInput(Unit) {
+      detectVerticalDragGestures { change, dragAmount ->
+          change.consume()
+          val height = size.height.toFloat()
+          if (height > 0f) {
+              // Keep a live working value for the current gesture.
+              // This makes the fader accumulate movement like a normal Slider.
+              val current = latestValue
+              val delta = -dragAmount / height * 24f
+              onValueChange((current + delta).coerceIn(-12f, 12f))
+          }
+      }
+  }
+  .pointerInput(Unit) {
+      detectTapGestures { offset ->
+          val height = size.height.toFloat()
+          if (height > 0f) {
+              val fraction = 1f - (offset.y / height)
+              val newVal = (-12f + fraction * 24f).coerceIn(-12f, 12f)
+              onValueChange(newVal)
+          }
+      }
+  },
         contentAlignment = Alignment.Center
     ) {
         Box(
-            modifier = Modifier
-                .width(6.dp)
-                .fillMaxHeight(0.85f)
-                .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))
+  modifier = Modifier
+      .width(6.dp)
+      .fillMaxHeight(0.85f)
+      .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(3.dp))
         )
         Box(
-            modifier = Modifier
-                .width(14.dp)
-                .height(2.dp)
-                .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+  modifier = Modifier
+      .width(14.dp)
+      .height(2.dp)
+      .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
         )
-        val fraction = (value - (-12f)) / 24f
+
+        val fraction = ((latestValue + 12f) / 24f).coerceIn(0f, 1f)
         BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxHeight(0.85f)
-                .width(44.dp),
-            contentAlignment = Alignment.BottomCenter
+  modifier = Modifier
+      .fillMaxHeight(0.85f)
+      .width(44.dp),
+  contentAlignment = Alignment.BottomCenter
         ) {
-            val trackH = maxHeight
-            val thumbY = trackH * fraction - 14.dp
-            Box(
-                modifier = Modifier
-                    .size(28.dp)
-                    .offset(y = -thumbY)
-                    .shadow(4.dp, CircleShape)
-                    .background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
-                )
-            }
+  val trackH = maxHeight
+  val thumbY = trackH * fraction - 14.dp
+  Box(
+      modifier = Modifier
+          .size(28.dp)
+          .offset(y = -thumbY)
+          .shadow(4.dp, CircleShape)
+          .background(MaterialTheme.colorScheme.primary, CircleShape),
+      contentAlignment = Alignment.Center
+  ) {
+      Box(
+          modifier = Modifier
+              .size(8.dp)
+              .background(MaterialTheme.colorScheme.onPrimary, CircleShape)
+      )
+  }
         }
     }
 }
