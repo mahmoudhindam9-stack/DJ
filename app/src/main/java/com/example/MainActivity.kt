@@ -48,6 +48,7 @@ import androidx.navigation.compose.*
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.player.*
+import com.example.org.OrgScreen
 import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.delay
@@ -158,6 +159,18 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
+                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "ORG") },
+                    label = { Text("ORG") },
+                    selected = currentDestination?.route == "org",
+                    onClick = {
+                        navController.navigate("org") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
                     icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },
                     label = { Text("Controls") },
                     selected = currentDestination?.route == "controls",
@@ -212,6 +225,9 @@ fun MainApp() {
             }
             composable("mic") {
                 MicScreen(micController = micController, context = context, scope = scope)
+            }
+            composable("org") {
+                OrgScreen()
             }
             composable("controls") {
                 NotificationControlScreen(context = context)
