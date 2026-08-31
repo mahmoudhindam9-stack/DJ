@@ -5,11 +5,19 @@ MAIN = ROOT / "app/src/main/java/com/example/MainActivity.kt"
 
 text = MAIN.read_text(encoding="utf-8")
 marker = "// DJ_AUDIO_CARD_V1"
+
+# ExposedDropdownMenuBox/menuAnchor are experimental in the Material3 version used by this app.
+# Keep the opt-in attached to MicScreen so the build remains strict without changing global compiler flags.
+optin_anchor = '@Composable\n// KARAOKE_DJ_ENGLISH_V2\nfun MicScreen('
+optin_replacement = '@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)\n@Composable\n// KARAOKE_DJ_ENGLISH_V2\nfun MicScreen('
+if optin_anchor in text and optin_replacement not in text:
+    text = text.replace(optin_anchor, optin_replacement, 1)
+
 if marker in text:
-    print("DJ audio card already present")
+    MAIN.write_text(text, encoding="utf-8")
+    print("DJ audio card already present; Material3 opt-in ensured")
     raise SystemExit(0)
 
-# Find the DJ screen by its existing effects title. Insert the card before the effects section.
 anchors = [
     'Text("DJ Effects"',
     'Text("Effects"',
@@ -139,4 +147,4 @@ card = r'''// DJ_AUDIO_CARD_V1
 '''
 text = text.replace(anchor, card + anchor, 1)
 MAIN.write_text(text, encoding="utf-8")
-print("Persistent DJ Audio Card inserted")
+print("Persistent DJ Audio Card inserted and Material3 opt-in ensured")
