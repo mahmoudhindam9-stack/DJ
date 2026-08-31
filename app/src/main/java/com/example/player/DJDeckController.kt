@@ -8,6 +8,10 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.common.util.UnstableApi
 import com.example.model.AudioItem
 import kotlinx.coroutines.*
 import kotlin.math.sin
@@ -266,8 +270,23 @@ class DJSoundPlayer(private val context: Context) {
     }
 }
 
+@OptIn(UnstableApi::class)
 class DJDeck(context: Context, val deckName: String) {
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
+    private val fxProcessor = DeckFxAudioProcessor()
+
+    private val renderersFactory = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(
+            context: Context,
+            enableFloatOutput: Boolean,
+            enableAudioTrackPlaybackParams: Boolean
+        ): AudioSink {
+            return DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf(fxProcessor))
+                .build()
+        }
+    }
+
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
 
     var track by mutableStateOf<AudioItem?>(null)
         private set
@@ -291,6 +310,26 @@ class DJDeck(context: Context, val deckName: String) {
     var isReverbActive by mutableStateOf(false)
     var isEchoActive by mutableStateOf(false)
     var isCrushActive by mutableStateOf(false)
+
+    fun toggleFlanger() {
+        isFlangerActive = !isFlangerActive
+        fxProcessor.flangerEnabled = isFlangerActive
+    }
+
+    fun toggleReverb() {
+        isReverbActive = !isReverbActive
+        fxProcessor.reverbEnabled = isReverbActive
+    }
+
+    fun toggleEcho() {
+        isEchoActive = !isEchoActive
+        fxProcessor.echoEnabled = isEchoActive
+    }
+
+    fun toggleCrush() {
+        isCrushActive = !isCrushActive
+        fxProcessor.crushEnabled = isCrushActive
+    }
 
     init {
         exoPlayer.addListener(object : Player.Listener {
@@ -340,23 +379,12 @@ class DJDeck(context: Context, val deckName: String) {
 
     fun setPitchAndSpeed(newRate: Float) {
         pitchSpeed = newRate.coerceIn(0.5f, 1.5f)
-        var effectiveSpeed = pitchSpeed
-        if (isFlangerActive) {
-            effectiveSpeed *= 1.02f
-        }
-        exoPlayer.playbackParameters = PlaybackParameters(effectiveSpeed, effectiveSpeed)
+        exoPlayer.playbackParameters = PlaybackParameters(pitchSpeed, pitchSpeed)
     }
 
     fun setDeckVolume(vol: Float) {
         volume = vol.coerceIn(0f, 1f)
-        var effVol = volume
-        if (isEchoActive) {
-            effVol = (effVol * 1.15f).coerceAtMost(1f)
-        }
-        if (isCrushActive) {
-            effVol *= 0.9f
-        }
-        exoPlayer.volume = effVol
+        exoPlayer.volume = volume
     }
 
     fun release() {
@@ -376,13 +404,23 @@ class DJMixerController(context: Context) {
         crossfader = position.coerceIn(0f, 1f)
         val volA = (1f - crossfader) * deckA.volume
         val volB = crossfader * deckB.volume
-        deckA.exoPlayer.volume = if (deckA.isEchoActive) (volA * 1.15f).coerceAtMost(1f) else volA
-        deckB.exoPlayer.volume = if (deckB.isEchoActive) (volB * 1.15f).coerceAtMost(1f) else volB
+        deckA.exoPlayer.volume = volA
+        deckB.exoPlayer.volume = volB
     }
 
     fun pauseAll() {
         deckA.pause()
         deckB.pause()
+    }
+
+    fun playMelodyOverDeckA(melody: AudioItem): Boolean {
+        if (deckA.track == null) return false
+        deckB.loadTrack(melody)
+        deckA.exoPlayer.volume = deckA.volume
+        deckB.exoPlayer.volume = deckB.volume
+        deckA.exoPlayer.play()
+        deckB.exoPlayer.play()
+        return true
     }
 
     fun release() {

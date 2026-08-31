@@ -5,6 +5,7 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
 import com.example.model.AudioItem
+import com.example.player.DJMixerController
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
@@ -39,9 +40,10 @@ import androidx.compose.ui.unit.dp
 private data class MelodyNote(val name: String, val frequencyHz: Double, val durationMs: Int = 260)
 
 @Composable
-fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context) {
+fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context, djMixerController: DJMixerController) {
     val sequence = remember { mutableStateListOf<MelodyNote>() }
     var lastExport by remember { mutableStateOf("") }
+    var lastExportedItem by remember { mutableStateOf<AudioItem?>(null) }
     val notes = remember {
         listOf(
             MelodyNote("C4", 261.63), MelodyNote("D4", 293.66), MelodyNote("E4", 329.63),
@@ -93,6 +95,7 @@ fun MelodyStudioCard(audioLibrary: MutableList<AudioItem>, context: Context) {
                         val item = MelodyAudio.export(context, audioLibrary, sequence)
                         audioLibrary.add(item)
                         lastExport = "تم حفظ ${item.title}"
+                        lastExportedItem = item
                     }
                 },
                 modifier = Modifier.fillMaxWidth()
