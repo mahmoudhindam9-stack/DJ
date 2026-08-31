@@ -1,0 +1,6 @@
+{
+  "name": "Music Player",
+  "description": "A music player with advanced equalizer, DJ mixer, and karaoke features.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
