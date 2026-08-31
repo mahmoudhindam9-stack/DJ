@@ -27,6 +27,9 @@ jobs:
       - name: Persist audio input/output routing upgrade
         run: python3 .github/fix_audio_routing.py
 
+      - name: Fix audio device classification and Bluetooth routing
+        run: python3 .github/fix_device_routing.py
+
       - name: Persist safe EQ and Dolby integration
         run: python3 .github/upgrade_equalizer_dolby.py
 
@@ -47,7 +50,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: add melody notifications and external playback controls [skip ci]"
+            git commit -m "feat: complete karaoke, routing, EQ, melody and external controls [skip ci]"
             git push origin HEAD:main
           fi
 
