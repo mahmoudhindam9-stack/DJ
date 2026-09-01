@@ -4,6 +4,8 @@ package com.example.player
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.media.AudioDeviceInfo
 import android.media.AudioFormat
 import android.media.AudioManager
@@ -16,17 +18,17 @@ import android.os.Build
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.*
 import kotlin.math.PI
 import kotlin.math.sin
+import java.io.File
+import java.io.RandomAccessFile
 
 
 enum class MicFilter(val displayName: String) {
-    NORMAL("Clean"),
-    STUDIO_REVERB("Studio Reverb"),
-    CHIPMUNK("Chipmunk"),
-    MONSTER("Monster"),
-    ROBOT("Robot")
+    NORMAL("Clean"), STUDIO_REVERB("Studio Reverb"), CHIPMUNK("Chipmunk"), MONSTER("Monster"), ROBOT("Robot"),
+    TELEPHONE("Telephone"), RADIO("Radio"), MEGAPHONE("Megaphone"), CHORUS("Chorus"), TREMOLO("Tremolo"), BASS_BOOST("Bass Boost")
 }
 
 enum class BeatFxDivision(val displayName: String, val beats: Float) {
@@ -120,6 +122,22 @@ class MicController(private val context: Context) {
     var filterMix by mutableStateOf(0.55f)
     var bpm by mutableStateOf(120f)
     var beatFxDivision by mutableStateOf(BeatFxDivision.QUARTER)
+
+    var voiceProcessingEnabled by mutableStateOf(true)
+        private set
+    var isOutputRecording by mutableStateOf(false)
+        private set
+    var recordingStatus by mutableStateOf("Ready to record")
+        private set
+    var recordingDurationText by mutableStateOf("00:00")
+        private set
+    private var pendingRecordingFile: File? = null
+    private var recordingFile: File? = null
+    private var recordingWriter: RandomAccessFile? = null
+    private var recordedPcmBytes = 0L
+    private var recordingStartedAt = 0L
+    private var recordingTickerJob: Job? = null
+    private val recordingLock = Any()
 
     var inputDevices by mutableStateOf<List<AudioDeviceInfo>>(emptyList())
         private set
@@ -223,25 +241,12 @@ class MicController(private val context: Context) {
     private fun startMic(coroutineScope: CoroutineScope) {
         if (isMicEnabled) return
         try {
-            // INDEPENDENT_BT_ROUTING_V1
             val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
-            // SCO/HFP input needs communication mode, but we deliberately do NOT call
-            // setCommunicationDevice() here because that API selects a matching output too.
-            // AudioRecord.setPreferredDevice() and AudioTrack.setPreferredDevice() are used
-            // independently so Bluetooth input and Bluetooth output can be selected separately
-            // whenever the Android device/audio stack supports that combination.
             val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
             audioRecord = AudioRecord(audioSource, sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, bufferSize)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                val accepted = audioRecord?.setPreferredDevice(inputDevice) ?: false
-                if (inputDevice != null && !accepted) {
-                    routingStatus = "تعذر اختيار مدخل الصوت: ${inputDevice.displayName()}"
-                }
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.setPreferredDevice(inputDevice)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
             audioTrack = AudioTrack.Builder()
                 .setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build())
                 .setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())
@@ -249,14 +254,14 @@ class MicController(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.setPreferredDevice(selectedOutputDevice)
             val sessionId = audioRecord?.audioSessionId ?: 0
             if (sessionId != 0) {
-                if (AcousticEchoCanceler.isAvailable()) echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }
-                if (NoiseSuppressor.isAvailable()) noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = true }
+                if (AcousticEchoCanceler.isAvailable()) echoCanceler = AcousticEchoCanceler.create(sessionId)?.apply { enabled = voiceProcessingEnabled }
+                if (NoiseSuppressor.isAvailable()) noiseSuppressor = NoiseSuppressor.create(sessionId)?.apply { enabled = voiceProcessingEnabled }
             }
             audioRecord?.startRecording()
             if (audioRecord?.recordingState != AudioRecord.RECORDSTATE_RECORDING) throw IllegalStateException("AudioRecord failed to start")
             audioTrack?.play()
             isMicEnabled = true
-            AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
+            startMicForegroundService()
             updateRoutingStatus()
             recordingJob = coroutineScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(bufferSize / 2)
@@ -271,32 +276,26 @@ class MicController(private val context: Context) {
                     val beatDelay = ((sampleRate * 60f / currentBpm) * beatFxDivision.beats).toInt().coerceIn(1, delayBuffer.size - 1)
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
+                        if (voiceProcessingEnabled && kotlin.math.abs(sample) < 0.012f) sample *= 0.08f
+                        val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
                             MicFilter.CHIPMUNK -> sample *= 1.12f
                             MicFilter.MONSTER -> sample *= 0.72f
                             MicFilter.ROBOT -> sample *= if ((i / 24) % 2 == 0) 1f else 0.55f
+                            MicFilter.TELEPHONE -> { lowPass += 0.16f * (sample - lowPass); sample = ((sample - lowPass) * 1.8f).coerceIn(-1f, 1f) }
+                            MicFilter.RADIO -> { lowPass += 0.2f * (sample - lowPass); sample = (lowPass * 3.2f).coerceIn(-1f, 1f) }
+                            MicFilter.MEGAPHONE -> { lowPass += 0.24f * (sample - lowPass); sample = (lowPass * 4f).coerceIn(-1f, 1f) }
+                            MicFilter.CHORUS -> { val lfo = (sin(2.0 * PI * writeIdx.toDouble() / sampleRate * 0.45) + 1.0) * 0.5; val d = (sampleRate * (0.012 + 0.006 * lfo)).toInt().coerceIn(1, delayBuffer.size - 1); sample += readDelay(d) * 0.55f }
+                            MicFilter.TREMOLO -> sample *= 0.55f + 0.45f * sin(2.0 * PI * writeIdx.toDouble() / sampleRate * 5.5).toFloat()
+                            MicFilter.BASS_BOOST -> { lowPass += 0.08f * (sample - lowPass); sample = (sample + lowPass * 0.75f).coerceIn(-1f, 1f) }
                             else -> Unit
-                        }
-                        val readDelay = fun(frames: Int): Float {
-                            val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size
-                            return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat()
                         }
                         val echo = if (echoFxEnabled) readDelay((sampleRate * 0.24f).toInt()) * echoLevel else 0f
                         val reverb = if (reverbFxEnabled) (readDelay((sampleRate * 0.045f).toInt()) * 0.24f + readDelay((sampleRate * 0.085f).toInt()) * 0.16f) * reverbLevel else 0f
-                        val flanger = if (flangerFxEnabled) {
-                            val lfo = (sin(2.0 * PI * (writeIdx.toDouble() / sampleRate) * 0.35) + 1.0) * 0.5
-                            val d = (sampleRate * (0.001 + 0.004 * lfo)).toInt().coerceIn(1, delayBuffer.size - 1)
-                            readDelay(d) * flangerMix
-                        } else 0f
+                        val flanger = if (flangerFxEnabled) { val lfo = (sin(2.0 * PI * writeIdx.toDouble() / sampleRate * 0.35) + 1.0) * 0.5; val d = (sampleRate * (0.001 + 0.004 * lfo)).toInt().coerceIn(1, delayBuffer.size - 1); readDelay(d) * flangerMix } else 0f
                         val combined = sample + echo + reverb + flanger
                         lowPass += 0.12f * (combined - lowPass)
-                        val filtered = when (activeFilter) {
-                            MicFilter.STUDIO_REVERB -> combined
-                            else -> when {
-                                filterMix <= 0f -> combined
-                                else -> combined * (1f - filterMix) + lowPass * filterMix
-                            }
-                        }
+                        val filtered = if (activeFilter == MicFilter.STUDIO_REVERB) combined else if (filterMix <= 0f) combined else combined * (1f - filterMix) + lowPass * filterMix
                         val beatEcho = if (beatFxEnabled) readDelay(beatDelay) * 0.35f else 0f
                         val output = (filtered + beatEcho).coerceIn(-1f, 1f) * micVolume
                         val outShort = (output.coerceIn(-1f, 1f) * Short.MAX_VALUE).toInt().toShort()
@@ -305,14 +304,73 @@ class MicController(private val context: Context) {
                         writeIdx = (writeIdx + 1) % delayBuffer.size
                     }
                     audioTrack?.write(buffer, 0, read)
+                    appendRecordingPcm(buffer, read)
                 }
             }
-        } catch (t: Throwable) {
-            routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"
-            t.printStackTrace()
-            stopMic()
+        } catch (t: Throwable) { routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"; t.printStackTrace(); stopMic() }
+    }
+
+    fun setVoiceProcessingEnabled(enabled: Boolean) {
+        voiceProcessingEnabled = enabled
+        try { echoCanceler?.enabled = enabled } catch (_: Throwable) { }
+        try { noiseSuppressor?.enabled = enabled } catch (_: Throwable) { }
+        recordingStatus = if (enabled) "AEC + noise suppression enabled" else "Voice cleanup disabled"
+    }
+
+    private fun startMicForegroundService() {
+        try {
+            val i = Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_START)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, i) else context.startService(i)
+        } catch (t: Throwable) { routingStatus = "Microphone service start failed: ${t.message ?: "Unknown error"}" }
+    }
+
+    private fun stopMicForegroundService() { try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (_: Throwable) { } }
+
+    private fun writeWavHeader(file: RandomAccessFile, dataLength: Long) {
+        val byteRate = sampleRate * 2; val totalLength = 36L + dataLength
+        file.seek(0); file.writeBytes("RIFF"); file.writeInt(Integer.reverseBytes(totalLength.toInt())); file.writeBytes("WAVEfmt ")
+        file.writeInt(Integer.reverseBytes(16)); file.writeShort(java.lang.Short.reverseBytes(1).toInt()); file.writeShort(java.lang.Short.reverseBytes(1).toInt())
+        file.writeInt(Integer.reverseBytes(sampleRate)); file.writeInt(Integer.reverseBytes(byteRate)); file.writeShort(java.lang.Short.reverseBytes(2).toInt()); file.writeShort(java.lang.Short.reverseBytes(16).toInt())
+        file.writeBytes("data"); file.writeInt(Integer.reverseBytes(dataLength.toInt()))
+    }
+
+    fun startOutputRecording(): Boolean {
+        if (!isMicEnabled || isOutputRecording) return false
+        return try {
+            val file = File(context.cacheDir, "mic_output_${System.currentTimeMillis()}.wav"); val writer = RandomAccessFile(file, "rw"); writeWavHeader(writer, 0L)
+            synchronized(recordingLock) { recordingFile = file; pendingRecordingFile = null; recordingWriter = writer; recordedPcmBytes = 0L; recordingStartedAt = System.currentTimeMillis(); isOutputRecording = true; recordingDurationText = "00:00"; recordingStatus = "Recording processed microphone output" }
+            recordingTickerJob?.cancel(); recordingTickerJob = CoroutineScope(Dispatchers.Main.immediate).launch {
+                while (isActive && isOutputRecording) { val s = ((System.currentTimeMillis() - recordingStartedAt) / 1000L).coerceAtLeast(0L); recordingDurationText = "%02d:%02d".format(s / 60L, s % 60L); delay(500L) }
+            }; true
+        } catch (t: Throwable) { recordingStatus = "Unable to start recording: ${t.message ?: "Unknown error"}"; false }
+    }
+
+    private fun appendRecordingPcm(buffer: ShortArray, count: Int) {
+        synchronized(recordingLock) {
+            val writer = recordingWriter ?: return; if (!isOutputRecording) return; val bytes = ByteArray(count * 2); var p = 0
+            for (i in 0 until count) { val v = buffer[i].toInt(); bytes[p++] = (v and 0xff).toByte(); bytes[p++] = ((v ushr 8) and 0xff).toByte() }
+            try { writer.write(bytes); recordedPcmBytes += bytes.size.toLong() } catch (t: Throwable) { recordingStatus = "Recording write failed: ${t.message ?: "Unknown error"}" }
         }
     }
+
+    fun stopOutputRecording(): Boolean {
+        synchronized(recordingLock) {
+            if (!isOutputRecording) return pendingRecordingFile?.exists() == true
+            isOutputRecording = false; recordingTickerJob?.cancel(); recordingTickerJob = null; val writer = recordingWriter; recordingWriter = null
+            try { writer?.let { writeWavHeader(it, recordedPcmBytes); it.fd.sync(); it.close() } } catch (t: Throwable) { recordingStatus = "Unable to finalize recording: ${t.message ?: "Unknown error"}" }
+            pendingRecordingFile = recordingFile; recordingFile = null; recordingStatus = if (pendingRecordingFile?.exists() == true) "Choose a location and filename to save" else "Recording stopped"; return pendingRecordingFile?.exists() == true
+        }
+    }
+
+    fun suggestedRecordingName(): String = "DJ_Mic_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.wav"
+
+    suspend fun savePendingRecording(uri: Uri): Boolean {
+        val source = pendingRecordingFile ?: return false
+        return try { context.contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { it.copyTo(out) } } ?: return false; source.delete(); pendingRecordingFile = null; recordingStatus = "Recording saved successfully"; true }
+        catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
+    }
+
+    fun discardPendingRecording() { pendingRecordingFile?.delete(); pendingRecordingFile = null; recordingStatus = "Recording discarded" }
 
     @SuppressLint("MissingPermission")
     private fun applyInputRouting() {
@@ -401,6 +459,8 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
+        if (isOutputRecording) stopOutputRecording()
+        stopMicForegroundService()
         recordingJob?.cancel()
         recordingJob = null
         try {

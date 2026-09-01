@@ -34,6 +34,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -239,7 +240,7 @@ fun MainApp() {
                 EqualizerScreen(eqController = eqController)
             }
             composable("mic") {
-                MicScreen(micController = micController, context = context, scope = scope)
+                MicScreen(micController = micController, scope = scope)
             }
             composable("org") {
                 OrgScreen()
@@ -254,15 +255,23 @@ fun MainApp() {
     }
 }
 
+// KARAOKE_MIC_PAGE_V5
 @Composable
-// KARAOKE_DJ_ENGLISH_V2
-fun MicScreen(micController: MicController, context: Context, scope: kotlinx.coroutines.CoroutineScope) {
+fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
+    val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) micController.toggleMic(true, scope)
         else Toast.makeText(context, "Microphone permission is required", Toast.LENGTH_SHORT).show()
+    }
+    val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { uri ->
+        if (uri == null) micController.discardPendingRecording()
+        else scope.launch {
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri) }
+            Toast.makeText(context, if (ok) "Recording saved" else "Unable to save recording", Toast.LENGTH_SHORT).show()
+        }
     }
 
     Column(
@@ -295,12 +304,16 @@ fun MicScreen(micController: MicController, context: Context, scope: kotlinx.cor
                 Text("Input Device", style = MaterialTheme.typography.labelSmall)
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { inputExpanded = true }, Modifier.fillMaxWidth()) {
-                        Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     DropdownMenu(inputExpanded, { inputExpanded = false }) {
-                        DropdownMenuItem(text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.inputDevices.forEach { device ->
-                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Input ${device.id}" } ?: "Audio Input ${device.id}") }, onClick = { micController.selectInputDevice(device, scope); inputExpanded = false })
+                            DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectInputDevice(device, scope); inputExpanded = false })
                         }
                     }
                 }
@@ -308,44 +321,24 @@ fun MicScreen(micController: MicController, context: Context, scope: kotlinx.cor
                 Text("Output Device", style = MaterialTheme.typography.labelSmall)
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { outputExpanded = true }, Modifier.fillMaxWidth()) {
-                        Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
-                        DropdownMenuItem(text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
-                            DropdownMenuItem(text = { Text(device.productName?.toString()?.ifBlank { "Audio Output ${device.id}" } ?: "Audio Output ${device.id}") }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
+                            DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
                         }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
-                Spacer(Modifier.height(8.dp))
                 Button(onClick = { micController.refreshDevices() }, Modifier.fillMaxWidth()) {
-                    Text("Refresh connected devices")
+                    Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Refresh connected devices")
                 }
                 Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(14.dp)) {
-                Text("DJ Effects", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(micController.echoFxEnabled, { micController.echoFxEnabled = !micController.echoFxEnabled }, label = { Text("Echo") }, modifier = Modifier.weight(1f))
-                    FilterChip(micController.reverbFxEnabled, { micController.reverbFxEnabled = !micController.reverbFxEnabled }, label = { Text("Reverb") }, modifier = Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(micController.flangerFxEnabled, { micController.flangerFxEnabled = !micController.flangerFxEnabled }, label = { Text("Flanger") }, modifier = Modifier.weight(1f))
-                    FilterChip(micController.beatFxEnabled, { micController.beatFxEnabled = !micController.beatFxEnabled }, label = { Text("Beat FX") }, modifier = Modifier.weight(1f))
-                }
-                Spacer(Modifier.height(8.dp))
-                Text("Vocal Preset", style = MaterialTheme.typography.labelSmall)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(MicFilter.values().toList()) { filter ->
-                        FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) })
-                    }
-                }
             }
         }
 
@@ -364,6 +357,11 @@ fun MicScreen(micController: MicController, context: Context, scope: kotlinx.cor
                 Slider(micController.flangerMix, { micController.flangerMix = it }, valueRange = 0f..1f)
                 Text("Filter: ${(micController.filterMix * 100).toInt()}%")
                 Slider(micController.filterMix, { micController.filterMix = it }, valueRange = 0f..1f)
+                Spacer(Modifier.height(4.dp))
+                Text("Vocal Filters", style = MaterialTheme.typography.labelSmall)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(MicFilter.values().toList()) { filter -> FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) }) }
+                }
             }
         }
 
@@ -375,19 +373,54 @@ fun MicScreen(micController: MicController, context: Context, scope: kotlinx.cor
                 Text("BPM: ${micController.bpm.toInt()}")
                 Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(BeatFxDivision.values().toList()) { div ->
-                        FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) })
-                    }
+                    items(BeatFxDivision.values().toList()) { div -> FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) }) }
                 }
             }
         }
 
         Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("AEC & Noise Suppression", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text("Live echo cancellation and noise cleanup", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = micController.voiceProcessingEnabled, onCheckedChange = micController::setVoiceProcessingEnabled)
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text("Recording", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text("Record the processed microphone output", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Text(micController.recordingDurationText, style = MaterialTheme.typography.labelSmall)
+                }
+                Spacer(Modifier.height(10.dp))
+                Button(
+                    enabled = micController.isMicEnabled || micController.isOutputRecording,
+                    onClick = {
+                        if (micController.isOutputRecording) {
+                            if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName())
+                        } else if (micController.startOutputRecording()) Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(if (micController.isOutputRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp)); Text(if (micController.isOutputRecording) "Stop & Save" else "Start Recording")
+                }
+                Text(micController.recordingStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("AEC & Noise Suppression enabled", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
+            Text(if (micController.isMicEnabled) "Microphone monitor is active" else "Microphone monitor is off", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }

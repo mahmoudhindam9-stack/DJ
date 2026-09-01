@@ -25,6 +25,9 @@ class MusicService : Service() {
         const val ACTION_NEXT = "com.example.action.NEXT"
         const val ACTION_PREV = "com.example.action.PREV"
         const val ACTION_STOP = "com.example.action.STOP"
+        const val ACTION_MIC_START = "com.example.action.MIC_START"
+        const val ACTION_MIC_STOP = "com.example.action.MIC_STOP"
+        const val MIC_NOTIFICATION_ID = 1002
 
         var instance: MusicService? = null
             private set
@@ -32,6 +35,7 @@ class MusicService : Service() {
 
     var playerController: AudioPlayerController? = null
     private lateinit var mediaSession: MediaSessionCompat
+    private var micActive = false
 
     override fun onCreate() {
         super.onCreate()
@@ -72,13 +76,32 @@ class MusicService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+            ACTION_MIC_START -> {
+                micActive = true
+                if (playerController?.isPlaying != true) updateMicNotification()
+            }
+            ACTION_MIC_STOP -> {
+                micActive = false
+                if (playerController?.isPlaying != true) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+            }
         }
         return START_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun updateMicNotification() {
+        val intent = Intent(this, MainActivity::class.java)
+        val pending = PendingIntent.getActivity(this, 99, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("DJ Microphone").setContentText("Live microphone monitor is running")
+            .setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentIntent(pending).setOngoing(true)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()
+        startForeground(MIC_NOTIFICATION_ID, notification)
+    }
+
     fun updateNotification(title: String, artist: String, isPlaying: Boolean) {
+        if (micActive && !isPlaying) { updateMicNotification(); return }
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
             this, 0, notificationIntent,
