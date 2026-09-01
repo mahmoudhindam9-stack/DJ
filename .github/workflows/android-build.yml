@@ -20,69 +20,21 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Restore complete Player and DJ screens baseline
-        run: python3 .github/restore_main_screens.py
+      # One idempotent normalization pass. The build no longer replays a chain
+      # of historical source-mutating patches on every run.
+      - name: Normalize microphone source
+        run: python3 .github/normalize_mic_source.py
 
-      - name: Persist Karaoke UI and DJ effects upgrade
-        run: python3 .github/upgrade_karaoke.py
-
-      - name: Persist audio input/output routing upgrade
-        run: python3 .github/fix_audio_routing.py
-
-      - name: Fix audio device classification and Bluetooth routing
-        run: python3 .github/fix_device_routing.py
-
-      - name: Persist DJ Audio Card
-        run: python3 .github/add_dj_audio_card.py
-
-      - name: Persist notification permission request
-        run: python3 .github/add_notification_permission.py
-
-      - name: Persist expanded DJ effects engine
-        run: python3 .github/expand_dj_effects.py
-
-      - name: Persist safe EQ and Dolby integration
-        run: python3 .github/upgrade_equalizer_dolby.py
-
-      - name: Remove Melody Studio completely
-        run: python3 .github/remove_melody_studio.py
-
-      - name: Wire ORG workstation and output recorder
-        run: python3 .github/add_org_system.py
-
-      - name: Apply ORG functionality fixes
-        run: python3 .github/fix_org_functionality.py
-
-      - name: Apply final launcher/audio batch fixes
-        run: python3 .github/add_dj_audio_card.py
-
-      - name: Apply microphone recording format and build fix
-        run: python3 .github/finalize_mic_recording_format.py
-
-      - name: Commit app upgrades
+      - name: Commit normalized source
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/src/main/java/com/example/MainActivity.kt \
-                  app/src/main/java/com/example/player/MicController.kt \
-                  app/src/main/java/com/example/player/EqualizerController.kt \
-                  app/src/main/java/com/example/player/DJDeckController.kt \
-                  app/src/main/java/com/example/player/MusicService.kt \
-                  app/src/main/java/com/example/widget/MusicWidgetProvider.kt \
-                  app/src/main/java/com/example/NotificationControlScreen.kt \
-                  app/src/main/java/com/example/org/OrgController.kt \
-                  app/src/main/java/com/example/org/OrgScreen.kt \
-                  app/src/main/AndroidManifest.xml \
-                  .github/add_org_system.py \
-                  .github/add_dj_audio_card.py \
-                  .github/add_notification_permission.py \
-                  .github/fix_org_functionality.py \
-                  .github/fix_audio_routing.py \
-                  .github/finalize_mic_recording_format.py
+                  app/src/main/java/com/example/player/MicController.kt
           if git diff --cached --quiet; then
-            echo "No generated source changes to commit."
+            echo "Source already normalized."
           else
-            git commit -m "feat: microphone recording format and routing controls [skip ci]"
+            git commit -m "ci: normalize microphone source [skip ci]"
             git push origin HEAD:main
           fi
 
