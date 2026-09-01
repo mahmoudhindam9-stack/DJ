@@ -1,14 +1,32 @@
 from pathlib import Path
 
-MAIN = Path(__file__).resolve().parents[1] / 'app/src/main/java/com/example/MainActivity.kt'
+ROOT = Path(__file__).resolve().parents[1]
+MAIN = ROOT / 'app/src/main/java/com/example/MainActivity.kt'
+SCREEN = ROOT / 'app/src/main/java/com/example/studio/MusicStudioScreen.kt'
 MARKER = '// STUDIO_CONTROLS_V1'
+
 
 def replace_once(text, old, new, label):
     if old not in text:
         raise SystemExit(f'{label}: source block not found')
     return text.replace(old, new, 1)
 
+
+def normalize_screen(text):
+    if 'import androidx.compose.foundation.verticalScroll' not in text:
+        text = replace_once(
+            text,
+            'import androidx.compose.foundation.rememberScrollState\n',
+            'import androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\n',
+            'studio verticalScroll import'
+        )
+    return text
+
+
 def main():
+    screen = SCREEN.read_text(encoding='utf-8')
+    SCREEN.write_text(normalize_screen(screen), encoding='utf-8')
+
     text = MAIN.read_text(encoding='utf-8')
     if MARKER in text:
         print('Studio navigation already normalized')
@@ -48,7 +66,8 @@ def main():
         'studio route'
     )
     MAIN.write_text(text, encoding='utf-8')
-    print('Studio navigation and route normalized')
+    print('Studio navigation and screen normalized')
+
 
 if __name__ == '__main__':
     main()
