@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / "app/src/main/java/com/example/MainActivity.kt"
@@ -7,10 +8,10 @@ MIC = ROOT / "app/src/main/java/com/example/player/MicController.kt"
 
 def patch_mic():
     text = MIC.read_text(encoding="utf-8")
+    # V5 microphone page: rename the explicit control method so it cannot collide
+    # with the JVM setter generated for the voiceProcessingEnabled property.
     if "// KARAOKE_MIC_PAGE_V5" in text or "// KARAOKE_MIC_PAGE_V6" in text:
-        # Kotlin properties named voiceProcessingEnabled generate setVoiceProcessingEnabled(Boolean).
-        # Rename the explicit control method so it cannot collide with that generated setter.
-        text = text.replace("fun setVoiceProcessingEnabled(enabled: Boolean)", "fun toggleVoiceProcessing(enabled: Boolean)", 1)
+        text = re.sub(r'(\n\s*)(?:@kotlin\.jvm\.JvmName\([^\n]+\)\n\s*)?fun\s+)setVoiceProcessingEnabled\s*\(', r'\1\2toggleVoiceProcessing(', text, count=1)
         MIC.write_text(text, encoding="utf-8")
         return
     if "fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope)" not in text:
@@ -35,7 +36,7 @@ def patch_mic():
 
 def patch_main():
     text = MAIN.read_text(encoding="utf-8")
-    text = text.replace("micController::setVoiceProcessingEnabled", "micController::toggleVoiceProcessing", 1)
+    text = text.replace("micController::setVoiceProcessingEnabled", "micController::toggleVoiceProcessing")
     replacements = {
         'micController.selectedInputDevice = null; inputExpanded = false': 'micController.selectInputDevice(null, scope); inputExpanded = false',
         'micController.selectedInputDevice = device; inputExpanded = false': 'micController.selectInputDevice(device, scope); inputExpanded = false',
@@ -74,7 +75,4 @@ def patch_independent_bluetooth_routing():
 
 
 if __name__ == "__main__":
-    patch_mic()
-    patch_main()
-    patch_independent_bluetooth_routing()
-    print("Audio routing patch applied")
+    patch_mic(); patch_main(); patch_independent_bluetooth_routing(); print("Audio routing patch applied")
