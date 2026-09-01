@@ -1,6 +1,6 @@
 name: Android Build Verification
 
-# PLAYER_UX_BUILD_RECHECK_2026-09-01
+# PLAYER_DJ_UX_PERSISTENT_INTEGRATION_2026-09-01
 on:
   push:
     branches: [ main ]
@@ -15,7 +15,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,8 +25,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      # Normalizers affect only this checkout. They never push generated files
-      # back to main, so simultaneous builds cannot create rebase conflicts.
       - name: Normalize microphone source when needed
         shell: bash
         run: |
@@ -39,13 +37,26 @@ jobs:
       - name: Normalize studio, notification and widget integration
         run: python3 .github/normalize_studio_main.py
 
-      # IMPORTANT: player normalization may rewrite MainActivity.kt. Keep the
-      # DJ FX rack injection after it so the generated DJ screen cannot lose it.
+      # Player normalization can rewrite MainActivity.kt, so the FX mount must
+      # always run after it. The generated source is persisted back to main.
       - name: Normalize player, playlists and session ownership
         run: python3 .github/normalize_player_experience.py
 
       - name: Integrate Mixxx-inspired DJ FX rack
         run: python3 .github/upgrade_dj_fx_rack.py
+
+      - name: Persist normalized source to main
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet; then
+            echo "No generated source changes to persist."
+          else
+            git add app/src/main/java .github
+            git commit -m "Persist Player Playlist and Mixxx DJ FX integration"
+            git push origin HEAD:main
+          fi
 
       - name: Verify equalizer isolation
         shell: bash
@@ -62,7 +73,7 @@ jobs:
         shell: bash
         run: |
           test -f app/src/main/java/com/example/DJFxRackScreen.kt
-          grep -q 'DJ_FX_RACK_V1' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'DJ_FX_RACK_V2' app/src/main/java/com/example/MainActivity.kt
           grep -q 'DJFxRack(deck)' app/src/main/java/com/example/MainActivity.kt
           grep -q 'DJEffect.values().size' app/src/main/java/com/example/DJFxRackScreen.kt
           echo "DJ FX rack verification passed."
