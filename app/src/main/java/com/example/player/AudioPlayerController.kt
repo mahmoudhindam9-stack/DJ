@@ -79,6 +79,8 @@ class AudioPlayerController(private val context: Context) {
 
     private fun syncNotificationSafely() {
         try {
+            val existingController = MusicService.instance?.playerController
+            if (existingController != null && existingController !== this) return
             val serviceIntent = Intent(context, MusicService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent)
@@ -352,7 +354,8 @@ class AudioPlayerController(private val context: Context) {
             }
             exoPlayer.volume = volume
             exoPlayer.prepare()
-            exoPlayer.playWhenReady = savedPlaying
+            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
+            exoPlayer.playWhenReady = savedPlaying && canAutoResume
             applyPreferredAudioDevice()
         } catch (_: Exception) {
             prefs.edit().clear().apply()
@@ -372,6 +375,13 @@ class AudioPlayerController(private val context: Context) {
     }
 
     companion object {
+        @JvmStatic
+        fun obtain(context: Context): AudioPlayerController {
+            return activeInstance
+                ?: MusicService.instance?.playerController
+                ?: AudioPlayerController(context.applicationContext)
+        }
+
         private const val PREFS_NAME = "dj_player_session"
         private const val KEY_QUEUE = "queue"
         private const val KEY_INDEX = "index"

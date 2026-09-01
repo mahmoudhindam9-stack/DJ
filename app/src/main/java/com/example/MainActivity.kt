@@ -74,14 +74,14 @@ fun MainApp() {
     val navController = rememberNavController()
 
     // Persistent State Controllers
-    val playerController = remember { AudioPlayerController(context) }
+    val playerController = remember { AudioPlayerController.obtain(context) }
     val djMixerController = remember { DJMixerController(context) }
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
     val musicStudioController = remember { MusicStudioController(context) }
 
     // Master Library and Playlists State & Room DB Repository
-    val audioLibrary = remember { mutableStateListOf<AudioItem>() }
+    val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }
     val playlists = remember { mutableStateListOf<Playlist>() }
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -128,7 +128,9 @@ fun MainApp() {
 
     DisposableEffect(Unit) {
         onDispose {
-            playerController.release()
+            if (!playerController.isPlaying && MusicService.instance?.playerController !== playerController) {
+                playerController.release()
+            }
             djMixerController.release()
             eqController.release()
             musicStudioController.close()
@@ -223,12 +225,10 @@ fun MainApp() {
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("player") {
-                PlayerScreen(
+                PlayerScreenV2(
                     playerController = playerController,
                     audioLibrary = audioLibrary,
                     playlists = playlists,
-                    selectedPlaylistId = selectedPlaylistId,
-                    onSelectPlaylist = { id -> selectedPlaylistId = id },
                     onPauseDJ = { djMixerController.pauseAll() },
                     navController = navController
                 )
@@ -1370,19 +1370,10 @@ fun DJDeckItem(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Audio FX Pad Toggles
-            Text("Deck FX", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                DJPadButton("Flanger", deck.isFlangerActive) { deck.toggleFlanger() }
-                DJPadButton("Reverb", deck.isReverbActive) { deck.toggleReverb() }
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                DJPadButton("Echo", deck.isEchoActive) { deck.toggleEcho() }
-                DJPadButton("Crush", deck.isCrushActive) { deck.toggleCrush() }
-            }
+            // DJ_FX_RACK_V2
+            // Replace the four legacy pads with the full Mixxx-style rack so the
+            // professional effects are visible directly inside each DJ deck.
+            DJFxRack(deck)
         }
     }
 

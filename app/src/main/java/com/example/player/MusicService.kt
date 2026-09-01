@@ -41,7 +41,7 @@ class MusicService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)
+        playerController = AudioPlayerController.obtain(applicationContext)
         createNotificationChannel()
         mediaSession = MediaSessionCompat(this, "DJMusicSession").apply {
             setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
@@ -74,7 +74,7 @@ class MusicService : Service() {
     }
 
     private fun ensureController() {
-        if (playerController == null) playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)
+        if (playerController == null) playerController = AudioPlayerController.obtain(applicationContext)
     }
 
     private fun syncFromController() {
