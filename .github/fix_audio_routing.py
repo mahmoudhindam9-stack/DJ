@@ -7,21 +7,22 @@ MIC = ROOT / "app/src/main/java/com/example/player/MicController.kt"
 
 def patch_mic():
     text = MIC.read_text(encoding="utf-8")
-    # V5 already contains routing and its own restart methods.
+    # The V5 microphone page already owns routing; only normalize the generated JVM setter clash.
     if "// KARAOKE_MIC_PAGE_V5" in text:
+        needle = '    fun setVoiceProcessingEnabled(enabled: Boolean) {'
+        if '@kotlin.jvm.JvmName("setVoiceProcessingEnabledControl")' not in text and needle in text:
+            text = text.replace(needle, '    @kotlin.jvm.JvmName("setVoiceProcessingEnabledControl")\n' + needle, 1)
         MIC.write_text(text, encoding="utf-8")
         return
     if "fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope)" not in text:
         needle = '    private fun stopMic() {'
         if needle not in text: raise SystemExit("MicController stopMic anchor not found")
-        insert = '''    /** Apply an input selection immediately. If live monitoring is active, restart the recorder. */
-    fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope) {
+        insert = '''    fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope) {
         selectedInputState = device
         if (isMicEnabled) { stopMic(); startMic(coroutineScope) }
         else routingStatus = if (device == null) "Input: System Default Mic" else "Input: ${device.displayName()}"
     }
 
-    /** Apply an output selection to the live mic monitor and Media3 player. */
     fun selectOutputDevice(device: AudioDeviceInfo?) {
         selectedOutputState = device
         if (isMicEnabled) applyOutputRouting() else AudioPlayerController.updateGlobalPreferredAudioDevice(device)
@@ -49,7 +50,6 @@ def patch_independent_bluetooth_routing():
     text = MIC.read_text(encoding="utf-8")
     marker = "// INDEPENDENT_BT_ROUTING_V1"
     if marker in text or "// KARAOKE_MIC_PAGE_V5" in text: return
-    # The original independent-routing transformation remains unchanged.
     old_start = '''            val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
             val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
