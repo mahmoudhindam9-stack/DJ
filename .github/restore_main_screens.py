@@ -8,5 +8,13 @@ GOOD_PATH = "app/src/main/java/com/example/MainActivity.kt"
 
 subprocess.run(["git", "fetch", "--no-tags", "--depth=1", "origin", GOOD_COMMIT], cwd=ROOT, check=True)
 content = subprocess.check_output(["git", "show", f"FETCH_HEAD:{GOOD_PATH}"], cwd=ROOT, text=True)
+content = content.replace(
+    'MicScreen(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope)',
+    'MicScreen(micController = micController, scope = scope)'
+)
+content = content.replace(
+    'fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {',
+    'fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {'
+)
 MAIN.write_text(content, encoding="utf-8")
-print("Restored complete MainActivity.kt from known-good baseline")
+print("Restored complete MainActivity.kt from known-good baseline with microphone-page signature normalized")
