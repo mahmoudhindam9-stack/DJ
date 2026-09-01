@@ -1,5 +1,6 @@
 package com.example.player
 
+import android.content.Context
 import android.media.audiofx.Equalizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -19,7 +20,12 @@ data class EqBand(
     var currentLevelDb: Int = 0
 )
 
-class EqualizerController {
+class EqualizerController(private val context: Context) {
+    init {
+        activeInstance = this
+        loadQuickState()
+    }
+
     private var equalizer: Equalizer? = null
     private var hardwareFrequenciesHz = IntArray(0)
 
@@ -73,6 +79,7 @@ class EqualizerController {
         val safe = levelDb.coerceIn(-6, 6)
         bands[bandIndex] = bands[bandIndex].copy(currentLevelDb = safe)
         selectedPreset = "Custom"
+        persistQuickState()
         applyAllToHardware()
     }
 
@@ -102,6 +109,7 @@ class EqualizerController {
             else -> List(10) { 0 }
         }
         for (i in bands.indices) bands[i] = bands[i].copy(currentLevelDb = values[i].coerceIn(-6, 6))
+        persistQuickState()
         applyAllToHardware()
     }
 
@@ -139,9 +147,48 @@ class EqualizerController {
         return 0.0
     }
 
+    private fun persistQuickState() {
+        try {
+            context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE).edit()
+                .putInt("bass", bands[0].currentLevelDb)
+                .putInt("mid", bands[4].currentLevelDb)
+                .putInt("treble", bands[9].currentLevelDb)
+                .apply()
+        } catch (_: Throwable) { }
+    }
+
+    private fun loadQuickState() {
+        try {
+            val prefs = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE)
+            bands[0] = bands[0].copy(currentLevelDb = prefs.getInt("bass", 0).coerceIn(-6, 6))
+            bands[4] = bands[4].copy(currentLevelDb = prefs.getInt("mid", 0).coerceIn(-6, 6))
+            bands[9] = bands[9].copy(currentLevelDb = prefs.getInt("treble", 0).coerceIn(-6, 6))
+        } catch (_: Throwable) { }
+    }
+
     fun release() {
+        persistQuickState()
+        if (activeInstance === this) activeInstance = null
         try { equalizer?.release() } catch (_: Throwable) { }
         equalizer = null
         hardwareFrequenciesHz = IntArray(0)
+    }
+
+    companion object {
+        @Volatile var activeInstance: EqualizerController? = null
+
+        fun adjustQuickBand(context: Context, band: Int) {
+            val instance = activeInstance
+            if (instance != null) {
+                val index = when (band) { 0 -> 0; 1 -> 4; else -> 9 }
+                val current = instance.bands[index].currentLevelDb
+                instance.updateBandLevel(index, if (current >= 6) -6 else current + 1)
+            } else {
+                val prefs = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE)
+                val key = when (band) { 0 -> "bass"; 1 -> "mid"; else -> "treble" }
+                val current = prefs.getInt(key, 0)
+                prefs.edit().putInt(key, if (current >= 6) -6 else current + 1).apply()
+            }
+        }
     }
 }
