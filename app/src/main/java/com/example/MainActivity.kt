@@ -385,7 +385,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     Text("AEC & Noise Suppression", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     Text("Live echo cancellation and noise cleanup", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Switch(checked = micController.voiceProcessingEnabled, onCheckedChange = micController::setVoiceProcessingEnabled)
+                Switch(checked = micController.voiceProcessingEnabled, onCheckedChange = micController::toggleVoiceProcessing)
             }
         }
 
