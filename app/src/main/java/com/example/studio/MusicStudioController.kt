@@ -103,6 +103,13 @@ class MusicStudioController(private val context: Context) {
     var isPlaying by mutableStateOf(false)
     var playheadBeat by mutableStateOf(0f)
 
+    // STUDIO_FUNCTIONALITY_V1
+    // Forces Compose refresh after edits to nested mutable track data.
+    var uiRevision by mutableStateOf(0)
+        private set
+
+    private fun bumpUi() { uiRevision++ }
+
     private var playbackJob: Job? = null
     private val prefs = context.getSharedPreferences("music_studio_project", Context.MODE_PRIVATE)
     private val sampleRate = 44100
@@ -116,10 +123,12 @@ class MusicStudioController(private val context: Context) {
     fun addNote(pitch: Int, beat: Float, length: Float = 1f) {
         selectedTrack.notes.removeAll { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.01f }
         selectedTrack.notes += StudioNote(pitch, beat.coerceIn(0f, loopBeats - 0.25f), length.coerceIn(0.25f, 4f))
+        bumpUi()
     }
 
     fun removeNote(pitch: Int, beat: Float) {
         selectedTrack.notes.removeAll { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.26f }
+        bumpUi()
     }
 
     fun addChord(rootPitch: Int, beat: Float) {
@@ -127,7 +136,7 @@ class MusicStudioController(private val context: Context) {
         intervals.forEach { addNote(rootPitch + it, beat, 1f) }
     }
 
-    fun clearTrack() { selectedTrack.notes.clear() }
+    fun clearTrack() { selectedTrack.notes.clear(); bumpUi() }
 
     fun duplicateTrack() {
         val nextId = (tracks.maxOfOrNull { it.id } ?: 0) + 1
@@ -136,12 +145,14 @@ class MusicStudioController(private val context: Context) {
         source.notes.forEach { copy.notes += it.copy() }
         tracks += copy
         selectedTrackId = nextId
+        bumpUi()
     }
 
     fun addTrack() {
         val nextId = (tracks.maxOfOrNull { it.id } ?: 0) + 1
         tracks += StudioTrack(nextId, "Track ${tracks.size + 1}", instruments[nextId % instruments.size])
         selectedTrackId = nextId
+        bumpUi()
     }
 
     fun deleteTrack() {
@@ -149,12 +160,13 @@ class MusicStudioController(private val context: Context) {
         val index = tracks.indexOfFirst { it.id == selectedTrackId }
         if (index >= 0) tracks.removeAt(index)
         selectedTrackId = tracks.getOrNull((index - 1).coerceAtLeast(0))?.id ?: tracks.first().id
+        bumpUi()
     }
 
-    fun setTrackInstrument(instrument: String) { selectedTrack.instrument = instrument }
-    fun setTrackVolume(value: Float) { selectedTrack.volume = value.coerceIn(0f, 1f) }
-    fun toggleTrackMute() { selectedTrack.muted = !selectedTrack.muted }
-    fun toggleTrackSolo() { selectedTrack.solo = !selectedTrack.solo }
+    fun setTrackInstrument(instrument: String) { selectedTrack.instrument = instrument; bumpUi() }
+    fun setTrackVolume(value: Float) { selectedTrack.volume = value.coerceIn(0f, 1f); bumpUi() }
+    fun toggleTrackMute() { selectedTrack.muted = !selectedTrack.muted; bumpUi() }
+    fun toggleTrackSolo() { selectedTrack.solo = !selectedTrack.solo; bumpUi() }
 
     fun applyMelodyPreset(index: Int) {
         val preset = melodyPresets[index.coerceIn(melodyPresets.indices)]
@@ -164,6 +176,7 @@ class MusicStudioController(private val context: Context) {
             val pitch = root + scaleOffset(degree)
             selectedTrack.notes += StudioNote(pitch, i.toFloat().coerceAtMost(loopBeats - 1f), 0.75f)
         }
+        bumpUi()
     }
 
     fun applyChordProgression() {
@@ -174,6 +187,7 @@ class MusicStudioController(private val context: Context) {
             val base = root + scaleOffset(degree)
             addChord(base, bar * 4f)
         }
+        bumpUi()
     }
 
     fun startPlayback(scope: CoroutineScope) {
@@ -199,7 +213,12 @@ class MusicStudioController(private val context: Context) {
                     last = now
                     beat += dt * bpm / 60.0
                     if (beat >= loopBeats) {
-                        beat %= loopBeats
+                        if (loopEnabled) {
+                            beat %= loopBeats
+                        } else {
+                            isPlaying = false
+                            break
+                        }
                     }
                     playheadBeat = beat.toFloat()
                     synthChunk(buffer, beat)

@@ -305,6 +305,10 @@ class DJDeck(context: Context, val deckName: String) {
     var volume by mutableStateOf(0.8f)
         private set
 
+    // MIXER_FUNCTIONALITY_V1
+    // User volume is the deck fader; mixerGain is applied by the crossfader.
+    private var mixerGain by mutableStateOf(1f)
+
     var currentPositionMs by mutableStateOf(0L)
         private set
 
@@ -446,7 +450,16 @@ class DJDeck(context: Context, val deckName: String) {
 
     fun setDeckVolume(vol: Float) {
         volume = vol.coerceIn(0f, 1f)
-        exoPlayer.volume = volume
+        applyMixerGain()
+    }
+
+    fun setMixerGain(gain: Float) {
+        mixerGain = gain.coerceIn(0f, 1f)
+        applyMixerGain()
+    }
+
+    private fun applyMixerGain() {
+        exoPlayer.volume = (volume * mixerGain).coerceIn(0f, 1f)
     }
 
     fun release() {
@@ -464,10 +477,8 @@ class DJMixerController(context: Context) {
 
     fun updateCrossfader(position: Float) {
         crossfader = position.coerceIn(0f, 1f)
-        val volA = (1f - crossfader) * deckA.volume
-        val volB = crossfader * deckB.volume
-        deckA.exoPlayer.volume = volA
-        deckB.exoPlayer.volume = volB
+        deckA.setMixerGain(1f - crossfader)
+        deckB.setMixerGain(crossfader)
     }
 
     fun pauseAll() {
@@ -478,8 +489,8 @@ class DJMixerController(context: Context) {
     fun playMelodyOverDeckA(melody: AudioItem): Boolean {
         if (deckA.track == null) return false
         deckB.loadTrack(melody)
-        deckA.exoPlayer.volume = deckA.volume
-        deckB.exoPlayer.volume = deckB.volume
+        deckA.setMixerGain(1f - crossfader)
+        deckB.setMixerGain(crossfader)
         deckA.exoPlayer.play()
         deckB.exoPlayer.play()
         return true
