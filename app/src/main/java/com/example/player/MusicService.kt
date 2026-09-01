@@ -66,9 +66,9 @@ class MusicService : Service() {
             ACTION_NEXT -> { ensureController(); playerController?.playNext(); syncFromController() }
             ACTION_PREV -> { ensureController(); playerController?.playPrevious(); syncFromController() }
             ACTION_STOP -> { playerController?.pause(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
-            ACTION_MIC_START -> { micActive = true; if (playerController?.isPlaying != true) updateMicNotification() }
-            ACTION_MIC_STOP -> { micActive = false; if (playerController?.isPlaying != true) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() } }
-            null -> if (playerController?.isPlaying == true) syncFromController()
+            ACTION_MIC_START -> { micActive = true; updateMicNotification() }
+            ACTION_MIC_STOP -> { micActive = false; if (playerController?.isPlaying != true) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() } else syncFromController() }
+            else -> syncFromController()
         }
         return START_STICKY
     }
@@ -85,10 +85,16 @@ class MusicService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startForegroundTyped(id: Int, notification: Notification, type: Int) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-            ServiceCompat.startForeground(this, id, notification, type)
-        } else {
-            startForeground(id, notification)
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(this, id, notification, type)
+            } else {
+                startForeground(id, notification)
+            }
+        } catch (_: Throwable) {
+            try {
+                startForeground(id, notification)
+            } catch (_: Throwable) { }
         }
     }
 
