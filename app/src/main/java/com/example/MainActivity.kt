@@ -49,7 +49,9 @@ import androidx.navigation.compose.*
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.player.*
-import com.example.org.OrgScreen
+import com.example.studio.MusicStudioController
+import com.example.studio.MusicStudioScreen
+// STUDIO_CONTROLS_V1
 import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.delay
@@ -74,8 +76,9 @@ fun MainApp() {
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController(context) }
     val djMixerController = remember { DJMixerController(context) }
-    val eqController = remember { EqualizerController() }
+    val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
+    val musicStudioController = remember { MusicStudioController(context) }
 
     // Master Library and Playlists State & Room DB Repository
     val audioLibrary = remember { mutableStateListOf<AudioItem>() }
@@ -128,6 +131,7 @@ fun MainApp() {
             playerController.release()
             djMixerController.release()
             eqController.release()
+            musicStudioController.close()
         }
     }
 
@@ -175,11 +179,11 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "ORG") },
-                    label = { Text("ORG") },
-                    selected = currentDestination?.route == "org",
+                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "Studio") },
+                    label = { Text("Studio") },
+                    selected = currentDestination?.route == "studio",
                     onClick = {
-                        navController.navigate("org") {
+                        navController.navigate("studio") {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
@@ -242,8 +246,8 @@ fun MainApp() {
             composable("mic") {
                 MicScreen(micController = micController, scope = scope)
             }
-            composable("org") {
-                OrgScreen()
+            composable("studio") {
+                MusicStudioScreen(musicStudioController)
             }
             composable("controls") {
                 NotificationControlScreen(context = context)
