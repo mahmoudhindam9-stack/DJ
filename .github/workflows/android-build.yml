@@ -6,11 +6,15 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: android-build-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,8 +24,8 @@ jobs:
         with:
           python-version: '3.x'
 
-      # Keep the microphone normalization idempotent. Never re-run the old
-      # source transformer against an already-normalized file.
+      # Normalizers affect only this checkout. They never push generated files
+      # back to main, so simultaneous builds cannot create rebase conflicts.
       - name: Normalize microphone source when needed
         shell: bash
         run: |
@@ -34,19 +38,16 @@ jobs:
       - name: Normalize studio, notification and widget integration
         run: python3 .github/normalize_studio_main.py
 
-      - name: Commit generated source normalization
+      - name: Verify equalizer isolation
         shell: bash
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A app/src/main .github
-          if git diff --cached --quiet; then
-            echo "Generated source already normalized."
-          else
-            git commit -m "ci: normalize app source integrations [skip ci]"
-            git pull --rebase origin main
-            git push origin HEAD:main
-          fi
+          test -f app/src/main/java/com/example/player/EqualizerScreen.kt
+          test -f app/src/main/java/com/example/player/EqualizerController.kt
+          test ! -f app/src/main/java/com/example/player/ProEqualizerScreen.kt
+          grep -q 'The native Equalizer effect is created only after the user enables it' app/src/main/java/com/example/player/EqualizerController.kt
+          grep -q 'if (!isEnabled) return' app/src/main/java/com/example/player/EqualizerController.kt
+          grep -q 'fun EqualizerScreen(eqController: EqualizerController)' app/src/main/java/com/example/player/EqualizerScreen.kt
+          echo "Equalizer isolation verification passed."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
