@@ -409,7 +409,6 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     FilterChip(selected = recordingFormat == "MP3", onClick = { recordingFormat = "MP3" }, label = { Text("MP3") })
                 }
                 Spacer(Modifier.height(10.dp))
-                Spacer(Modifier.height(10.dp))
                 Button(
                     enabled = micController.isMicEnabled || micController.isOutputRecording,
                     onClick = {
