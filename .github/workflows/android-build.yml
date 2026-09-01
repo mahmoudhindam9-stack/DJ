@@ -20,21 +20,32 @@ jobs:
         with:
           python-version: '3.x'
 
-      # One idempotent normalization pass. The build no longer replays a chain
-      # of historical source-mutating patches on every run.
-      - name: Normalize microphone source
-        run: python3 .github/normalize_mic_source.py
+      # The microphone normalizer is only needed for repositories that still have
+      # the pre-normalized Beat FX state. This prevents an old patch script from
+      # running again against already-normalized source.
+      - name: Normalize microphone source when needed
+        shell: bash
+        run: |
+          if grep -q 'var beatFxEnabled by mutableStateOf(true)' app/src/main/java/com/example/player/MicController.kt; then
+            echo "Microphone source already normalized."
+          else
+            python3 .github/normalize_mic_source.py
+          fi
 
-      - name: Commit normalized source
+      - name: Normalize studio, notification and widget integration
+        run: python3 .github/normalize_studio_main.py
+
+      - name: Commit generated source normalization
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/src/main/java/com/example/MainActivity.kt \
-                  app/src/main/java/com/example/player/MicController.kt
+          git add -A app/src/main .github
           if git diff --cached --quiet; then
-            echo "Source already normalized."
+            echo "Generated source already normalized."
           else
-            git commit -m "ci: normalize microphone source [skip ci]"
+            git commit -m "ci: normalize app source integrations [skip ci]"
+            git pull --rebase origin main
             git push origin HEAD:main
           fi
 
@@ -66,4 +77,5 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/android-build-success.txt
           git commit -m "ci: record successful Android build [skip ci]"
+          git pull --rebase origin main
           git push origin HEAD:main
