@@ -49,7 +49,8 @@ class AudioPlayerController(private val context: Context) {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 persistSession(force = true)
-                syncNotification()
+                // Do not couple the critical player callback to notification/service startup.
+                // The service/widget is synchronized on explicit player actions instead.
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -68,7 +69,7 @@ class AudioPlayerController(private val context: Context) {
                     currentSong = playlist[index]
                     currentPositionMs = 0L
                     persistSession(force = true)
-                    syncNotification()
+                    syncNotificationSafely()
                 }
             }
         })
@@ -76,7 +77,7 @@ class AudioPlayerController(private val context: Context) {
         restoreSession()
     }
 
-    private fun syncNotification() {
+    private fun syncNotificationSafely() {
         try {
             val serviceIntent = Intent(context, MusicService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
@@ -90,8 +91,8 @@ class AudioPlayerController(private val context: Context) {
                 currentSong?.artist ?: "موسيقى",
                 isPlaying
             )
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Throwable) {
+            // Audio playback must continue even when notification/service integration is unavailable.
         }
     }
 
@@ -107,6 +108,7 @@ class AudioPlayerController(private val context: Context) {
             exoPlayer.playWhenReady = false
             applyPreferredAudioDevice()
             persistSession(force = true)
+            syncNotificationSafely()
         }
     }
 
@@ -125,6 +127,7 @@ class AudioPlayerController(private val context: Context) {
             applyPreferredAudioDevice()
             exoPlayer.play()
             persistSession(force = true)
+            syncNotificationSafely()
         }
     }
 
@@ -137,11 +140,13 @@ class AudioPlayerController(private val context: Context) {
             exoPlayer.play()
         }
         persistSession(force = true)
+        syncNotificationSafely()
     }
 
     fun pause() {
         exoPlayer.pause()
         persistSession(force = true)
+        syncNotificationSafely()
     }
 
     fun playNext() {
@@ -159,6 +164,7 @@ class AudioPlayerController(private val context: Context) {
             applyPreferredAudioDevice()
             exoPlayer.play()
             persistSession(force = true)
+            syncNotificationSafely()
         }
     }
 
@@ -168,6 +174,7 @@ class AudioPlayerController(private val context: Context) {
             exoPlayer.seekTo(0)
             currentPositionMs = 0L
             persistSession(force = true)
+            syncNotificationSafely()
             return
         }
         currentSongIndex = if (isShuffle) {
@@ -184,6 +191,7 @@ class AudioPlayerController(private val context: Context) {
             applyPreferredAudioDevice()
             exoPlayer.play()
             persistSession(force = true)
+            syncNotificationSafely()
         }
     }
 
@@ -220,14 +228,12 @@ class AudioPlayerController(private val context: Context) {
         persistSession(force = true)
     }
 
-    /** Routes Media3's actual music output to the selected Android audio device. */
     @UnstableApi
     fun setPreferredAudioDevice(device: AudioDeviceInfo?) {
         activePreferredAudioDevice = device
         try {
             exoPlayer.setPreferredAudioDevice(device)
-        } catch (t: Throwable) {
-            t.printStackTrace()
+        } catch (_: Throwable) {
         }
     }
 
@@ -243,6 +249,7 @@ class AudioPlayerController(private val context: Context) {
                 applyPreferredAudioDevice()
                 exoPlayer.play()
                 persistSession(force = true)
+                syncNotificationSafely()
             }
             RepeatOption.ALL -> playNext()
             RepeatOption.OFF -> if (currentSongIndex < playlist.size - 1) {
@@ -250,7 +257,7 @@ class AudioPlayerController(private val context: Context) {
             } else {
                 isPlaying = false
                 persistSession(force = true)
-                syncNotification()
+                syncNotificationSafely()
             }
         }
     }
@@ -295,8 +302,7 @@ class AudioPlayerController(private val context: Context) {
                 .putString(KEY_TITLE, currentSong?.title ?: "مشغل الموسيقى")
                 .putString(KEY_ARTIST, currentSong?.artist ?: "موسيقى")
                 .apply()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
         }
     }
 
@@ -348,13 +354,12 @@ class AudioPlayerController(private val context: Context) {
             exoPlayer.prepare()
             exoPlayer.playWhenReady = savedPlaying
             applyPreferredAudioDevice()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             prefs.edit().clear().apply()
             playlist.clear()
             currentSongIndex = -1
             currentSong = null
             currentPositionMs = 0L
-            e.printStackTrace()
         }
     }
 
