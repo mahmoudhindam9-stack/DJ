@@ -24,6 +24,8 @@ fun MusicStudioScreen(controller: MusicStudioController) {
     val scope = rememberCoroutineScope()
     val gridScroll = rememberScrollState()
     val pitches = (72 downTo 48).toList()
+    @Suppress("UNUSED_VARIABLE")
+    val revision = controller.uiRevision
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),

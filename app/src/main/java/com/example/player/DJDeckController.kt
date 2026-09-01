@@ -307,7 +307,7 @@ class DJDeck(context: Context, val deckName: String) {
 
     // MIXER_FUNCTIONALITY_V1
     // User volume is the deck fader; mixerGain is applied by the crossfader.
-    private var mixerGain by mutableStateOf(1f)
+    private var mixerGainValue by mutableStateOf(1f)
 
     var currentPositionMs by mutableStateOf(0L)
         private set
@@ -409,6 +409,7 @@ class DJDeck(context: Context, val deckName: String) {
         track = audioItem
         exoPlayer.setMediaItem(MediaItem.fromUri(audioItem.uri))
         exoPlayer.prepare()
+        applyMixerGain()
         currentPositionMs = 0L
         durationMs = 0L
     }
@@ -454,12 +455,12 @@ class DJDeck(context: Context, val deckName: String) {
     }
 
     fun setMixerGain(gain: Float) {
-        mixerGain = gain.coerceIn(0f, 1f)
+        mixerGainValue = gain.coerceIn(0f, 1f)
         applyMixerGain()
     }
 
     private fun applyMixerGain() {
-        exoPlayer.volume = (volume * mixerGain).coerceIn(0f, 1f)
+        exoPlayer.volume = (volume * mixerGainValue).coerceIn(0f, 1f)
     }
 
     fun release() {
@@ -474,6 +475,10 @@ class DJMixerController(context: Context) {
 
     var crossfader by mutableStateOf(0.5f)
         private set
+
+    init {
+        updateCrossfader(0.5f)
+    }
 
     fun updateCrossfader(position: Float) {
         crossfader = position.coerceIn(0f, 1f)
