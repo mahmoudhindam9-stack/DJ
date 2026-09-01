@@ -372,6 +372,13 @@ class MicController(private val context: Context) {
 
     fun discardPendingRecording() { pendingRecordingFile?.delete(); pendingRecordingFile = null; recordingStatus = "Recording discarded" }
 
+    fun toggleVoiceProcessing(enabled: Boolean) {
+        voiceProcessingEnabled = enabled
+        try { echoCanceler?.enabled = enabled } catch (_: Throwable) { }
+        try { noiseSuppressor?.enabled = enabled } catch (_: Throwable) { }
+        recordingStatus = if (enabled) "AEC + noise suppression enabled" else "Voice cleanup disabled"
+    }
+
     @SuppressLint("MissingPermission")
     private fun applyInputRouting() {
         try {
@@ -459,6 +466,8 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
+        if (isOutputRecording) stopOutputRecording()
+        stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
