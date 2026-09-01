@@ -388,6 +388,7 @@ class DJDeck(context: Context, val deckName: String) {
 
 
 
+
     init {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
