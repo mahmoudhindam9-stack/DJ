@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.media.app.NotificationCompat.MediaStyle
 import androidx.media.session.MediaButtonReceiver
 import android.support.v4.media.MediaMetadataCompat
@@ -83,6 +84,14 @@ class MusicService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
 
+    private fun startForegroundTyped(id: Int, notification: Notification, type: Int) {
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+            ServiceCompat.startForeground(this, id, notification, type)
+        } else {
+            startForeground(id, notification)
+        }
+    }
+
     private fun updateMicNotification() {
         val intent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(this, 99, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
@@ -94,7 +103,7 @@ class MusicService : Service() {
             .setOngoing(true)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
-        startForeground(MIC_NOTIFICATION_ID, notification)
+        startForegroundTyped(MIC_NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
     fun updateNotification(title: String, artist: String, isPlaying: Boolean) {
@@ -114,7 +123,7 @@ class MusicService : Service() {
             .setContentIntent(pendingIntent).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(isPlaying)
             .addAction(prevAction).addAction(playPauseAction).addAction(nextAction)
             .setStyle(MediaStyle().setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)).build()
-        startForeground(NOTIFICATION_ID, notification)
+        startForegroundTyped(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         updateWidget(title, artist, isPlaying)
     }
 
