@@ -79,12 +79,6 @@ class AudioPlayerController(private val context: Context) {
         try {
             val existingController = MusicService.instance?.playerController
             if (existingController != null && existingController !== this) return
-            val existingController = MusicService.instance?.playerController
-            if (existingController != null && existingController !== this) return
-            val existingController = MusicService.instance?.playerController
-            if (existingController != null && existingController !== this) return
-            val existingController = MusicService.instance?.playerController
-            if (existingController != null && existingController !== this) return
             val serviceIntent = Intent(context, MusicService::class.java)
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent)
@@ -358,10 +352,7 @@ class AudioPlayerController(private val context: Context) {
             exoPlayer.volume = volume
             exoPlayer.prepare()
             val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
-            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
-            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
-            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
-            exoPlayer.playWhenReady = savedPlaying && canAutoResume && canAutoResume && canAutoResume && canAutoResume
+            exoPlayer.playWhenReady = savedPlaying && canAutoResume
             applyPreferredAudioDevice()
         } catch (_: Exception) {
             prefs.edit().clear().apply()
