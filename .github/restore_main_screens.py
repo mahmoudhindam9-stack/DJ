@@ -16,5 +16,6 @@ content = content.replace(
     'fun MicScreen(micController: MicController, audioLibrary: SnapshotStateList<AudioItem>, context: Context, scope: kotlinx.coroutines.CoroutineScope) {',
     'fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {'
 )
+content = content.replace('// KARAOKE_DJ_ENGLISH_V2\nfun MicScreen', 'fun MicScreen', 1)
 MAIN.write_text(content, encoding="utf-8")
-print("Restored complete MainActivity.kt from known-good baseline with microphone-page signature normalized")
+print("Restored complete MainActivity.kt from known-good baseline with normalized microphone-page signature")
