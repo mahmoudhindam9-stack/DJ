@@ -39,11 +39,13 @@ jobs:
       - name: Normalize studio, notification and widget integration
         run: python3 .github/normalize_studio_main.py
 
-      - name: Integrate Mixxx-inspired DJ FX rack
-        run: python3 .github/upgrade_dj_fx_rack.py
-
+      # IMPORTANT: player normalization may rewrite MainActivity.kt. Keep the
+      # DJ FX rack injection after it so the generated DJ screen cannot lose it.
       - name: Normalize player, playlists and session ownership
         run: python3 .github/normalize_player_experience.py
+
+      - name: Integrate Mixxx-inspired DJ FX rack
+        run: python3 .github/upgrade_dj_fx_rack.py
 
       - name: Verify equalizer isolation
         shell: bash
@@ -61,6 +63,7 @@ jobs:
         run: |
           test -f app/src/main/java/com/example/DJFxRackScreen.kt
           grep -q 'DJ_FX_RACK_V1' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'DJFxRack(deck)' app/src/main/java/com/example/MainActivity.kt
           grep -q 'DJEffect.values().size' app/src/main/java/com/example/DJFxRackScreen.kt
           echo "DJ FX rack verification passed."
 
