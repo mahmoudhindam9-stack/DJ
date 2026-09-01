@@ -37,13 +37,16 @@ jobs:
       - name: Normalize studio, notification and widget integration
         run: python3 .github/normalize_studio_main.py
 
-      # Player normalization can rewrite MainActivity.kt, so the FX mount must
-      # always run after it. The generated source is persisted back to main.
+      # Player normalization can rewrite MainActivity.kt, so all DJ UI mounts
+      # must run after it and be persisted back to main.
       - name: Normalize player, playlists and session ownership
         run: python3 .github/normalize_player_experience.py
 
       - name: Integrate Mixxx-inspired DJ FX rack
         run: python3 .github/upgrade_dj_fx_rack.py
+
+      - name: Replace legacy DJ soundboard with professional CC0 sampler
+        run: python3 .github/upgrade_dj_sampler.py
 
       - name: Persist normalized source to main
         shell: bash
@@ -53,8 +56,8 @@ jobs:
           if git diff --quiet; then
             echo "No generated source changes to persist."
           else
-            git add app/src/main/java .github
-            git commit -m "Persist Player Playlist and Mixxx DJ FX integration"
+            git add app/src/main/java .github app/src/main/AndroidManifest.xml
+            git commit -m "Integrate professional CC0 DJ sampler"
             git push origin HEAD:main
           fi
 
@@ -78,6 +81,19 @@ jobs:
           grep -q 'DJEffect.values().size' app/src/main/java/com/example/DJFxRackScreen.kt
           echo "DJ FX rack verification passed."
 
+      - name: Verify professional sampler integration
+        shell: bash
+        run: |
+          test -f app/src/main/java/com/example/ProfessionalSampler.kt
+          grep -q 'DJ_SAMPLER_CC0_V1' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'ProfessionalSamplerBoard()' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'CC0' app/src/main/java/com/example/ProfessionalSampler.kt
+          if grep -q 'Live Sound Effects & Instruments Soundboard' app/src/main/java/com/example/MainActivity.kt; then
+            echo "Legacy sampler soundboard still present"
+            exit 1
+          fi
+          echo "Professional sampler verification passed."
+
       - name: Verify player experience integration
         shell: bash
         run: |
@@ -93,7 +109,7 @@ jobs:
           echo "Player experience verification passed."
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
