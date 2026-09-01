@@ -63,17 +63,9 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                         }
                     }
                     DropdownMenu(inputExpanded, { inputExpanded = false }) {
-                        DropdownMenuItem(
-                            leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
-                            text = { Text("System Default Mic") },
-                            onClick = { micController.selectInputDevice(null, scope); inputExpanded = false }
-                        )
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.inputDevices.forEach { device ->
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Filled.Mic, contentDescription = null) },
-                                text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                onClick = { micController.selectInputDevice(device, scope); inputExpanded = false }
-                            )
+                            DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectInputDevice(device, scope); inputExpanded = false })
                         }
                     }
                 }
@@ -88,25 +80,15 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                         }
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
-                        DropdownMenuItem(
-                            leadingIcon = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
-                            text = { Text("System Default Output") },
-                            onClick = { micController.selectOutputDevice(null); outputExpanded = false }
-                        )
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
-                            DropdownMenuItem(
-                                leadingIcon = { Icon(Icons.Filled.VolumeUp, contentDescription = null) },
-                                text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                                onClick = { micController.selectOutputDevice(device); outputExpanded = false }
-                            )
+                            DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
                         }
                     }
                 }
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = { micController.refreshDevices() }, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Refresh connected devices")
+                    Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Refresh connected devices")
                 }
                 Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -130,13 +112,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                 Spacer(Modifier.height(4.dp))
                 Text("Vocal Filters", style = MaterialTheme.typography.labelSmall)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(MicFilter.values().toList()) { filter ->
-                        FilterChip(
-                            selected = filter == micController.currentFilter,
-                            onClick = { micController.currentFilter = filter },
-                            label = { Text(filter.displayName) }
-                        )
-                    }
+                    items(MicFilter.values().toList()) { filter -> FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) }) }
                 }
             }
         }
@@ -149,9 +125,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                 Text("BPM: ${micController.bpm.toInt()}")
                 Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(BeatFxDivision.values().toList()) { div ->
-                        FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) })
-                    }
+                    items(BeatFxDivision.values().toList()) { div -> FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) }) }
                 }
             }
         }
@@ -171,8 +145,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(20.dp))
-                    Spacer(Modifier.width(8.dp))
+                    Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Recording", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                         Text("Record the processed microphone output", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -185,15 +158,12 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     onClick = {
                         if (micController.isOutputRecording) {
                             if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName())
-                        } else if (micController.startOutputRecording()) {
-                            Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
-                        }
+                        } else if (micController.startOutputRecording()) Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(if (micController.isOutputRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(if (micController.isOutputRecording) "Stop & Save" else "Start Recording")
+                    Spacer(Modifier.width(6.dp)); Text(if (micController.isOutputRecording) "Stop & Save" else "Start Recording")
                 }
                 Text(micController.recordingStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -201,8 +171,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
 
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
+            Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
             Text(if (micController.isMicEnabled) "Microphone monitor is active" else "Microphone monitor is off", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
@@ -211,30 +180,26 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
 
 def patch_main():
     text = MAIN.read_text(encoding='utf-8')
-    if MARKER in text:
-        return
+    if MARKER in text: return
     if 'import kotlinx.coroutines.withContext' not in text:
         text = text.replace('import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n', 1)
-    pattern = r'@Composable\s*(?://[^\n]*\n)?fun MicScreen\(micController: MicController(?:, audioLibrary: SnapshotStateList<AudioItem>)?, context: Context, scope: kotlinx\.coroutines\.CoroutineScope\)\s*\{.*?\n\}\n\n@Composable\nfun FullPlayerScreen'
-    repl = MARKER + '\n' + NEW_MIC_SCREEN.rstrip() + '\n\n@Composable\nfun FullPlayerScreen'
-    new_text, n = re.subn(pattern, repl, text, count=1, flags=re.S)
-    if n != 1:
-        raise SystemExit('Could not patch MicScreen')
-    text = re.sub(r'MicScreen\(micController = micController, audioLibrary = audioLibrary, context = context, scope = scope\)', 'MicScreen(micController = micController, scope = scope)', text)
-    MAIN.write_text(text, encoding='utf-8')
+    pattern = r'@Composable\s*(?://[^\n]*\n)?fun MicScreen\([^)]*CoroutineScope\)\s*\{.*?\n\}\n\n@Composable\nfun FullPlayerScreen'
+    new_text, n = re.subn(pattern, MARKER + '\n' + NEW_MIC_SCREEN.rstrip() + '\n\n@Composable\nfun FullPlayerScreen', text, count=1, flags=re.S)
+    if n != 1: raise SystemExit('Could not patch MicScreen')
+    MAIN.write_text(new_text, encoding='utf-8')
 
 def patch_mic():
     text = MIC.read_text(encoding='utf-8')
-    if MARKER not in text:
-        text = text.replace('import android.content.Context\n', 'import android.content.Context\nimport android.content.Intent\nimport android.net.Uri\n', 1)
-        if 'import androidx.core.content.ContextCompat' not in text:
-            text = text.replace('import androidx.compose.runtime.setValue\n', 'import androidx.compose.runtime.setValue\nimport androidx.core.content.ContextCompat\n', 1)
-        if 'import java.io.File' not in text:
-            text = text.replace('import kotlin.math.sin\n', 'import kotlin.math.sin\nimport java.io.File\nimport java.io.RandomAccessFile\n', 1)
-        text = re.sub(r'enum class MicFilter\(val displayName: String\) \{.*?\n\}', '''enum class MicFilter(val displayName: String) {
+    if MARKER in text: return
+    if 'import android.content.Intent' not in text: text = text.replace('import android.content.Context\n', 'import android.content.Context\nimport android.content.Intent\n', 1)
+    if 'import android.net.Uri' not in text: text = text.replace('import android.content.Intent\n', 'import android.content.Intent\nimport android.net.Uri\n', 1)
+    if 'import androidx.core.content.ContextCompat' not in text: text = text.replace('import androidx.compose.runtime.setValue\n', 'import androidx.compose.runtime.setValue\nimport androidx.core.content.ContextCompat\n', 1)
+    if 'import java.io.File' not in text: text = text.replace('import kotlin.math.sin\n', 'import kotlin.math.sin\nimport java.io.File\nimport java.io.RandomAccessFile\n', 1)
+    text = re.sub(r'enum class MicFilter\(val displayName: String\) \{.*?\n\}', '''enum class MicFilter(val displayName: String) {
     NORMAL("Clean"), STUDIO_REVERB("Studio Reverb"), CHIPMUNK("Chipmunk"), MONSTER("Monster"), ROBOT("Robot"),
     TELEPHONE("Telephone"), RADIO("Radio"), MEGAPHONE("Megaphone"), CHORUS("Chorus"), TREMOLO("Tremolo"), BASS_BOOST("Bass Boost")
 }''', text, count=1, flags=re.S)
+    if 'var voiceProcessingEnabled by' not in text:
         anchor = '    var beatFxDivision by mutableStateOf(BeatFxDivision.QUARTER)\n'
         text = text.replace(anchor, anchor + '''
     var voiceProcessingEnabled by mutableStateOf(true)
@@ -253,9 +218,9 @@ def patch_mic():
     private var recordingTickerJob: Job? = null
     private val recordingLock = Any()
 ''', 1)
-        start = text.index('    private fun startMic(coroutineScope: CoroutineScope) {')
-        end = text.index('    @SuppressLint("MissingPermission")\n    private fun applyInputRouting()', start)
-        new_start = r'''    private fun startMic(coroutineScope: CoroutineScope) {
+    start = text.index('    private fun startMic(coroutineScope: CoroutineScope) {')
+    end = text.index('    @SuppressLint("MissingPermission")\n    private fun applyInputRouting()', start)
+    new_start = r'''    private fun startMic(coroutineScope: CoroutineScope) {
         if (isMicEnabled) return
         try {
             val inputDevice = selectedInputDevice
@@ -279,7 +244,6 @@ def patch_mic():
             audioTrack?.play()
             isMicEnabled = true
             startMicForegroundService()
-            AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
             updateRoutingStatus()
             recordingJob = coroutineScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(bufferSize / 2)
@@ -295,10 +259,7 @@ def patch_mic():
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
                         if (voiceProcessingEnabled && kotlin.math.abs(sample) < 0.012f) sample *= 0.08f
-                        val readDelay = fun(frames: Int): Float {
-                            val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size
-                            return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat()
-                        }
+                        val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
                             MicFilter.CHIPMUNK -> sample *= 1.12f
                             MicFilter.MONSTER -> sample *= 0.72f
@@ -328,16 +289,13 @@ def patch_mic():
                     appendRecordingPcm(buffer, read)
                 }
             }
-        } catch (t: Throwable) {
-            routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"
-            t.printStackTrace()
-            stopMic()
-        }
+        } catch (t: Throwable) { routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"; t.printStackTrace(); stopMic() }
     }
 
 '''
-        text = text[:start] + new_start + text[end:]
-        anchor = '    @SuppressLint("MissingPermission")\n    private fun applyInputRouting()'
+    text = text[:start] + new_start + text[end:]
+    helper_anchor = '    @SuppressLint("MissingPermission")\n    private fun applyInputRouting()'
+    if 'fun startOutputRecording()' not in text:
         helpers = r'''    fun setVoiceProcessingEnabled(enabled: Boolean) {
         voiceProcessingEnabled = enabled
         try { echoCanceler?.enabled = enabled } catch (_: Throwable) { }
@@ -347,94 +305,46 @@ def patch_mic():
 
     private fun startMicForegroundService() {
         try {
-            val intent = Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_START)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, intent) else context.startService(intent)
+            val i = Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_START)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, i) else context.startService(i)
         } catch (t: Throwable) { routingStatus = "Microphone service start failed: ${t.message ?: "Unknown error"}" }
     }
 
-    private fun stopMicForegroundService() {
-        try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (_: Throwable) { }
-    }
+    private fun stopMicForegroundService() { try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (_: Throwable) { } }
 
     private fun writeWavHeader(file: RandomAccessFile, dataLength: Long) {
-        val byteRate = sampleRate * 2
-        val totalLength = 36L + dataLength
-        file.seek(0)
-        file.writeBytes("RIFF")
-        file.writeInt(Integer.reverseBytes(totalLength.toInt()))
-        file.writeBytes("WAVEfmt ")
-        file.writeInt(Integer.reverseBytes(16))
-        file.writeShort(java.lang.Short.reverseBytes(1).toInt())
-        file.writeShort(java.lang.Short.reverseBytes(1).toInt())
-        file.writeInt(Integer.reverseBytes(sampleRate))
-        file.writeInt(Integer.reverseBytes(byteRate))
-        file.writeShort(java.lang.Short.reverseBytes(2).toInt())
-        file.writeShort(java.lang.Short.reverseBytes(16).toInt())
-        file.writeBytes("data")
-        file.writeInt(Integer.reverseBytes(dataLength.toInt()))
+        val byteRate = sampleRate * 2; val totalLength = 36L + dataLength
+        file.seek(0); file.writeBytes("RIFF"); file.writeInt(Integer.reverseBytes(totalLength.toInt())); file.writeBytes("WAVEfmt ")
+        file.writeInt(Integer.reverseBytes(16)); file.writeShort(java.lang.Short.reverseBytes(1).toInt()); file.writeShort(java.lang.Short.reverseBytes(1).toInt())
+        file.writeInt(Integer.reverseBytes(sampleRate)); file.writeInt(Integer.reverseBytes(byteRate)); file.writeShort(java.lang.Short.reverseBytes(2).toInt()); file.writeShort(java.lang.Short.reverseBytes(16).toInt())
+        file.writeBytes("data"); file.writeInt(Integer.reverseBytes(dataLength.toInt()))
     }
 
     fun startOutputRecording(): Boolean {
         if (!isMicEnabled || isOutputRecording) return false
         return try {
-            val file = File(context.cacheDir, "mic_output_${System.currentTimeMillis()}.wav")
-            val writer = RandomAccessFile(file, "rw")
-            writeWavHeader(writer, 0L)
-            synchronized(recordingLock) {
-                recordingFile = file
-                pendingRecordingFile = null
-                recordingWriter = writer
-                recordedPcmBytes = 0L
-                recordingStartedAt = System.currentTimeMillis()
-                isOutputRecording = true
-                recordingDurationText = "00:00"
-                recordingStatus = "Recording processed microphone output"
-            }
-            recordingTickerJob?.cancel()
-            recordingTickerJob = CoroutineScope(Dispatchers.Main.immediate).launch {
-                while (isActive && isOutputRecording) {
-                    val seconds = ((System.currentTimeMillis() - recordingStartedAt) / 1000L).coerceAtLeast(0L)
-                    recordingDurationText = "%02d:%02d".format(seconds / 60L, seconds % 60L)
-                    delay(500L)
-                }
-            }
-            true
-        } catch (t: Throwable) {
-            recordingStatus = "Unable to start recording: ${t.message ?: "Unknown error"}"
-            false
-        }
+            val file = File(context.cacheDir, "mic_output_${System.currentTimeMillis()}.wav"); val writer = RandomAccessFile(file, "rw"); writeWavHeader(writer, 0L)
+            synchronized(recordingLock) { recordingFile = file; pendingRecordingFile = null; recordingWriter = writer; recordedPcmBytes = 0L; recordingStartedAt = System.currentTimeMillis(); isOutputRecording = true; recordingDurationText = "00:00"; recordingStatus = "Recording processed microphone output" }
+            recordingTickerJob?.cancel(); recordingTickerJob = CoroutineScope(Dispatchers.Main.immediate).launch {
+                while (isActive && isOutputRecording) { val s = ((System.currentTimeMillis() - recordingStartedAt) / 1000L).coerceAtLeast(0L); recordingDurationText = "%02d:%02d".format(s / 60L, s % 60L); delay(500L) }
+            }; true
+        } catch (t: Throwable) { recordingStatus = "Unable to start recording: ${t.message ?: "Unknown error"}"; false }
     }
 
     private fun appendRecordingPcm(buffer: ShortArray, count: Int) {
         synchronized(recordingLock) {
-            val writer = recordingWriter ?: return
-            if (!isOutputRecording) return
-            val bytes = ByteArray(count * 2)
-            var p = 0
-            for (i in 0 until count) {
-                val value = buffer[i].toInt()
-                bytes[p++] = (value and 0xff).toByte()
-                bytes[p++] = ((value ushr 8) and 0xff).toByte()
-            }
-            try { writer.write(bytes); recordedPcmBytes += bytes.size.toLong() }
-            catch (t: Throwable) { recordingStatus = "Recording write failed: ${t.message ?: "Unknown error"}" }
+            val writer = recordingWriter ?: return; if (!isOutputRecording) return; val bytes = ByteArray(count * 2); var p = 0
+            for (i in 0 until count) { val v = buffer[i].toInt(); bytes[p++] = (v and 0xff).toByte(); bytes[p++] = ((v ushr 8) and 0xff).toByte() }
+            try { writer.write(bytes); recordedPcmBytes += bytes.size.toLong() } catch (t: Throwable) { recordingStatus = "Recording write failed: ${t.message ?: "Unknown error"}" }
         }
     }
 
     fun stopOutputRecording(): Boolean {
         synchronized(recordingLock) {
             if (!isOutputRecording) return pendingRecordingFile?.exists() == true
-            isOutputRecording = false
-            recordingTickerJob?.cancel()
-            recordingTickerJob = null
-            val writer = recordingWriter
-            recordingWriter = null
-            try { writer?.let { writeWavHeader(it, recordedPcmBytes); it.fd.sync(); it.close() } }
-            catch (t: Throwable) { recordingStatus = "Unable to finalize recording: ${t.message ?: "Unknown error"}" }
-            pendingRecordingFile = recordingFile
-            recordingFile = null
-            recordingStatus = if (pendingRecordingFile?.exists() == true) "Choose a location and filename to save" else "Recording stopped"
-            return pendingRecordingFile?.exists() == true
+            isOutputRecording = false; recordingTickerJob?.cancel(); recordingTickerJob = null; val writer = recordingWriter; recordingWriter = null
+            try { writer?.let { writeWavHeader(it, recordedPcmBytes); it.fd.sync(); it.close() } } catch (t: Throwable) { recordingStatus = "Unable to finalize recording: ${t.message ?: "Unknown error"}" }
+            pendingRecordingFile = recordingFile; recordingFile = null; recordingStatus = if (pendingRecordingFile?.exists() == true) "Choose a location and filename to save" else "Recording stopped"; return pendingRecordingFile?.exists() == true
         }
     }
 
@@ -442,43 +352,29 @@ def patch_mic():
 
     suspend fun savePendingRecording(uri: Uri): Boolean {
         val source = pendingRecordingFile ?: return false
-        return try {
-            context.contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { it.copyTo(out) } } ?: return false
-            source.delete()
-            pendingRecordingFile = null
-            recordingStatus = "Recording saved successfully"
-            true
-        } catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
+        return try { context.contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { it.copyTo(out) } } ?: return false; source.delete(); pendingRecordingFile = null; recordingStatus = "Recording saved successfully"; true }
+        catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
     }
 
-    fun discardPendingRecording() {
-        pendingRecordingFile?.delete()
-        pendingRecordingFile = null
-        recordingStatus = "Recording discarded"
-    }
+    fun discardPendingRecording() { pendingRecordingFile?.delete(); pendingRecordingFile = null; recordingStatus = "Recording discarded" }
 
 '''
-        text = text.replace(anchor, helpers + anchor, 1)
-        text = text.replace('    private fun stopMic() {\n        isMicEnabled = false\n', '    private fun stopMic() {\n        isMicEnabled = false\n        if (isOutputRecording) stopOutputRecording()\n        stopMicForegroundService()\n', 1)
-        text = text.replace('AcousticEchoCanceler.create(sessionId)?.apply { enabled = true }', 'AcousticEchoCanceler.create(sessionId)?.apply { enabled = voiceProcessingEnabled }')
-        text = text.replace('NoiseSuppressor.create(sessionId)?.apply { enabled = true }', 'NoiseSuppressor.create(sessionId)?.apply { enabled = voiceProcessingEnabled }')
-        text += '\n' + MARKER + '\n'
+        text = text.replace(helper_anchor, helpers + helper_anchor, 1)
+    text = text.replace('    private fun stopMic() {\n        isMicEnabled = false\n', '    private fun stopMic() {\n        isMicEnabled = false\n        if (isOutputRecording) stopOutputRecording()\n        stopMicForegroundService()\n', 1)
     MIC.write_text(text, encoding='utf-8')
 
 def patch_service():
     text = SERVICE.read_text(encoding='utf-8')
-    if 'ACTION_MIC_START' not in text:
-        text = text.replace('        const val ACTION_STOP = "com.example.action.STOP"\n', '        const val ACTION_STOP = "com.example.action.STOP"\n        const val ACTION_MIC_START = "com.example.action.MIC_START"\n        const val ACTION_MIC_STOP = "com.example.action.MIC_STOP"\n        const val MIC_NOTIFICATION_ID = 1002\n', 1)
-    if 'private var micActive' not in text:
-        text = text.replace('    private lateinit var mediaSession: MediaSessionCompat\n', '    private lateinit var mediaSession: MediaSessionCompat\n    private var micActive = false\n', 1)
+    if 'ACTION_MIC_START' not in text: text = text.replace('        const val ACTION_STOP = "com.example.action.STOP"\n', '        const val ACTION_STOP = "com.example.action.STOP"\n        const val ACTION_MIC_START = "com.example.action.MIC_START"\n        const val ACTION_MIC_STOP = "com.example.action.MIC_STOP"\n        const val MIC_NOTIFICATION_ID = 1002\n', 1)
+    if 'private var micActive' not in text: text = text.replace('    private lateinit var mediaSession: MediaSessionCompat\n', '    private lateinit var mediaSession: MediaSessionCompat\n    private var micActive = false\n', 1)
     if 'ACTION_MIC_START ->' not in text:
-        text = text.replace('            ACTION_STOP -> {\n                playerController?.pause()\n                stopForeground(STOP_FOREGROUND_REMOVE)\n                stopSelf()\n            }\n', '            ACTION_STOP -> {\n                playerController?.pause()\n                stopForeground(STOP_FOREGROUND_REMOVE)\n                stopSelf()\n            }\n            ACTION_MIC_START -> {\n                micActive = true\n                if (playerController?.isPlaying != true) updateMicNotification()\n            }\n            ACTION_MIC_STOP -> {\n                micActive = false\n                if (playerController?.isPlaying != true) {\n                    stopForeground(STOP_FOREGROUND_REMOVE)\n                    stopSelf()\n                }\n            }\n', 1)
+        text = text.replace('            ACTION_STOP -> {\n                playerController?.pause()\n                stopForeground(STOP_FOREGROUND_REMOVE)\n                stopSelf()\n            }\n', '            ACTION_STOP -> {\n                playerController?.pause()\n                stopForeground(STOP_FOREGROUND_REMOVE)\n                stopSelf()\n            }\n            ACTION_MIC_START -> {\n                micActive = true\n                if (playerController?.isPlaying != true) updateMicNotification()\n            }\n            ACTION_MIC_STOP -> {\n                micActive = false\n                if (playerController?.isPlaying != true) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }\n            }\n', 1)
     if 'private fun updateMicNotification()' not in text:
         anchor = '    fun updateNotification(title: String, artist: String, isPlaying: Boolean) {\n'
-        notif = '''    private fun updateMicNotification() {\n        val notificationIntent = Intent(this, MainActivity::class.java)\n        val pendingIntent = PendingIntent.getActivity(this, 99, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)\n        val notification = NotificationCompat.Builder(this, CHANNEL_ID)\n            .setContentTitle("DJ Microphone")\n            .setContentText("Live microphone monitor is running")\n            .setSmallIcon(android.R.drawable.ic_btn_speak_now)\n            .setContentIntent(pendingIntent)\n            .setOngoing(true)\n            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)\n            .build()\n        startForeground(MIC_NOTIFICATION_ID, notification)\n    }\n\n'''
+        notif = '''    private fun updateMicNotification() {\n        val intent = Intent(this, MainActivity::class.java)\n        val pending = PendingIntent.getActivity(this, 99, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)\n        val notification = NotificationCompat.Builder(this, CHANNEL_ID)\n            .setContentTitle("DJ Microphone").setContentText("Live microphone monitor is running")\n            .setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentIntent(pending).setOngoing(true)\n            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()\n        startForeground(MIC_NOTIFICATION_ID, notification)\n    }\n\n'''
         text = text.replace(anchor, notif + anchor, 1)
     if 'if (micActive && !isPlaying)' not in text:
-        text = text.replace('    fun updateNotification(title: String, artist: String, isPlaying: Boolean) {\n', '    fun updateNotification(title: String, artist: String, isPlaying: Boolean) {\n        if (micActive && !isPlaying) {\n            updateMicNotification()\n            return\n        }\n', 1)
+        text = text.replace('    fun updateNotification(title: String, artist: String, isPlaying: Boolean) {\n', '    fun updateNotification(title: String, artist: String, isPlaying: Boolean) {\n        if (micActive && !isPlaying) { updateMicNotification(); return }\n', 1)
     SERVICE.write_text(text, encoding='utf-8')
 
 def patch_manifest():
@@ -488,8 +384,4 @@ def patch_manifest():
     text = text.replace('android:foregroundServiceType="mediaPlayback"', 'android:foregroundServiceType="mediaPlayback|microphone"', 1)
     MANIFEST.write_text(text, encoding='utf-8')
 
-patch_main()
-patch_mic()
-patch_service()
-patch_manifest()
-print('Applied microphone page V5 changes.')
+patch_main(); patch_mic(); patch_service(); patch_manifest(); print('Applied microphone page V5 changes.')
