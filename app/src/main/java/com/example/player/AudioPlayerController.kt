@@ -250,6 +250,7 @@ class AudioPlayerController(private val context: Context) {
             } else {
                 isPlaying = false
                 persistSession(force = true)
+                syncNotification()
             }
         }
     }
@@ -291,6 +292,8 @@ class AudioPlayerController(private val context: Context) {
                 .putBoolean(KEY_SHUFFLE, isShuffle)
                 .putString(KEY_REPEAT, repeatOption.name)
                 .putFloat(KEY_VOLUME, volume)
+                .putString(KEY_TITLE, currentSong?.title ?: "مشغل الموسيقى")
+                .putString(KEY_ARTIST, currentSong?.artist ?: "موسيقى")
                 .apply()
         } catch (e: Exception) {
             e.printStackTrace()
@@ -372,6 +375,8 @@ class AudioPlayerController(private val context: Context) {
         private const val KEY_SHUFFLE = "shuffle"
         private const val KEY_REPEAT = "repeat"
         private const val KEY_VOLUME = "volume"
+        const val KEY_TITLE = "title"
+        const val KEY_ARTIST = "artist"
 
         @JvmStatic
         var activeInstance: AudioPlayerController? = null
