@@ -20,9 +20,8 @@ jobs:
         with:
           python-version: '3.x'
 
-      # The microphone normalizer is only needed for repositories that still have
-      # the pre-normalized Beat FX state. This prevents an old patch script from
-      # running again against already-normalized source.
+      # Keep the microphone normalization idempotent. Never re-run the old
+      # source transformer against an already-normalized file.
       - name: Normalize microphone source when needed
         shell: bash
         run: |
@@ -68,14 +67,3 @@ jobs:
           name: DJ-debug-apk
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
-
-      - name: Record successful Android build
-        shell: bash
-        run: |
-          printf 'SUCCESS\nCommit: %s\nWorkflow: Android Build Verification\nArtifact: DJ-debug-apk\n' "$GITHUB_SHA" > .github/android-build-success.txt
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/android-build-success.txt
-          git commit -m "ci: record successful Android build [skip ci]"
-          git pull --rebase origin main
-          git push origin HEAD:main
