@@ -56,6 +56,9 @@ jobs:
       - name: Apply final launcher/audio batch fixes
         run: python3 .github/add_dj_audio_card.py
 
+      - name: Apply microphone recording format and build fix
+        run: python3 .github/finalize_mic_recording_format.py
+
       - name: Commit app upgrades
         run: |
           git config user.name "github-actions[bot]"
@@ -73,11 +76,13 @@ jobs:
                   .github/add_org_system.py \
                   .github/add_dj_audio_card.py \
                   .github/add_notification_permission.py \
-                  .github/fix_org_functionality.py
+                  .github/fix_org_functionality.py \
+                  .github/fix_audio_routing.py \
+                  .github/finalize_mic_recording_format.py
           if git diff --cached --quiet; then
             echo "No generated source changes to commit."
           else
-            git commit -m "feat: batch audio controls, ORG sounds, notifications, and launcher reuse [skip ci]"
+            git commit -m "feat: microphone recording format and routing controls [skip ci]"
             git push origin HEAD:main
           fi
 
