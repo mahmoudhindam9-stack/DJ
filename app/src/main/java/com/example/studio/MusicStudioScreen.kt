@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -26,6 +27,10 @@ fun MusicStudioScreen(controller: MusicStudioController) {
     val pitches = (72 downTo 48).toList()
     @Suppress("UNUSED_VARIABLE")
     val revision = controller.uiRevision
+
+    val activeNoteSet = remember(controller.uiRevision, controller.selectedTrackId) {
+        controller.selectedTrack.notes.map { Pair(it.pitch, (it.startBeat * 2.0f).toInt()) }.toSet()
+    }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(12.dp),
@@ -129,7 +134,7 @@ fun MusicStudioScreen(controller: MusicStudioController) {
                         Box(Modifier.width(48.dp).height(26.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Text(noteName(pitch), fontSize = 9.sp) }
                         repeat((controller.loopBeats / 0.5f).toInt()) { i ->
                             val beat = i * 0.5f
-                            val active = controller.selectedTrack.notes.any { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.01f }
+                            val active = (pitch to i) in activeNoteSet
                             Box(
                                 Modifier.width(34.dp).height(26.dp).padding(1.dp)
                                     .background(if (active) MaterialTheme.colorScheme.primary else if (i % 8 == 0) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent, RoundedCornerShape(4.dp))
@@ -142,13 +147,49 @@ fun MusicStudioScreen(controller: MusicStudioController) {
         }
 
         Spacer(Modifier.height(10.dp))
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+        ) {
+            Column(Modifier.padding(12.dp)) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                    Text("🥁 Darbuka Live Pads (طبلة شرقية)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text("Tap to play live", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    val pads = listOf(
+                        "Doom" to "دوم (Doom)",
+                        "Tak" to "تاك (Tak)",
+                        "Sak" to "صك (Sak)",
+                        "Ka" to "كاب (Ka)",
+                        "Riq" to "رق (Riq)",
+                        "Bandir" to "بندير (Bandir)"
+                    )
+                    pads.forEach { (type, label) ->
+                        Button(
+                            onClick = { controller.playLiveDarbuka(type) },
+                            modifier = Modifier.weight(1f).height(42.dp),
+                            contentPadding = PaddingValues(2.dp),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(label, fontSize = 9.sp, maxLines = 1)
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
             Column(Modifier.padding(10.dp)) {
-                Text("Rhythm Patterns", style = MaterialTheme.typography.titleSmall)
+                Text("Rhythm Patterns & Oriental Loops (إيقاعات وطبلة لووب)", style = MaterialTheme.typography.titleSmall)
+                Spacer(Modifier.height(4.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    itemsIndexed(controller.rhythms) { i, r -> FilterChip(controller.selectedRhythmIndex == i, { controller.selectedRhythmIndex = i }, label = { Text(r.name) }) }
+                    itemsIndexed(controller.rhythms) { i, r -> FilterChip(controller.selectedRhythmIndex == i, { controller.selectedRhythmIndex = i }, label = { Text(r.name, fontSize = 11.sp) }) }
                 }
-                Text("Selected: ${controller.selectedRhythm.name} • percussion follows the loop during playback", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Selected Loop: ${controller.selectedRhythm.name} • loops automatically during playback", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }

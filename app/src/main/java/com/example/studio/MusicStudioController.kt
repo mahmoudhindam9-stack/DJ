@@ -41,49 +41,61 @@ class MusicStudioController(private val context: Context) {
     data class RhythmPreset(val name: String, val pattern: IntArray)
 
     val instruments = listOf(
-        "Grand Piano", "Warm Piano", "Oud", "Qanun", "Nay", "Arabic Violin",
-        "Mizmar", "Strings", "Cello", "Flute", "Sax", "Trumpet", "Guitar",
-        "Bass", "Synth Lead", "Warm Pad", "Bell"
+        // Oriental (شرقي)
+        "Oud (عود)", "Qanun (قانون)", "Nay (ناي)", "Arabic Violin (كمان شرقي)",
+        "Mizmar (مزمار)", "Bouzouki (بزق)", "Rebab (ربابة)", "Oriental Accordion (أكورديون شرقي)",
+        "Kanun Tremolo (قانون ترملو)", "Oriental Clarinet (كلارنيت شرقي)", "Oriental Synth (سينث شرقي)",
+        // Occidental (غربي)
+        "Grand Piano (بيانو)", "Electric Piano Rhodes (رودز)", "Acoustic Guitar (جيتار أكوستيك)",
+        "Electric Guitar (جيتار كهربائي)", "Bass Guitar (باس)", "Violin Ensemble (وتريات)",
+        "Cello (شيلو)", "Harp (هارب)", "Accordion (أكورديون)", "Saxophone (ساكسفون)",
+        "Flute (فلوت)", "Synth Brass (سينث براس)", "Synth Pad (سينث باد)", "Church Organ (أورغن)",
+        "808 Synth Bass (808 باس)"
     )
 
-    val scales = listOf("Major", "Minor", "Hijaz", "Bayati", "Rast", "Nahawand", "Kurd", "Saba", "Ajam")
+    val scales = listOf(
+        // Maqamat (مقامات شرقية)
+        "Bayati", "Rast", "Hijaz", "Nahawand", "Kurd", "Saba", "Sikah", "Ajam",
+        "Hijaz Kar", "Jiharkah", "Suznak",
+        // Occidental Scales (سلم غربي)
+        "Major", "Minor", "Harmonic Minor", "Melodic Minor", "Pentatonic Major",
+        "Pentatonic Minor", "Blues", "Dorian", "Phrygian"
+    )
+
     val keys = listOf("C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B")
+
     val rhythms = listOf(
-        RhythmPreset("Maqsum", intArrayOf(1,0,2,0,1,0,2,0)),
-        RhythmPreset("Baladi", intArrayOf(1,0,0,2,1,0,2,0)),
-        RhythmPreset("Saeidi", intArrayOf(1,0,2,1,1,0,2,1)),
-        RhythmPreset("Malfouf", intArrayOf(1,0,2,1,1,0,2,1)),
-        RhythmPreset("Khaleeji", intArrayOf(1,2,0,2,1,2,0,2)),
-        RhythmPreset("Sama'i", intArrayOf(1,0,0,1,2,0,1,0)),
-        RhythmPreset("Rumba", intArrayOf(1,0,2,0,0,2,1,0)),
-        RhythmPreset("Pop", intArrayOf(1,0,2,0,1,0,2,0)),
-        RhythmPreset("Rock", intArrayOf(1,2,1,2,1,2,1,2)),
-        RhythmPreset("House", intArrayOf(1,2,1,2,1,2,1,2)),
-        RhythmPreset("Disco", intArrayOf(1,0,2,0,1,0,2,0)),
-        RhythmPreset("Waltz", intArrayOf(1,0,0,2,0,0,2,0)),
-        RhythmPreset("6/8", intArrayOf(1,0,2,1,0,2,1,0)),
-        RhythmPreset("Latin", intArrayOf(1,0,2,1,0,2,1,2)),
-        RhythmPreset("Slow Ballad", intArrayOf(1,0,0,0,2,0,0,0)),
-        RhythmPreset("Wedding", intArrayOf(1,0,2,1,1,0,2,1))
+        RhythmPreset("Maqsum (مقسوم)", intArrayOf(1, 0, 2, 0, 1, 0, 2, 3)),
+        RhythmPreset("Baladi (بلدي)", intArrayOf(1, 0, 0, 2, 1, 0, 2, 0)),
+        RhythmPreset("Saeidi (صعيدي)", intArrayOf(1, 0, 2, 1, 1, 0, 2, 1)),
+        RhythmPreset("Malfouf (ملفوف)", intArrayOf(1, 3, 2, 3, 1, 3, 2, 3)),
+        RhythmPreset("Zafeh (زفة)", intArrayOf(1, 1, 2, 0, 1, 2, 2, 0)),
+        RhythmPreset("Khaleeji (خليجي)", intArrayOf(1, 2, 3, 2, 1, 2, 3, 2)),
+        RhythmPreset("Chobi (جوبي)", intArrayOf(1, 0, 1, 2, 1, 0, 2, 3)),
+        RhythmPreset("Ayoub (أيوب / زار)", intArrayOf(1, 2, 1, 2, 1, 2, 1, 2)),
+        RhythmPreset("Dabke (دبكة)", intArrayOf(1, 1, 2, 3, 1, 2, 2, 3)),
+        RhythmPreset("Rumba Oriental (رومبا)", intArrayOf(1, 0, 2, 3, 0, 2, 1, 3)),
+        RhythmPreset("Pop Beat (بوب)", intArrayOf(1, 0, 2, 0, 1, 0, 2, 0)),
+        RhythmPreset("House Beat (هاوس)", intArrayOf(1, 3, 2, 3, 1, 3, 2, 3)),
+        RhythmPreset("HipHop 808 (هيب هوب)", intArrayOf(1, 0, 0, 2, 0, 1, 2, 0)),
+        RhythmPreset("Waltz 3/4 (فالس)", intArrayOf(1, 0, 0, 2, 0, 0, 2, 0))
     )
 
     val melodyPresets = listOf(
-        MelodyPreset("Oriental Rise", listOf(0,2,4,5,7,5,4,2,0)),
-        MelodyPreset("Hijaz Walk", listOf(0,1,4,5,7,5,4,1,0)),
-        MelodyPreset("Bayati Phrase", listOf(0,1,3,4,3,1,0,-2,0)),
-        MelodyPreset("Rast Phrase", listOf(0,2,3,5,4,3,2,0)),
-        MelodyPreset("Arabic Dance", listOf(0,2,0,4,3,2,0,5,4,2)),
-        MelodyPreset("Romantic", listOf(0,3,5,7,5,4,3,2,0)),
-        MelodyPreset("Pop Hook", listOf(0,0,3,5,3,0,7,5,3)),
-        MelodyPreset("Ballad", listOf(0,2,4,7,5,4,2,0)),
-        MelodyPreset("Wedding Intro", listOf(0,4,5,7,9,7,5,4,2,0)),
-        MelodyPreset("Mizmar", listOf(0,3,4,7,8,7,4,3,0)),
-        MelodyPreset("Nay Solo", listOf(0,2,5,4,2,7,5,4,2,0)),
-        MelodyPreset("Qanun", listOf(0,2,4,7,9,7,4,2,0)),
-        MelodyPreset("Oud Theme", listOf(0,2,3,5,3,2,0,7,5,3)),
-        MelodyPreset("Saeidi Hook", listOf(0,0,3,5,7,5,3,0)),
-        MelodyPreset("Oriental Pop", listOf(0,2,4,2,7,5,4,2,0)),
-        MelodyPreset("Finale", listOf(7,9,11,12,11,9,7,5,4,2,0))
+        MelodyPreset("Alf Leila (ألف ليلةولييلة)", listOf(0, 2, 3, 5, 7, 8, 7, 5, 3, 2, 0)),
+        MelodyPreset("Inta Omri (إنت عمري)", listOf(0, 1, 3, 5, 7, 5, 3, 1, 0)),
+        MelodyPreset("Lamma Bada (لما بدا)", listOf(0, 2, 3, 5, 4, 3, 2, 0, 2, 3)),
+        MelodyPreset("Zeyna (زينة)", listOf(0, 1, 3, 4, 3, 1, 0, -2, 0)),
+        MelodyPreset("Nour El Ain (نور العين)", listOf(0, 1, 3, 5, 3, 1, 0, 7, 5, 3)),
+        MelodyPreset("3 Daqat (3 دقات)", listOf(0, 2, 4, 5, 7, 9, 7, 5, 4, 2, 0)),
+        MelodyPreset("Hijaz Taqsim (تقسيم حجاز)", listOf(0, 1, 4, 5, 7, 8, 7, 5, 4, 1, 0)),
+        MelodyPreset("Bayati Taqsim (تقسيم بياتي)", listOf(0, 1, 3, 5, 7, 5, 3, 1, 0, -2, 0)),
+        MelodyPreset("Rast Taqsim (تقسيم راست)", listOf(0, 2, 3, 5, 7, 8, 10, 8, 7, 5, 3, 2, 0)),
+        MelodyPreset("Saeidi Mizmar (مزمار صعيدي)", listOf(0, 3, 4, 7, 8, 7, 4, 3, 0)),
+        MelodyPreset("Für Elise (فير إيليس)", listOf(7, 6, 7, 6, 7, 2, 5, 3, 0)),
+        MelodyPreset("Turkish March (مارش تركي)", listOf(2, 1, 0, 2, 4, 3, 2, 4, 5)),
+        MelodyPreset("Spanish Romance (جيتار)", listOf(7, 7, 7, 7, 5, 3, 3, 2, 0)),
+        MelodyPreset("Blues Shuffle (بلوز)", listOf(0, 3, 5, 6, 7, 10, 12, 10, 7))
     )
 
     val tracks = mutableStateListOf(
@@ -120,9 +132,42 @@ class MusicStudioController(private val context: Context) {
     val selectedRhythm: RhythmPreset get() = rhythms.getOrElse(selectedRhythmIndex) { rhythms.first() }
     val loopBeats: Float get() = bars.coerceIn(1, 32) * 4f
 
+    private var previewTrack: AudioTrack? = null
+
+    fun playNotePreview(pitch: Int) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val freq = midiToHz(pitch)
+                val durSec = 0.22
+                val samples = (sampleRate * durSec).toInt()
+                val pcm = ShortArray(samples * 2)
+                for (i in 0 until samples) {
+                    val t = i.toDouble() / sampleRate
+                    val env = Math.exp(-t * 9.0)
+                    val s = (waveform(selectedTrack.instrument, freq, t) * env * 14000.0).toInt().coerceIn(-32768, 32767).toShort()
+                    pcm[i * 2] = s
+                    pcm[i * 2 + 1] = s
+                }
+                synchronized(this@MusicStudioController) {
+                    try { previewTrack?.stop() } catch (_: Throwable) {}
+                    try { previewTrack?.release() } catch (_: Throwable) {}
+                    previewTrack = AudioTrack.Builder()
+                        .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                        .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
+                        .setBufferSizeInBytes(pcm.size * 2)
+                        .setTransferMode(AudioTrack.MODE_STATIC)
+                        .build()
+                    previewTrack?.write(pcm, 0, pcm.size)
+                    previewTrack?.play()
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
     fun addNote(pitch: Int, beat: Float, length: Float = 1f) {
         selectedTrack.notes.removeAll { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.01f }
         selectedTrack.notes += StudioNote(pitch, beat.coerceIn(0f, loopBeats - 0.25f), length.coerceIn(0.25f, 4f))
+        playNotePreview(pitch)
         bumpUi()
     }
 
@@ -206,12 +251,12 @@ class MusicStudioController(private val context: Context) {
                 var beat = 0.0
                 val frameChunk = 512
                 val buffer = ShortArray(frameChunk * 2)
-                var last = System.nanoTime()
+                val beatStep = (frameChunk.toDouble() / sampleRate) * (bpm / 60.0)
                 while (isActive && isPlaying) {
-                    val now = System.nanoTime()
-                    val dt = (now - last) / 1_000_000_000.0
-                    last = now
-                    beat += dt * bpm / 60.0
+                    playheadBeat = beat.toFloat()
+                    synthChunk(buffer, beat)
+                    track.write(buffer, 0, buffer.size)
+                    beat += beatStep
                     if (beat >= loopBeats) {
                         if (loopEnabled) {
                             beat %= loopBeats
@@ -220,9 +265,6 @@ class MusicStudioController(private val context: Context) {
                             break
                         }
                     }
-                    playheadBeat = beat.toFloat()
-                    synthChunk(buffer, beat)
-                    track.write(buffer, 0, buffer.size)
                 }
             } finally {
                 try { track.stop() } catch (_: Throwable) {}
@@ -322,31 +364,114 @@ class MusicStudioController(private val context: Context) {
         }
     }
 
+    fun playLiveDarbuka(type: String) {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val durSec = 0.35
+                val samples = (sampleRate * durSec).toInt()
+                val pcm = ShortArray(samples * 2)
+                for (i in 0 until samples) {
+                    val t = i.toDouble() / sampleRate
+                    val sample: Double = when (type) {
+                        "Doom" -> {
+                            val freq = 80.0 * exp(-t * 12.0)
+                            sin(2.0 * PI * freq * t) * exp(-t * 7.0) * 1.5
+                        }
+                        "Tak" -> {
+                            val noise = (Math.random() * 2.0 - 1.0)
+                            val freq = 1400.0 * exp(-t * 20.0)
+                            (sin(2.0 * PI * freq * t) * 0.6 + noise * 0.4) * exp(-t * 22.0)
+                        }
+                        "Sak" -> {
+                            val noise = (Math.random() * 2.0 - 1.0)
+                            (noise * 0.8) * exp(-t * 35.0)
+                        }
+                        "Ka" -> {
+                            val freq = 1800.0 * exp(-t * 25.0)
+                            sin(2.0 * PI * freq * t) * exp(-t * 28.0)
+                        }
+                        "Riq" -> {
+                            val noise = (Math.random() * 2.0 - 1.0)
+                            val jingle = sin(2.0 * PI * 3500.0 * t)
+                            (jingle * 0.5 + noise * 0.5) * exp(-t * 14.0)
+                        }
+                        "Bandir" -> {
+                            val freq = 65.0 * exp(-t * 8.0)
+                            val buzz = (Math.random() * 2.0 - 1.0) * 0.2
+                            (sin(2.0 * PI * freq * t) + buzz) * exp(-t * 5.0) * 1.6
+                        }
+                        else -> (Math.random() * 2.0 - 1.0) * exp(-t * 15.0)
+                    }
+                    val s = (sample * 16000.0).toInt().coerceIn(-32768, 32767).toShort()
+                    pcm[i * 2] = s
+                    pcm[i * 2 + 1] = s
+                }
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
+                    .setBufferSizeInBytes(pcm.size * 2)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                delay(380)
+                track.release()
+            } catch (_: Throwable) {}
+        }
+    }
+
     private fun waveform(instrument: String, freq: Double, t: Double): Double {
         val s1 = sin(2.0 * PI * freq * t)
         val s2 = sin(2.0 * PI * freq * 2.0 * t)
         val s3 = sin(2.0 * PI * freq * 3.0 * t)
+        val s4 = sin(2.0 * PI * freq * 4.0 * t)
+        val s5 = sin(2.0 * PI * freq * 5.0 * t)
+        val s6 = sin(2.0 * PI * freq * 6.0 * t)
+        val sub = sin(2.0 * PI * (freq * 0.5) * t)
+
+        val vibrato = 1.0 + 0.008 * sin(2.0 * PI * 5.5 * t)
+
         return when {
-            instrument.contains("Oud") -> s1 + 0.46 * s2 + 0.18 * s3
-            instrument.contains("Qanun") -> s1 + 0.62 * s2 + 0.34 * s3
-            instrument.contains("Nay") -> s1 + 0.18 * s2
-            instrument.contains("Violin") || instrument.contains("Strings") || instrument.contains("Cello") -> s1 + 0.32 * s2 + 0.16 * s3
-            instrument.contains("Bass") -> s1 + 0.44 * s2
-            instrument.contains("Synth") || instrument.contains("Pad") -> s1 + 0.52 * s2 + 0.22 * s3
-            instrument.contains("Bell") -> s1 + 0.72 * s2 + 0.30 * s4(freq, t)
-            instrument.contains("Flute") -> s1 + 0.10 * s2
-            instrument.contains("Sax") || instrument.contains("Trumpet") -> s1 + 0.52 * s2 + 0.24 * s3
-            else -> s1 + 0.24 * s2 + 0.12 * s3
+            instrument.contains("Oud") -> (s1 + 0.52 * s2 + 0.22 * s3 + 0.10 * s4) * exp(-t * 1.8)
+            instrument.contains("Qanun") || instrument.contains("Kanun") -> (s1 + 0.72 * s2 + 0.44 * s3 + 0.28 * s4) * exp(-t * 2.4)
+            instrument.contains("Nay") -> (s1 * vibrato + 0.22 * s2 + (Math.random() * 0.04 - 0.02))
+            instrument.contains("Mizmar") -> (if (s1 > 0) 0.8 else -0.8) + 0.4 * s2 + 0.2 * s3
+            instrument.contains("Violin") || instrument.contains(" وتريات") || instrument.contains("Strings") -> (s1 * vibrato + 0.42 * s2 + 0.24 * s3 + 0.12 * s4)
+            instrument.contains("Cello") || instrument.contains("شيلو") -> (s1 + 0.55 * s2 + 0.35 * s3 + 0.18 * sub)
+            instrument.contains("Bouzouki") || instrument.contains("بزق") -> (s1 + 0.65 * s2 + 0.45 * s4) * exp(-t * 2.2)
+            instrument.contains("Rebab") || instrument.contains("ربابة") -> (s1 * vibrato + 0.35 * s2 + 0.20 * s3)
+            instrument.contains("Accordion") || instrument.contains("أكورديون") -> (s1 + 0.65 * s2 + 0.35 * s3 + 0.25 * s5)
+            instrument.contains("Guitar") || instrument.contains("جيتار") -> (s1 + 0.45 * s2 + 0.25 * s3) * exp(-t * 2.0)
+            instrument.contains("Bass") || instrument.contains("باس") -> (s1 + 0.60 * s2 + 0.40 * sub)
+            instrument.contains("Sax") || instrument.contains("Flute") || instrument.contains("Clarinet") -> (s1 + 0.35 * s2 + 0.18 * s3)
+            instrument.contains("Organ") || instrument.contains("أورغن") -> (s1 + s2 * 0.8 + s3 * 0.6 + s4 * 0.4 + s5 * 0.3)
+            instrument.contains("Synth") || instrument.contains("Pad") -> (s1 + 0.50 * s2 + 0.30 * s3 + 0.15 * s4)
+            instrument.contains("Harp") || instrument.contains("هارب") -> (s1 + 0.55 * s2 + 0.30 * s3) * exp(-t * 3.0)
+            else -> s1 + 0.30 * s2 + 0.15 * s3
         } * 0.68
     }
 
-    private fun s4(freq: Double, t: Double): Double = sin(2.0 * PI * freq * 4.0 * t)
     private fun percussionAt(beat: Double): Double {
         val step = ((beat * 2.0).toInt() % 8)
         val hit = selectedRhythm.pattern[step]
+        val t = (beat * 2.0) - (beat * 2.0).toInt()
         return when (hit) {
-            1 -> exp(-((beat * 2.0) - (beat * 2.0).toInt()) * 25.0)
-            2 -> 0.5 * exp(-((beat * 2.0) - (beat * 2.0).toInt()) * 35.0)
+            1 -> {
+                // Doom (deep resonant bass)
+                val freq = 85.0 * exp(-t * 14.0)
+                sin(2.0 * PI * freq * t) * exp(-t * 8.0) * 1.4
+            }
+            2 -> {
+                // Tak (sharp high edge)
+                val noise = (Math.random() * 2.0 - 1.0)
+                val freq = 1300.0 * exp(-t * 22.0)
+                (sin(2.0 * PI * freq * t) * 0.6 + noise * 0.4) * exp(-t * 24.0) * 0.9
+            }
+            3 -> {
+                // Riq / Sak (accented snap)
+                val noise = (Math.random() * 2.0 - 1.0)
+                (noise * 0.8) * exp(-t * 32.0) * 0.7
+            }
             else -> 0.0
         }
     }
@@ -356,14 +481,25 @@ class MusicStudioController(private val context: Context) {
     private fun scaleOffset(degree: Int): Int {
         val d = degree.coerceAtLeast(-7)
         val pattern = when (selectedScale) {
-            "Minor" -> intArrayOf(0, 2, 3, 5, 7, 8, 10)
-            "Hijaz" -> intArrayOf(0, 1, 4, 5, 7, 8, 10)
-            "Bayati" -> intArrayOf(0, 1, 3, 5, 7, 8, 10)
-            "Rast" -> intArrayOf(0, 2, 3, 5, 7, 9, 10)
-            "Nahawand" -> intArrayOf(0, 2, 3, 5, 7, 8, 11)
-            "Kurd" -> intArrayOf(0, 1, 3, 5, 7, 8, 10)
-            "Saba" -> intArrayOf(0, 1, 3, 5, 6, 8, 10)
-            "Ajam" -> intArrayOf(0, 2, 4, 5, 7, 9, 11)
+            "Minor", "مينور" -> intArrayOf(0, 2, 3, 5, 7, 8, 10)
+            "Hijaz", "حجاز" -> intArrayOf(0, 1, 4, 5, 7, 8, 10)
+            "Bayati", "بياتي" -> intArrayOf(0, 1, 3, 5, 7, 8, 10)
+            "Rast", "راست" -> intArrayOf(0, 2, 3, 5, 7, 9, 10)
+            "Nahawand", "نهاوند" -> intArrayOf(0, 2, 3, 5, 7, 8, 11)
+            "Kurd", "كرد" -> intArrayOf(0, 1, 3, 5, 7, 8, 10)
+            "Saba", "صبا" -> intArrayOf(0, 1, 3, 5, 6, 8, 10)
+            "Sikah", "سيكاه" -> intArrayOf(0, 2, 3, 5, 7, 8, 10)
+            "Ajam", "عجم" -> intArrayOf(0, 2, 4, 5, 7, 9, 11)
+            "Hijaz Kar" -> intArrayOf(0, 1, 4, 5, 7, 8, 11)
+            "Jiharkah" -> intArrayOf(0, 2, 4, 5, 7, 8, 10)
+            "Suznak" -> intArrayOf(0, 2, 3, 5, 7, 8, 11)
+            "Harmonic Minor" -> intArrayOf(0, 2, 3, 5, 7, 8, 11)
+            "Melodic Minor" -> intArrayOf(0, 2, 3, 5, 7, 9, 11)
+            "Pentatonic Major" -> intArrayOf(0, 2, 4, 7, 9, 12, 14)
+            "Pentatonic Minor" -> intArrayOf(0, 3, 5, 7, 10, 12, 15)
+            "Blues" -> intArrayOf(0, 3, 5, 6, 7, 10, 12)
+            "Dorian" -> intArrayOf(0, 2, 3, 5, 7, 9, 10)
+            "Phrygian" -> intArrayOf(0, 1, 3, 5, 7, 8, 10)
             else -> intArrayOf(0, 2, 4, 5, 7, 9, 11)
         }
         val octave = Math.floorDiv(d, 7)

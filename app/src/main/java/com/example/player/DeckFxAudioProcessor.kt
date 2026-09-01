@@ -36,17 +36,28 @@ class DeckFxAudioProcessor : AudioProcessor {
     @Volatile var beatDivision = 0.25f
 
     private var inputFormat = AudioProcessor.AudioFormat.NOT_SET
+    private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var inputEnded = false
     private var sampleRate = 44_100
     private var channelCount = 2
-    private var delayFrames = 1
-    private var delayLine = FloatArray(2)
+    private var delayFrames = 22050
+    private var delayLine = FloatArray(44100)
     private var writeFrame = 0L
     private var phase = 0.0
     private var filterState = FloatArray(2)
     private var hpState = FloatArray(2)
     private var previous = FloatArray(2)
+
+    private fun replaceOutputBuffer(count: Int): ByteBuffer {
+        if (buffer.capacity() < count) {
+            buffer = ByteBuffer.allocateDirect(count).order(ByteOrder.LITTLE_ENDIAN)
+        } else {
+            buffer.clear()
+        }
+        outputBuffer = buffer
+        return buffer
+    }
 
     fun setEffect(effect: Effect, active: Boolean) {
         enabled[effect] = active
@@ -95,83 +106,83 @@ class DeckFxAudioProcessor : AudioProcessor {
 
         val hasFx = flangerEnabled || reverbEnabled || echoEnabled || crushEnabled ||
             enabled.values.any { it }
+
         if (!hasFx) {
-            val output = ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN)
+            val output = replaceOutputBuffer(bytes)
             output.put(inputBuffer)
             output.flip()
-            outputBuffer = output
             return
         }
 
-        val output = ByteBuffer.allocateDirect(bytes).order(ByteOrder.LITTLE_ENDIAN)
+        val output = replaceOutputBuffer(bytes)
         val frames = bytes / (2 * channelCount)
         val fxAmount = amount.coerceIn(0f, 1f)
 
-        repeat(frames) {
-            val monoPhase = phase
+        fun delayed(framesBack: Int, ch: Int): Float {
+            if (delayFrames <= 0) return 0f
+            val safeBack = framesBack.coerceIn(1, delayFrames - 1)
+            var framePos = ((writeFrame - safeBack) % delayFrames).toInt()
+            if (framePos < 0) framePos += delayFrames
+            val idx = framePos * channelCount + ch
+            return if (idx in delayLine.indices) delayLine[idx] else 0f
+        }
+
+        for (f in 0 until frames) {
             val rollWindow = max(1, (sampleRate * beatDivision.coerceIn(0.0625f, 1f)).toInt())
             val rollOffset = (writeFrame % rollWindow).toInt()
             val rollGate = if (rollOffset < rollWindow / 2) 1f else 0f
             val trem = (0.5 + 0.5 * sin(2.0 * PI * 5.0 * writeFrame / sampleRate.toDouble())).toFloat()
-            val pan = (0.5 + 0.5 * sin(monoPhase)).toFloat()
+            val pan = (0.5 + 0.5 * sin(phase)).toFloat()
 
             for (ch in 0 until channelCount) {
-                val input = inputBuffer.short.toFloat() / Short.MAX_VALUE.toFloat()
-                val idx = ((writeFrame % delayFrames) * channelCount + ch).toInt()
-
-                fun delayed(framesBack: Int): Float {
-                    var frame = writeFrame - framesBack
-                    while (frame < 0) frame += delayFrames
-                    return delayLine[((frame % delayFrames) * channelCount + ch).toInt()]
-                }
-
-                var sample = input
+                if (!inputBuffer.hasRemaining()) break
+                val inputShort = inputBuffer.short
+                var sample = inputShort.toFloat() / 32768.0f
 
                 if (isEffectEnabled(Effect.FILTER) || isEffectEnabled(Effect.LOW_PASS)) {
-                    val alpha = 0.08f + 0.55f * fxAmount
+                    val alpha = 0.05f + 0.45f * (1f - fxAmount)
                     filterState[ch] += alpha * (sample - filterState[ch])
                     sample = filterState[ch]
+                }
+                if (isEffectEnabled(Effect.HIGH_PASS)) {
+                    val alpha = 0.05f + 0.45f * (1f - fxAmount)
+                    filterState[ch] += alpha * (sample - filterState[ch])
+                    sample = sample - filterState[ch]
                 }
                 if (isEffectEnabled(Effect.FILTER_ROLL)) {
                     val alpha = if (rollGate > 0f) 0.08f + 0.7f * fxAmount else 0.01f
                     filterState[ch] += alpha * (sample - filterState[ch])
                     sample = filterState[ch]
                 }
-                if (isEffectEnabled(Effect.HIGH_PASS)) {
-                    val low = 0.06f * sample + 0.94f * filterState[ch]
-                    filterState[ch] = low
-                    sample -= low
-                }
-                if (flangerEnabled) {
+                if (flangerEnabled || isEffectEnabled(Effect.FLANGER)) {
                     val lfo = (sin(2.0 * PI * (writeFrame.toDouble() / sampleRate) * 0.35) + 1.0) * 0.5
                     val d = max(1, (sampleRate * (0.001 + 0.004 * lfo)).toInt())
-                    sample += delayed(d) * 0.42f * fxAmount
+                    sample += delayed(d, ch) * 0.45f * fxAmount
                 }
-                if (reverbEnabled || isEffectEnabled(Effect.SPACE)) {
-                    sample += delayed(max(1, (sampleRate * 0.045).toInt())) * 0.20f * fxAmount
-                    sample += delayed(max(1, (sampleRate * 0.085).toInt())) * 0.13f * fxAmount
-                    if (isEffectEnabled(Effect.SPACE)) sample += delayed(max(1, (sampleRate * 0.31).toInt())) * 0.10f * fxAmount
+                if (reverbEnabled || isEffectEnabled(Effect.REVERB) || isEffectEnabled(Effect.SPACE)) {
+                    sample += delayed(max(1, (sampleRate * 0.035).toInt()), ch) * 0.25f * fxAmount
+                    sample += delayed(max(1, (sampleRate * 0.075).toInt()), ch) * 0.18f * fxAmount
                 }
-                if (echoEnabled || isEffectEnabled(Effect.DELAY) || isEffectEnabled(Effect.PITCH_ECHO)) {
+                if (echoEnabled || isEffectEnabled(Effect.ECHO) || isEffectEnabled(Effect.DELAY) || isEffectEnabled(Effect.PITCH_ECHO)) {
                     val delay = max(1, (sampleRate * if (isEffectEnabled(Effect.PITCH_ECHO)) 0.12 else 0.24).toInt())
-                    sample += delayed(delay) * (0.25f + 0.18f * fxAmount)
-                    if (isEffectEnabled(Effect.PITCH_ECHO)) sample += delayed(delay * 2) * 0.16f * fxAmount
+                    sample += delayed(delay, ch) * (0.28f + 0.18f * fxAmount)
                 }
                 if (isEffectEnabled(Effect.PHASER)) {
-                    val d = max(1, (sampleRate * (0.002 + 0.003 * (0.5 + 0.5 * sin(monoPhase)))).toInt())
-                    sample += delayed(d) * 0.28f * fxAmount
+                    val d = max(1, (sampleRate * (0.002 + 0.003 * (0.5 + 0.5 * sin(phase)))).toInt())
+                    sample += delayed(d, ch) * 0.32f * fxAmount
                 }
                 if (isEffectEnabled(Effect.TREMOLO)) sample *= (1f - fxAmount) + fxAmount * trem
-                if (isEffectEnabled(Effect.CHOPPA)) sample *= rollGate
+                if (isEffectEnabled(Effect.CHOPPA) || isEffectEnabled(Effect.ROLL) || isEffectEnabled(Effect.BEAT_REPEAT)) {
+                    sample *= rollGate
+                }
                 if (isEffectEnabled(Effect.MUTE)) sample = 0f
                 if (isEffectEnabled(Effect.FADER_TONE)) {
-                    val tone = abs(cos(monoPhase)).toFloat()
+                    val tone = abs(cos(phase)).toFloat()
                     sample *= 0.35f + 0.65f * tone
                 }
-                if (isEffectEnabled(Effect.ROLL) || isEffectEnabled(Effect.BEAT_REPEAT)) sample *= rollGate
                 if (isEffectEnabled(Effect.STUTTER)) {
                     val stutterFrames = max(1, (sampleRate * 0.08).toInt())
-                    sample = delayed((writeFrame % stutterFrames).toInt())
+                    sample = delayed((writeFrame % stutterFrames).toInt(), ch)
                 }
                 if (isEffectEnabled(Effect.GATE)) {
                     sample = if (abs(sample) >= 0.075f) sample else sample * 0.12f
@@ -181,22 +192,31 @@ class DeckFxAudioProcessor : AudioProcessor {
                     sample = (sample * steps).roundToInt() / steps
                 }
                 if (isEffectEnabled(Effect.TELEPHONE)) {
-                    val low = filterState[ch]
-                    sample = (sample - low) * 0.65f
+                    filterState[ch] += 0.2f * (sample - filterState[ch])
+                    sample = (sample - filterState[ch]) * 1.3f
                 }
-                if (isEffectEnabled(Effect.VINYL)) sample += delayed(max(1, (sampleRate * 0.011).toInt())) * 0.08f * fxAmount
+                if (isEffectEnabled(Effect.VINYL)) sample += delayed(max(1, (sampleRate * 0.011).toInt()), ch) * 0.10f * fxAmount
                 if (isEffectEnabled(Effect.ROBOT)) sample *= if (((writeFrame / 18) % 2L) == 0L) 1f else -1f
-                if (isEffectEnabled(Effect.RING_MOD)) sample *= sin(monoPhase * 6.0).toFloat()
+                if (isEffectEnabled(Effect.RING_MOD)) sample *= sin(phase * 6.0).toFloat()
                 if (isEffectEnabled(Effect.AUTO_PAN) && channelCount > 1) sample *= if (ch == 0) (1f - pan * fxAmount) else (0.5f + pan * fxAmount)
-                if (isEffectEnabled(Effect.TRANSFORM)) sample *= if ((writeFrame % max(1, sampleRate / 12L)) < sampleRate / 24L) 1f else 0f
-                if (isEffectEnabled(Effect.SLICE)) sample *= if (((writeFrame / max(1, sampleRate / 8L)) % 2L) == 0L) 1f else 0.15f
-                if (isEffectEnabled(Effect.NOISE)) sample += delayed(max(1, (sampleRate * 0.007).toInt())) * 0.12f * fxAmount
-                if (isEffectEnabled(Effect.TAPE_STOP)) sample *= exp(-0.0008 * (writeFrame % sampleRate)).toFloat()
+                if (isEffectEnabled(Effect.TRANSFORM) || isEffectEnabled(Effect.SLICE)) {
+                    val sliceLen = max(1, (sampleRate * 0.125 * beatDivision).toInt())
+                    val isSliceOn = ((writeFrame / sliceLen) % 2L) == 0L
+                    if (!isSliceOn) sample *= (1f - fxAmount)
+                }
+                if (isEffectEnabled(Effect.NOISE)) {
+                    sample += ((Math.random() * 2.0 - 1.0) * 0.12 * fxAmount).toFloat()
+                }
+                if (isEffectEnabled(Effect.TAPE_STOP)) {
+                    sample *= exp(-0.0008 * (writeFrame % sampleRate)).toFloat()
+                }
 
                 val out = sample.coerceIn(-1f, 1f)
-                delayLine[idx] = out
-                previous[ch] = out
-                output.putShort((out * Short.MAX_VALUE).roundToInt().toShort())
+                val idx = ((writeFrame % delayFrames) * channelCount + ch).toInt()
+                if (idx in delayLine.indices) {
+                    delayLine[idx] = out
+                }
+                output.putShort((out * 32767.0f).roundToInt().toShort())
             }
             writeFrame = (writeFrame + 1L) % delayFrames
             phase += 2.0 * PI * 0.9 / sampleRate.toDouble()
@@ -204,7 +224,6 @@ class DeckFxAudioProcessor : AudioProcessor {
         }
 
         output.flip()
-        outputBuffer = output
     }
 
     override fun queueEndOfStream() { inputEnded = true }
