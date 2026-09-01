@@ -41,6 +41,9 @@ jobs:
       - name: Integrate Mixxx-inspired DJ FX rack
         run: python3 .github/upgrade_dj_fx_rack.py
 
+      - name: Normalize player, playlists and session ownership
+        run: python3 .github/normalize_player_experience.py
+
       - name: Verify equalizer isolation
         shell: bash
         run: |
@@ -59,6 +62,20 @@ jobs:
           grep -q 'DJ_FX_RACK_V1' app/src/main/java/com/example/MainActivity.kt
           grep -q 'DJEffect.values().size' app/src/main/java/com/example/DJFxRackScreen.kt
           echo "DJ FX rack verification passed."
+
+      - name: Verify player experience integration
+        shell: bash
+        run: |
+          test -f app/src/main/java/com/example/MainPlayerExperience.kt
+          test -f app/src/main/java/com/example/PlayerLibraryStore.kt
+          test -f app/src/main/java/com/example/FolderAudioImporter.kt
+          grep -q 'PlayerScreenV2' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'AudioPlayerController.obtain(context)' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'PlayerLibraryStore.load(context)' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'fun obtain(context: Context): AudioPlayerController' app/src/main/java/com/example/player/AudioPlayerController.kt
+          grep -q 'canAutoResume' app/src/main/java/com/example/player/AudioPlayerController.kt
+          grep -q 'existingController' app/src/main/java/com/example/player/AudioPlayerController.kt
+          echo "Player experience verification passed."
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
