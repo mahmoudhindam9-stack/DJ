@@ -24,6 +24,12 @@ android {
   }
 
   signingConfigs {
+    create("debugConfig") {
+      storeFile = file("${rootDir}/debug.keystore")
+      storePassword = "android"
+      keyAlias = "androiddebugkey"
+      keyPassword = "android"
+    }
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       storeFile = file(keystorePath)
@@ -43,7 +49,7 @@ android {
     // Use the standard Android debug signing configuration so Gradle/CI generates
     // the debug keystore automatically when it is not present in the repository.
     debug {
-      signingConfig = signingConfigs.getByName("debug")
+      signingConfig = signingConfigs.getByName("debugConfig")
     }
   }
   compileOptions {
