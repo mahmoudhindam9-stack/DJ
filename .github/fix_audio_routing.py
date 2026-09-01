@@ -7,11 +7,10 @@ MIC = ROOT / "app/src/main/java/com/example/player/MicController.kt"
 
 def patch_mic():
     text = MIC.read_text(encoding="utf-8")
-    # The V5 microphone page already owns routing; only normalize the generated JVM setter clash.
-    if "// KARAOKE_MIC_PAGE_V5" in text:
-        needle = '    fun setVoiceProcessingEnabled(enabled: Boolean) {'
-        if '@kotlin.jvm.JvmName("setVoiceProcessingEnabledControl")' not in text and needle in text:
-            text = text.replace(needle, '    @kotlin.jvm.JvmName("setVoiceProcessingEnabledControl")\n' + needle, 1)
+    if "// KARAOKE_MIC_PAGE_V5" in text or "// KARAOKE_MIC_PAGE_V6" in text:
+        # Kotlin properties named voiceProcessingEnabled generate setVoiceProcessingEnabled(Boolean).
+        # Rename the explicit control method so it cannot collide with that generated setter.
+        text = text.replace("fun setVoiceProcessingEnabled(enabled: Boolean)", "fun toggleVoiceProcessing(enabled: Boolean)", 1)
         MIC.write_text(text, encoding="utf-8")
         return
     if "fun selectInputDevice(device: AudioDeviceInfo?, coroutineScope: CoroutineScope)" not in text:
@@ -36,6 +35,7 @@ def patch_mic():
 
 def patch_main():
     text = MAIN.read_text(encoding="utf-8")
+    text = text.replace("micController::setVoiceProcessingEnabled", "micController::toggleVoiceProcessing", 1)
     replacements = {
         'micController.selectedInputDevice = null; inputExpanded = false': 'micController.selectInputDevice(null, scope); inputExpanded = false',
         'micController.selectedInputDevice = device; inputExpanded = false': 'micController.selectInputDevice(device, scope); inputExpanded = false',
@@ -49,7 +49,8 @@ def patch_main():
 def patch_independent_bluetooth_routing():
     text = MIC.read_text(encoding="utf-8")
     marker = "// INDEPENDENT_BT_ROUTING_V1"
-    if marker in text or "// KARAOKE_MIC_PAGE_V5" in text: return
+    if marker in text or "// KARAOKE_MIC_PAGE_V5" in text or "// KARAOKE_MIC_PAGE_V6" in text:
+        return
     old_start = '''            val inputDevice = selectedInputDevice
             val useBluetoothHfp = inputDevice?.isBluetoothSco() == true
             val audioSource = if (useBluetoothHfp) MediaRecorder.AudioSource.VOICE_COMMUNICATION else MediaRecorder.AudioSource.MIC
@@ -69,38 +70,6 @@ def patch_independent_bluetooth_routing():
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && useBluetoothHfp) audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
 '''
     if old_start in text: text = text.replace(old_start, new_start, 1)
-    old_input = '''            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device?.isBluetoothSco() == true) {
-                audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                if (selectedOutputDevice?.id == device.id) audioManager.setCommunicationDevice(device)
-            }
-            updateRoutingStatus()
-'''
-    new_input = '''            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && device?.isBluetoothSco() == true) audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-            applyOutputRouting()
-            updateRoutingStatus()
-'''
-    if old_input in text: text = text.replace(old_input, new_input, 1)
-    old_output = '''            AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                val input = selectedInputDevice
-                if (input?.isBluetoothSco() == true && selectedOutputDevice?.id == input.id) {
-                    audioManager.setCommunicationDevice(input)
-                } else if (selectedOutputDevice == null && audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) {
-                    audioManager.clearCommunicationDevice()
-                }
-            }
-            updateRoutingStatus()
-'''
-    new_output = '''            AudioPlayerController.updateGlobalPreferredAudioDevice(selectedOutputDevice)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                if (selectedInputDevice?.isBluetoothSco() == true) audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
-                else if (audioManager.mode == AudioManager.MODE_IN_COMMUNICATION) audioManager.mode = AudioManager.MODE_NORMAL
-            }
-            updateRoutingStatus()
-'''
-    if old_output in text: text = text.replace(old_output, new_output, 1)
     MIC.write_text(text, encoding="utf-8")
 
 
