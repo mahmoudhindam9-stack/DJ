@@ -1165,52 +1165,11 @@ fun DJMixerScreen(
 
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Live Sound Effects & Instruments Soundboard
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)),
-            shape = RoundedCornerShape(16.dp)
-        ) {
-            Column(
-                modifier = Modifier.padding(12.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                val sounds = SamplerSound.values()
-                val rows = sounds.toList().chunked(3)
+        // DJ_SAMPLER_CC0_V1
+        // The former generated/legacy sound buttons are removed completely.
+        // This is the only sampler surface shown in the DJ page.
+        ProfessionalSamplerBoard()
 
-                rows.forEach { rowSounds ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        rowSounds.forEach { sound ->
-                            Button(
-                                onClick = { djMixerController.soundPlayer.playSound(sound) },
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(44.dp),
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.primary,
-                                    contentColor = MaterialTheme.colorScheme.onPrimary
-                                ),
-                                contentPadding = PaddingValues(2.dp)
-                            ) {
-                                Text(
-                                    text = sound.title,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                        }
-                    }
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-            }
-        }
     }
 }
 
