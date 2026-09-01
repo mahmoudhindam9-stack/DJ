@@ -13,27 +13,20 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 def normalize_main(text: str) -> str:
-    text = replace_once(
-        text,
-        'val playerController = remember { AudioPlayerController(context) }',
-        'val playerController = remember { AudioPlayerController.obtain(context) }',
-        'main controller ownership'
-    ) if 'AudioPlayerController.obtain(context)' not in text else text
-
+    if 'AudioPlayerController.obtain(context)' not in text:
+        text = replace_once(text, 'val playerController = remember { AudioPlayerController(context) }', 'val playerController = remember { AudioPlayerController.obtain(context) }', 'main controller ownership')
     old_library = 'val audioLibrary = remember { mutableStateListOf<AudioItem>() }'
-    new_library = 'val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }'
-    text = replace_once(text, old_library, new_library, 'persistent audio library') if old_library in text else text
-
+    if old_library in text:
+        text = replace_once(text, old_library, 'val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }', 'persistent audio library')
     old_release = '''        onDispose {
             playerController.release()
             djMixerController.release()'''
-    new_release = '''        onDispose {
+    if old_release in text:
+        text = replace_once(text, old_release, '''        onDispose {
             if (!playerController.isPlaying && MusicService.instance?.playerController !== playerController) {
                 playerController.release()
             }
-            djMixerController.release()'''
-    text = replace_once(text, old_release, new_release, 'player release ownership') if old_release in text else text
-
+            djMixerController.release()''', 'player release ownership')
     old_call = '''                PlayerScreen(
                     playerController = playerController,
                     audioLibrary = audioLibrary,
@@ -50,37 +43,52 @@ def normalize_main(text: str) -> str:
                     onPauseDJ = { djMixerController.pauseAll() },
                     navController = navController
                 )'''
-    text = replace_once(text, old_call, new_call, 'player screen replacement') if old_call in text else text
+    if old_call in text:
+        text = replace_once(text, old_call, new_call, 'player screen replacement')
     return text
 
 
 def normalize_player(text: str) -> str:
+    companion_start = '    companion object {\n'
+    obtain_block = '''        @JvmStatic
+        fun obtain(context: Context): AudioPlayerController {
+            return activeInstance
+                ?: MusicService.instance?.playerController
+                ?: AudioPlayerController(context.applicationContext)
+        }
+
+'''
     if 'fun obtain(context: Context): AudioPlayerController' not in text:
-        marker = '    init {\n'
-        helper = '''    companion object {\n        private const val PREFS_NAME = "dj_player_session"\n        private const val KEY_QUEUE = "queue"\n        private const val KEY_INDEX = "index"\n        private const val KEY_POSITION = "position"\n        private const val KEY_PLAYING = "playing"\n        private const val KEY_SHUFFLE = "shuffle"\n        private const val KEY_REPEAT = "repeat"\n        private const val KEY_VOLUME = "volume"\n        const val KEY_TITLE = "title"\n        const val KEY_ARTIST = "artist"\n\n        @JvmStatic\n        fun obtain(context: Context): AudioPlayerController {\n            return activeInstance\n                ?: MusicService.instance?.playerController\n                ?: AudioPlayerController(context.applicationContext)\n        }\n\n        @JvmStatic\n        var activeInstance: AudioPlayerController? = null\n            private set\n\n        @JvmStatic\n        var activePreferredAudioDevice: AudioDeviceInfo? = null\n            private set\n\n        @JvmStatic\n        @OptIn(UnstableApi::class)\n        fun updateGlobalPreferredAudioDevice(device: AudioDeviceInfo?) {\n            activePreferredAudioDevice = device\n            activeInstance?.setPreferredAudioDevice(device)\n        }\n    }\n\n'''
-        text = replace_once(text, marker, helper + marker, 'player companion injection')
-    else:
-        # Existing companion in source is kept; the injected helper is intentionally idempotent.
-        pass
+        text = replace_once(text, companion_start, companion_start + obtain_block, 'player companion helper')
 
     old_restore = '            exoPlayer.playWhenReady = savedPlaying'
-    new_restore = '''            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this\n            exoPlayer.playWhenReady = savedPlaying && canAutoResume'''
-    text = replace_once(text, old_restore, new_restore, 'session resume guard') if old_restore in text else text
+    if old_restore in text:
+        text = replace_once(text, old_restore, '''            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
+            exoPlayer.playWhenReady = savedPlaying && canAutoResume''', 'session resume guard')
 
-    old_sync = '''            val serviceIntent = Intent(context, MusicService::class.java)\n            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {\n                context.startForegroundService(serviceIntent)\n            } else {\n                context.startService(serviceIntent)\n            }\n            MusicService.instance?.playerController = this'''
-    new_sync = '''            val existingController = MusicService.instance?.playerController\n            if (existingController != null && existingController !== this) return\n            val serviceIntent = Intent(context, MusicService::class.java)\n            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {\n                context.startForegroundService(serviceIntent)\n            } else {\n                context.startService(serviceIntent)\n            }\n            MusicService.instance?.playerController = this'''
-    text = replace_once(text, old_sync, new_sync, 'service ownership guard') if old_sync in text else text
-
+    old_sync = '''            val serviceIntent = Intent(context, MusicService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+            MusicService.instance?.playerController = this'''
+    if old_sync in text:
+        text = replace_once(text, old_sync, '''            val existingController = MusicService.instance?.playerController
+            if (existingController != null && existingController !== this) return
+            val serviceIntent = Intent(context, MusicService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+            MusicService.instance?.playerController = this''', 'service ownership guard')
     return text
 
 
 def normalize_service(text: str) -> str:
-    old = '        playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)'
-    new = '        playerController = AudioPlayerController.obtain(applicationContext)'
-    text = replace_once(text, old, new, 'service controller reuse') if old in text else text
-    old2 = '        if (playerController == null) playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)'
-    new2 = '        if (playerController == null) playerController = AudioPlayerController.obtain(applicationContext)'
-    text = replace_once(text, old2, new2, 'service controller guard') if old2 in text else text
+    text = text.replace('playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)', 'playerController = AudioPlayerController.obtain(applicationContext)', 1)
+    text = text.replace('if (playerController == null) playerController = AudioPlayerController.activeInstance ?: AudioPlayerController(applicationContext)', 'if (playerController == null) playerController = AudioPlayerController.obtain(applicationContext)', 1)
     return text
 
 
