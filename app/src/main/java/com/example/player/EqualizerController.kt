@@ -13,6 +13,7 @@ import androidx.compose.runtime.setValue
 
 /**
  * Isolated player equalizer & Dolby Atmos 3D Spatializer controller.
+ * The native Equalizer effect is created only after the user enables it.
  * Native Audio Effects (Equalizer, Virtualizer/Dolby 3D) are created
  * when enabled and directly attached to the player's AudioSession.
  */
@@ -285,7 +286,8 @@ class EqualizerController(private val context: Context) {
         val eq = equalizer ?: return
         try {
             eq.enabled = isEnabled
-            if (!isEnabled || hardwareFrequenciesHz.isEmpty()) return
+            if (!isEnabled) return
+            if (hardwareFrequenciesHz.isEmpty()) return
             val range = eq.bandLevelRange
             val rangeMinDb = range[0].toInt() / 100
             val rangeMaxDb = range[1].toInt() / 100
