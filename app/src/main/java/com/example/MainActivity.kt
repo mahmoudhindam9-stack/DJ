@@ -370,7 +370,13 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(if (micController.beatFxEnabled) "ACTIVE • synced to BPM" else "BYPASSED", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(checked = micController.beatFxEnabled, onCheckedChange = { micController.beatFxEnabled = it })
+                }
                 Spacer(Modifier.height(6.dp))
                 Text("BPM: ${micController.bpm.toInt()}")
                 Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)

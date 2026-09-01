@@ -120,7 +120,7 @@ class MicController(private val context: Context) {
     var echoFxEnabled by mutableStateOf(true)
     var reverbFxEnabled by mutableStateOf(true)
     var flangerFxEnabled by mutableStateOf(false)
-    var beatFxEnabled by mutableStateOf(false)
+    var beatFxEnabled by mutableStateOf(true)
     var reverbLevel by mutableStateOf(0.28f)
     var flangerMix by mutableStateOf(0.35f)
     var filterMix by mutableStateOf(0.55f)
@@ -313,6 +313,8 @@ class MicController(private val context: Context) {
             }
         } catch (t: Throwable) { routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"; t.printStackTrace(); stopMic() }
     }
+
+
 
 
 
@@ -555,20 +557,6 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
         recordingJob?.cancel()
