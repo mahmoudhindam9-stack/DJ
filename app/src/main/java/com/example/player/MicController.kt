@@ -461,6 +461,8 @@ class MicController(private val context: Context) {
         isMicEnabled = false
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
+        if (isOutputRecording) stopOutputRecording()
+        stopMicForegroundService()
         recordingJob?.cancel()
         recordingJob = null
         try {
