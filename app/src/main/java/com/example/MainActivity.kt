@@ -257,19 +257,21 @@ fun MainApp() {
 
 // KARAOKE_MIC_PAGE_V5
 @Composable
+// MIC_RECORDING_FORMAT_V1
 fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
+    var recordingFormat by remember { mutableStateOf("WAV") }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) micController.toggleMic(true, scope)
         else Toast.makeText(context, "Microphone permission is required", Toast.LENGTH_SHORT).show()
     }
-    val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { uri ->
+    val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/*")) { uri ->
         if (uri == null) micController.discardPendingRecording()
         else scope.launch {
-            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri) }
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri, recordingFormat) }
             Toast.makeText(context, if (ok) "Recording saved" else "Unable to save recording", Toast.LENGTH_SHORT).show()
         }
     }
@@ -400,12 +402,19 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     }
                     Text(micController.recordingDurationText, style = MaterialTheme.typography.labelSmall)
                 }
+                Text("Format", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(4.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = recordingFormat == "WAV", onClick = { recordingFormat = "WAV" }, label = { Text("WAV") })
+                    FilterChip(selected = recordingFormat == "MP3", onClick = { recordingFormat = "MP3" }, label = { Text("MP3") })
+                }
+                Spacer(Modifier.height(10.dp))
                 Spacer(Modifier.height(10.dp))
                 Button(
                     enabled = micController.isMicEnabled || micController.isOutputRecording,
                     onClick = {
                         if (micController.isOutputRecording) {
-                            if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName())
+                            if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName(recordingFormat))
                         } else if (micController.startOutputRecording()) Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth()

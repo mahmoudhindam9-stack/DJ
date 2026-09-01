@@ -11,6 +11,8 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
+import android.media.MediaCodec
+import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
@@ -24,6 +26,8 @@ import kotlin.math.PI
 import kotlin.math.sin
 import java.io.File
 import java.io.RandomAccessFile
+import java.io.FileInputStream
+import java.io.FileOutputStream
 
 
 enum class MicFilter(val displayName: String) {
@@ -362,12 +366,80 @@ class MicController(private val context: Context) {
         }
     }
 
-    fun suggestedRecordingName(): String = "DJ_Mic_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.wav"
+    fun suggestedRecordingName(format: String = "WAV"): String {
+        val ext = if (format.equals("MP3", ignoreCase = true)) "mp3" else "wav"
+        return "DJ_Mic_${java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())}.$ext"
+    }
 
-    suspend fun savePendingRecording(uri: Uri): Boolean {
+    suspend fun savePendingRecording(uri: Uri, format: String = "WAV"): Boolean {
         val source = pendingRecordingFile ?: return false
-        return try { context.contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { it.copyTo(out) } } ?: return false; source.delete(); pendingRecordingFile = null; recordingStatus = "Recording saved successfully"; true }
-        catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
+        return try {
+            val sourceToSave = if (format.equals("MP3", ignoreCase = true)) {
+                val mp3 = File.createTempFile("dj_mic_", ".mp3", context.cacheDir)
+                if (!encodeWavToMp3(source, mp3)) { mp3.delete(); recordingStatus = "MP3 encoding is not available on this device"; return false }
+                mp3
+            } else source
+            context.contentResolver.openOutputStream(uri)?.use { out -> sourceToSave.inputStream().use { it.copyTo(out) } } ?: return false
+            if (sourceToSave != source) sourceToSave.delete()
+            source.delete(); pendingRecordingFile = null; recordingStatus = "Recording saved successfully"; true
+        } catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
+    }
+
+    private fun encodeWavToMp3(source: File, target: File): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) return false
+        val encoder = try { MediaCodec.createEncoderByType("audio/mpeg") } catch (_: Throwable) { return false }
+        var inputStream: FileInputStream? = null
+        var outputStream: FileOutputStream? = null
+        return try {
+            val format = MediaFormat.createAudioFormat("audio/mpeg", sampleRate, 1)
+            format.setInteger(MediaFormat.KEY_BIT_RATE, 192000)
+            format.setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
+            encoder.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            encoder.start()
+            inputStream = FileInputStream(source).also { it.skip(44) }
+            outputStream = FileOutputStream(target)
+            val info = MediaCodec.BufferInfo()
+            val pcm = ByteArray(bufferSize * 2)
+            var inputDone = false
+            var outputDone = false
+            while (!outputDone) {
+                if (!inputDone) {
+                    val inIndex = encoder.dequeueInputBuffer(10000)
+                    if (inIndex >= 0) {
+                        val inBuffer = encoder.getInputBuffer(inIndex) ?: return false
+                        inBuffer.clear()
+                        val read = inputStream.read(pcm)
+                        if (read < 0) {
+                            encoder.queueInputBuffer(inIndex, 0, 0, 0L, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
+                            inputDone = true
+                        } else {
+                            inBuffer.put(pcm, 0, read)
+                            val pts = recordedPcmBytes.coerceAtLeast(read.toLong()) * 1000000L / (sampleRate * 2L)
+                            encoder.queueInputBuffer(inIndex, 0, read, pts, 0)
+                        }
+                    }
+                }
+                when (val outIndex = encoder.dequeueOutputBuffer(info, 10000)) {
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED, MediaCodec.INFO_TRY_AGAIN_LATER -> Unit
+                    else -> if (outIndex >= 0) {
+                        val outBuffer = encoder.getOutputBuffer(outIndex)
+                        if (outBuffer != null && info.size > 0) {
+                            outBuffer.position(info.offset); outBuffer.limit(info.offset + info.size);
+                            val bytes = ByteArray(info.size); outBuffer.get(bytes); outputStream.write(bytes)
+                        }
+                        encoder.releaseOutputBuffer(outIndex, false)
+                        if ((info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) outputDone = true
+                    }
+                }
+            }
+            true
+        } catch (_: Throwable) { false }
+        finally {
+            try { inputStream?.close() } catch (_: Throwable) { }
+            try { outputStream?.close() } catch (_: Throwable) { }
+            try { encoder.stop() } catch (_: Throwable) { }
+            try { encoder.release() } catch (_: Throwable) { }
+        }
     }
 
     fun discardPendingRecording() { pendingRecordingFile?.delete(); pendingRecordingFile = null; recordingStatus = "Recording discarded" }
@@ -466,6 +538,8 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
+        if (isOutputRecording) stopOutputRecording()
+        stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
