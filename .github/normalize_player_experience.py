@@ -65,16 +65,20 @@ def normalize_player_ui(text: str) -> str:
             lines.insert(package_end, imp)
     text = '\n'.join(lines) + ('\n' if text.endswith('\n') else '')
 
+    # Always collapse the entire device-scan section, including stale duplicate
+    # declarations left by earlier non-idempotent versions of this normalizer.
+    scan_start = text.find('    fun runDeviceScan() {')
     marker = '    val scanDevice = {\n'
-    start = text.find(marker)
-    if start == -1:
+    if scan_start == -1:
+        scan_start = text.find(marker)
+    if scan_start == -1:
         return text
     end_marker = '\n\n    if (showNowPlaying && playerController.currentSong != null) {'
-    end = text.find(end_marker, start)
+    end = text.find(end_marker, scan_start)
     if end == -1:
         raise SystemExit('device scan block: end marker not found')
     replacement = '''    fun runDeviceScan() {\n        scope.launch {\n            val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }\n            addToLibrary(audioLibrary, songs, context)\n            infoMessage = "Scanned ${songs.size} device song(s)"\n        }\n    }\n\n    val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->\n        if (granted) runDeviceScan()\n        else infoMessage = "Storage permission denied; device music was not scanned"\n    }\n\n    val scanDevice = {\n        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {\n            Manifest.permission.READ_MEDIA_AUDIO\n        } else {\n            Manifest.permission.READ_EXTERNAL_STORAGE\n        }\n        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {\n            runDeviceScan()\n        } else {\n            scanPermissionLauncher.launch(permission)\n        }\n    }'''
-    return text[:start] + replacement + text[end:]
+    return text[:scan_start] + replacement + text[end:]
 
 
 def normalize_player(text: str) -> str:
