@@ -48,6 +48,23 @@ def normalize_main(text: str) -> str:
 
 
 def normalize_player_ui(text: str) -> str:
+    imports = [
+        'import android.Manifest',
+        'import android.content.pm.PackageManager',
+        'import android.os.Build',
+        'import androidx.core.content.ContextCompat',
+    ]
+    lines = text.splitlines()
+    package_end = 0
+    for i, line in enumerate(lines):
+        if line.startswith('package '):
+            package_end = i + 1
+            break
+    for imp in reversed(imports):
+        if imp not in text:
+            lines.insert(package_end, imp)
+    text = '\n'.join(lines) + ('\n' if text.endswith('\n') else '')
+
     marker = '    val scanDevice = {\n'
     start = text.find(marker)
     if start == -1:
