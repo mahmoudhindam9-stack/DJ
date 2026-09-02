@@ -23,18 +23,14 @@ class AudiusMusicRepository {
         .build()
 
     suspend fun getHome(): AudiusHomeData = withContext(Dispatchers.IO) {
-        val trending = getData("/tracks/trending?limit=50")
-        val latest = getData("/tracks/latest?limit=50")
-        val users = getData("/users/top?limit=50")
-        val genres = getData("/genres/popular?limit=30")
-
-        val trendingTracks = parseTracks(trending)
-        val latestTracks = parseTracks(latest)
+        val trending = parseTracks(getData("/tracks/trending?limit=50"))
+        val latest = parseTracks(getData("/tracks/latest?limit=50"))
+        val combined = (trending + latest).distinctBy { it.id }
         AudiusHomeData(
-            trending = trendingTracks,
-            latest = latestTracks,
-            artists = parseUsers(users),
-            genres = parseGenres(genres)
+            trending = trending,
+            latest = latest,
+            artists = combined.map { AudiusArtist(it.artistId, it.artist, it.artworkUrl) }.distinctBy { it.id },
+            genres = combined.mapNotNull { it.genre?.takeIf(String::isNotBlank) }.distinct()
         )
     }
 
@@ -49,7 +45,8 @@ class AudiusMusicRepository {
     }
 
     suspend fun getGenreTracks(genre: String): List<AudiusTrack> = withContext(Dispatchers.IO) {
-        parseTracks(getData("/tracks/search?query=&genre=${encode(genre)}&limit=100&sort_method=popular"))
+        parseTracks(getData("/tracks/search?query=${encode(genre)}&limit=100&sort_method=popular"))
+            .filter { it.genre.equals(genre, ignoreCase = true) || it.genre.isNullOrBlank() }
     }
 
     suspend fun resolveTrack(track: AudiusTrack): OnlineMusicTrack = withContext(Dispatchers.IO) {
@@ -108,34 +105,26 @@ class AudiusMusicRepository {
     private fun parseTracks(array: JSONArray): List<AudiusTrack> = buildList {
         for (i in 0 until array.length()) {
             val item = array.optJSONObject(i) ?: continue
-            val id = item.optString("id").ifBlank { continue }
+            val id = item.optString("id")
+            if (id.isBlank()) continue
             val user = item.optJSONObject("user")
             val artist = user?.optString("name").orEmpty().ifBlank { user?.optString("handle").orEmpty() }
+            val artistId = user?.optString("id").orEmpty()
             val artwork = item.optJSONObject("artwork")
             add(
                 AudiusTrack(
                     id = id,
                     title = item.optString("title").ifBlank { "Untitled" },
                     artist = artist.ifBlank { "Unknown Artist" },
+                    artistId = artistId,
                     album = item.optString("album_backlink").takeIf { it.isNotBlank() },
                     artworkUrl = artwork?.optString("_480x480")?.takeIf { it.isNotBlank() }
                         ?: artwork?.optString("_150x150")?.takeIf { it.isNotBlank() },
+                    genre = item.optString("genre").takeIf { it.isNotBlank() },
                     streamable = item.optBoolean("is_streamable", true),
                     downloadable = item.optBoolean("is_downloadable", false)
                 )
             )
-        }
-    }.distinctBy { it.id }
-
-    private fun parseUsers(array: JSONArray): List<AudiusArtist> = buildList {
-        for (i in 0 until array.length()) {
-            val item = array.optJSONObject(i) ?: continue
-            val id = item.optString("id").ifBlank { continue }
-            val name = item.optString("name").ifBlank { item.optString("handle") }
-            if (name.isBlank()) continue
-            val image = item.optJSONObject("profile_picture")?.optString("_480x480")
-                ?: item.optJSONObject("profile_picture")?.optString("_150x150")
-            add(AudiusArtist(id, name, image?.takeIf { it.isNotBlank() }))
         }
     }.distinctBy { it.id }
 
@@ -148,18 +137,8 @@ class AudiusMusicRepository {
         return AudiusArtist(id, name, image?.takeIf { it.isNotBlank() })
     }
 
-    private fun parseGenres(array: JSONArray): List<String> = buildList {
-        for (i in 0 until array.length()) {
-            val item = array.optJSONObject(i)
-            val name = item?.optString("name").orEmpty().ifBlank { item?.optString("genre").orEmpty() }
-            if (name.isNotBlank()) add(name)
-        }
-    }.distinct()
-
-    private fun parseSingleTrack(array: JSONArray): AudiusTrack {
-        val track = parseTracks(array).firstOrNull() ?: error("لم يتم العثور على الأغنية")
-        return track
-    }
+    private fun parseSingleTrack(array: JSONArray): AudiusTrack =
+        parseTracks(array).firstOrNull() ?: error("لم يتم العثور على الأغنية")
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 }
@@ -180,8 +159,10 @@ data class AudiusTrack(
     val id: String,
     val title: String,
     val artist: String,
+    val artistId: String,
     val album: String?,
     val artworkUrl: String?,
+    val genre: String?,
     val streamable: Boolean,
     val downloadable: Boolean
 )
