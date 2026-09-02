@@ -5,16 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,21 +16,8 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -59,21 +37,15 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    val saveDownloadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("audio/mpeg")
-    ) { uri: Uri? ->
+    val saveDownloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri: Uri? ->
         val pending = pendingDownload
         pendingDownload = null
         if (uri == null || pending == null) return@rememberLauncherForActivityResult
         scope.launch {
             message = "جاري تنزيل ${pending.title}..."
-            runCatching {
-                viewModel.downloadTrack(pending.audioUrl, context.contentResolver, uri)
-            }.onSuccess {
-                message = "تم تنزيل الأغنية بنجاح"
-            }.onFailure {
-                message = it.message ?: "فشل تنزيل الأغنية"
-            }
+            runCatching { viewModel.downloadTrack(pending.audioUrl, context.contentResolver, uri) }
+                .onSuccess { message = "تم تنزيل الأغنية بنجاح" }
+                .onFailure { message = it.message ?: "فشل تنزيل الأغنية" }
         }
     }
 
@@ -82,46 +54,28 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     fun playSong(link: AlbumatyLink) {
         scope.launch {
             message = "جاري تجهيز الأغنية..."
-            runCatching { viewModel.resolveTrack(link) }
-                .onSuccess { track ->
-                    val audio = track.streamUrl ?: error("لا يوجد رابط صوت")
-                    val item = AudioItem(
-                        id = link.url,
-                        title = track.title,
-                        artist = track.artist.ifBlank { "ألبوماتي" },
-                        album = track.album ?: "Online Music",
-                        durationMs = 0L,
-                        uri = Uri.parse(audio)
-                    )
-                    playerController.playSong(item, listOf(item))
-                    message = "يتم تشغيل: ${track.title}"
-                }
-                .onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
+            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
+                val audio = track.streamUrl ?: error("لا يوجد رابط صوت")
+                val item = AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio))
+                playerController.playSong(item, listOf(item))
+                message = "يتم تشغيل: ${track.title}"
+            }.onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
         }
     }
 
     fun downloadSong(link: AlbumatyLink) {
         scope.launch {
             message = "جاري تجهيز رابط التنزيل..."
-            runCatching { viewModel.resolveTrack(link) }
-                .onSuccess { track ->
-                    val audio = track.downloadUrl ?: track.streamUrl ?: error("لا يوجد رابط تنزيل")
-                    pendingDownload = PendingOnlineDownload(track.title, audio)
-                    saveDownloadLauncher.launch(suggestedFileName(track.title))
-                }
-                .onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
+            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
+                val audio = track.downloadUrl ?: track.streamUrl ?: error("لا يوجد رابط تنزيل")
+                pendingDownload = PendingOnlineDownload(track.title, audio)
+                saveDownloadLauncher.launch(suggestedFileName(track.title))
+            }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
         }
     }
 
     viewModel.section?.let { section ->
-        OnlineSectionScreen(
-            section = section,
-            isLoading = viewModel.isLoading,
-            message = message,
-            onBack = viewModel::closeSection,
-            onPlay = ::playSong,
-            onDownload = ::downloadSong
-        )
+        OnlineSectionScreen(section, viewModel.isLoading, message, viewModel::closeSection, ::playSong, ::downloadSong)
         return
     }
 
@@ -131,31 +85,13 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     val artists = viewModel.home.artists.filter { normalized.isBlank() || it.title.contains(normalized, true) }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp))
             Spacer(Modifier.size(8.dp))
-            Text(
-                "ألبوماتي",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
-            IconButton(onClick = { viewModel.loadHome(true) }) {
-                Icon(Icons.Filled.Refresh, "تحديث")
-            }
+            Text("ألبوماتي", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "تحديث") }
         }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text("ابحث في ألبوماتي") }
-        )
+        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("ابحث في ألبوماتي") })
 
         if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -167,106 +103,54 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
                 }
             }
         } else {
-            LazyColumn(
-                Modifier.fillMaxSize().padding(top = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
                     OnlineSection("الأقسام") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(viewModel.home.categories) { link ->
-                                Card(Modifier.clickable { viewModel.openSection(link) }) {
-                                    Text(
-                                        link.title,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-                                        maxLines = 1
-                                    )
-                                }
+                                Card(Modifier.clickable { viewModel.openSection(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) }
                             }
                         }
                     }
                 }
-                item {
-                    OnlineSection("جديد الألبومات") {
-                        LinkList(albums, onOpen = viewModel::openSection)
-                    }
-                }
-                item {
-                    OnlineSection("جديد الأغاني") {
-                        SongList(songs, ::playSong, ::downloadSong)
-                    }
-                }
-                item {
-                    OnlineSection("الفنانين") {
-                        LinkList(artists, onOpen = viewModel::openSection)
-                    }
-                }
-                message?.let {
-                    item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) }
-                }
+                item { OnlineSection("جديد الألبومات") { LinkList(albums, viewModel::openSection) } }
+                item { OnlineSection("جديد الأغاني") { SongList(songs, ::playSong, ::downloadSong) } }
+                item { OnlineSection("الفنانين") { LinkList(artists, viewModel::openSection, limit = null) } }
+                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(16.dp)) } }
             }
         }
     }
 }
 
 @Composable
-private fun OnlineSectionScreen(
-    section: AlbumatySection,
-    isLoading: Boolean,
-    message: String?,
-    onBack: () -> Unit,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit
-) {
+private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, message: String?, onBack: () -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
-            Text(
-                section.title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f)
-            )
+            Text(section.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (isLoading) CircularProgressIndicator(Modifier.size(22.dp))
         }
         when {
-            section.songs.isEmpty() && isLoading ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            section.songs.isEmpty() ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة في هذا القسم") }
-            else ->
-                LazyColumn(
-                    Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
-                ) {
-                    items(section.songs) { song -> OnlineSongCard(song, onPlay, onDownload) }
-                    message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) } }
-                }
+            section.songs.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            section.songs.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة في هذا القسم") }
+            else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                items(section.songs) { song -> OnlineSongCard(song, onPlay, onDownload) }
+                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(10.dp)) } }
+            }
         }
     }
 }
 
 @Composable
-private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit) {
+private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, limit: Int? = 24) {
+    val visible = if (limit == null) links else links.take(limit)
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        links.take(24).forEach { link ->
+        visible.forEach { link ->
             Card(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Filled.MusicNote, null) }
+                    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
                     Spacer(Modifier.size(9.dp))
-                    Text(
-                        link.title,
-                        modifier = Modifier.weight(1f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                    Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     TextButton(onClick = { onOpen(link) }) { Text("فتح") }
                 }
             }
@@ -275,36 +159,17 @@ private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit) 
 }
 
 @Composable
-private fun SongList(
-    links: List<AlbumatyLink>,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        links.take(24).forEach { link -> OnlineSongCard(link, onPlay, onDownload) }
-    }
+private fun SongList(links: List<AlbumatyLink>, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { links.take(24).forEach { OnlineSongCard(it, onPlay, onDownload) } }
 }
 
 @Composable
-private fun OnlineSongCard(
-    link: AlbumatyLink,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit
-) {
+private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.MusicNote, null) }
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
             Spacer(Modifier.size(9.dp))
-            Text(
-                link.title,
-                modifier = Modifier.weight(1f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = { onPlay(link) }) { Icon(Icons.Filled.PlayArrow, "تشغيل") }
             IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }
         }
@@ -313,19 +178,11 @@ private fun OnlineSongCard(
 
 @Composable
 private fun OnlineSection(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        content()
-    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); content() }
 }
 
 private data class PendingOnlineDownload(val title: String, val audioUrl: String)
-
 private fun suggestedFileName(title: String): String {
-    val safe = title
-        .replace(Regex("[\\\\/:*?\"<>|]"), "_")
-        .trim()
-        .ifBlank { "online_music" }
+    val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "online_music" }
     return if (safe.lowercase().endsWith(".mp3")) safe else "$safe.mp3"
 }
