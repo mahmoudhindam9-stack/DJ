@@ -34,6 +34,47 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     val context = LocalContext.current
     val playerController = remember { AudioPlayerController.obtain(context) }
     val scope = rememberCoroutineScope()
+    var foreign by rememberSaveable { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxSize()) {
+        OnlineSourceTabs(foreign = foreign, onChange = { foreign = it })
+        if (foreign) {
+            AudiusOnlineScreen(viewModel, playerController, scope)
+        } else {
+            AlbumatyOnlineScreen(viewModel, playerController, scope)
+        }
+    }
+}
+
+@Composable
+private fun OnlineSourceTabs(foreign: Boolean, onChange: (Boolean) -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FilterChip(
+            selected = !foreign,
+            onClick = { onChange(false) },
+            label = { Text("🇦🇪 عربي") },
+            modifier = Modifier.weight(1f)
+        )
+        FilterChip(
+            selected = foreign,
+            onClick = { onChange(true) },
+            label = { Text("🌎 أجنبي") },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+/** Existing Arabic/Albumaty experience. Kept functionally unchanged. */
+@Composable
+private fun AlbumatyOnlineScreen(
+    viewModel: OnlineMusicViewModel,
+    playerController: AudioPlayerController,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
+    val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
@@ -137,6 +178,210 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
 }
 
 @Composable
+private fun AudiusOnlineScreen(
+    viewModel: OnlineMusicViewModel,
+    playerController: AudioPlayerController,
+    scope: kotlinx.coroutines.CoroutineScope
+) {
+    val context = LocalContext.current
+    var query by remember { mutableStateOf("") }
+    var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    val saveDownloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri: Uri? ->
+        val pending = pendingDownload
+        pendingDownload = null
+        if (uri == null || pending == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            message = "جاري تنزيل ${pending.title}..."
+            runCatching { viewModel.downloadAudiusTrack(pending.audioUrl, context.contentResolver, uri) }
+                .onSuccess { message = "تم تنزيل الأغنية بنجاح" }
+                .onFailure { message = it.message ?: "فشل تنزيل الأغنية" }
+        }
+    }
+
+    LaunchedEffect(Unit) { viewModel.loadAudiusHome() }
+
+    fun playSong(track: AudiusTrack) {
+        scope.launch {
+            message = "جاري تجهيز الأغنية..."
+            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->
+                val audio = resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل")
+                val item = AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio))
+                playerController.playSong(item, listOf(item))
+                message = "يتم تشغيل: ${resolved.title}"
+            }.onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
+        }
+    }
+
+    fun downloadSong(track: AudiusTrack) {
+        scope.launch {
+            message = "جاري تجهيز رابط التنزيل..."
+            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->
+                val audio = resolved.downloadUrl ?: error("هذه الأغنية لا تسمح بالتنزيل")
+                pendingDownload = PendingOnlineDownload(resolved.title, audio)
+                saveDownloadLauncher.launch(suggestedFileName(resolved.title))
+            }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
+        }
+    }
+
+    viewModel.audiusArtistDetail?.let { detail ->
+        AudiusDetailScreen(
+            title = detail.artist.name,
+            subtitle = "Artist",
+            tracks = detail.tracks,
+            isLoading = viewModel.isLoading,
+            errorMessage = viewModel.errorMessage,
+            onBack = viewModel::closeAudiusDetail,
+            onPlay = ::playSong,
+            onDownload = ::downloadSong
+        )
+        return
+    }
+    viewModel.audiusGenreDetail?.let { (genre, tracks) ->
+        AudiusDetailScreen(
+            title = genre,
+            subtitle = "Genre",
+            tracks = tracks,
+            isLoading = viewModel.isLoading,
+            errorMessage = viewModel.errorMessage,
+            onBack = viewModel::closeAudiusDetail,
+            onPlay = ::playSong,
+            onDownload = ::downloadSong
+        )
+        return
+    }
+
+    val searchResults = viewModel.audiusSearchResults
+    val latest = if (query.isBlank()) viewModel.audiusHome.latest else searchResults
+    val trending = if (query.isBlank()) viewModel.audiusHome.trending else searchResults
+
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("أجنبي • Audius", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconButton(onClick = { viewModel.loadAudiusHome(true) }) { Icon(Icons.Filled.Refresh, "تحديث") }
+        }
+        OutlinedTextField(
+            query,
+            { query = it },
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            placeholder = { Text("Search foreign music") }
+        )
+        LaunchedEffect(query) {
+            if (query.trim().length >= 2) {
+                kotlinx.coroutines.delay(350)
+                viewModel.searchAudius(query.trim())
+            } else if (query.isBlank()) {
+                viewModel.clearAudiusSearch()
+            }
+        }
+
+        if (viewModel.isLoading && viewModel.audiusHome.trending.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (viewModel.errorMessage != null && viewModel.audiusHome.trending.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(viewModel.errorMessage!!, color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    TextButton(onClick = { viewModel.loadAudiusHome(true) }) { Text("إعادة المحاولة") }
+                }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (query.isBlank()) {
+                    item {
+                        OnlineSection("الأنواع") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(viewModel.audiusHome.genres) { genre ->
+                                    Card(Modifier.clickable { viewModel.openAudiusGenre(genre) }) {
+                                        Text(genre, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item {
+                        OnlineSection("الفنانين") {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(viewModel.audiusHome.artists) { artist ->
+                                    Card(Modifier.width(170.dp).clickable { viewModel.openAudiusArtist(artist) }) {
+                                        Column(Modifier.padding(12.dp)) {
+                                            Icon(Icons.Filled.MusicNote, null, Modifier.size(30.dp))
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(artist.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    item { OnlineSection("الأكثر رواجًا") { AudiusSongList(trending, ::playSong, ::downloadSong) } }
+                }
+                item { OnlineSection(if (query.isBlank()) "أحدث الأغاني" else "نتائج البحث") { AudiusSongList(latest, ::playSong, ::downloadSong) } }
+                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudiusDetailScreen(
+    title: String,
+    subtitle: String,
+    tracks: List<AudiusTrack>,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onBack: () -> Unit,
+    onPlay: (AudiusTrack) -> Unit,
+    onDownload: (AudiusTrack) -> Unit
+) {
+    Column(Modifier.fillMaxSize()) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            }
+            if (isLoading) CircularProgressIndicator(Modifier.size(22.dp))
+        }
+        when {
+            tracks.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            tracks.isEmpty() && errorMessage != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Text(errorMessage, color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+            }
+            tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة") }
+            else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                items(tracks, key = { it.id }) { AudiusSongCard(it, onPlay, onDownload) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AudiusSongList(tracks: List<AudiusTrack>, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { tracks.take(50).forEach { AudiusSongCard(it, onPlay, onDownload) } }
+}
+
+@Composable
+private fun AudiusSongCard(track: AudiusTrack, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit) {
+    Card(Modifier.fillMaxWidth()) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
+            Spacer(Modifier.size(9.dp))
+            Column(Modifier.weight(1f)) {
+                Text(track.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall)
+            }
+            IconButton(onClick = { onPlay(track) }, enabled = track.streamable) { Icon(Icons.Filled.PlayArrow, "تشغيل") }
+            if (track.downloadable) IconButton(onClick = { onDownload(track) }) { Icon(Icons.Filled.Download, "تنزيل") }
+        }
+    }
+}
+
+@Composable
 private fun OnlineSectionScreen(
     section: AlbumatySection,
     isLoading: Boolean,
@@ -190,9 +435,7 @@ private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) 
 @Composable
 private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, limit: Int? = 24) {
     val visible = if (limit == null) links else links.take(limit)
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        visible.forEach { link -> SectionLinkCard(link, onOpen) }
-    }
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { visible.forEach { link -> SectionLinkCard(link, onOpen) } }
 }
 
 @Composable
