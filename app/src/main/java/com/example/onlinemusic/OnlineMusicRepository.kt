@@ -36,7 +36,10 @@ class OnlineMusicRepository {
     }
 
     private fun parseHome(html: String): AlbumatyHomeData {
-        val linkRegex = Regex("<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>(.*?)</a>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL)
+        val linkRegex = Regex(
+            "<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>(.*?)</a>",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        )
         val links = linkRegex.findAll(html).mapNotNull { match ->
             val rawHref = match.groupValues[1].trim()
             val rawText = match.groupValues[2]
@@ -71,8 +74,8 @@ class OnlineMusicRepository {
     }
 
     private fun stripHtml(value: String): String = value
-        .replace(Regex("<script.*?</script>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL), "")
-        .replace(Regex("<style.*?</style>", RegexOption.IGNORE_CASE or RegexOption.DOT_MATCHES_ALL), "")
+        .replace(Regex("<script.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
+        .replace(Regex("<style.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
         .replace(Regex("<[^>]+>"), " ")
         .replace("&nbsp;", " ")
         .replace("&amp;", "&")
