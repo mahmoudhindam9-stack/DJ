@@ -216,6 +216,18 @@ fun MainApp() {
                         }
                     }
                 )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
+                    label = { Text("Online") },
+                    selected = currentDestination?.route == "online_music",
+                    onClick = {
+                        navController.navigate("online_music") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
         }
     ) { innerPadding ->
@@ -254,6 +266,11 @@ fun MainApp() {
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
+            }
+            composable("online_music") {
+                val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }
+                val vm = remember { com.example.onlinemusic.OnlineMusicViewModel(repo) }
+                com.example.onlinemusic.OnlineMusicScreen(vm)
             }
         }
     }
