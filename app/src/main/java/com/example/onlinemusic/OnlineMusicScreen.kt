@@ -6,6 +6,7 @@ import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -16,12 +17,13 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Row
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 
@@ -30,8 +32,9 @@ private const val ALBUMATY_URL = "https://www.albumaty.com/cat/1.html"
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
-    val webView = remember {
-        WebView(androidx.compose.ui.platform.LocalContext.current).apply {
+    val context = LocalContext.current
+    val webView = remember(context) {
+        WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
             settings.mediaPlaybackRequiresUserGesture = false
@@ -51,7 +54,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     Column(modifier = Modifier.fillMaxSize()) {
         Row(
             modifier = Modifier.fillMaxWidth().height(52.dp).padding(horizontal = 8.dp),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { if (webView.canGoBack()) webView.goBack() }) {
                 Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
