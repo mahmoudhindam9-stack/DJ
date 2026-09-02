@@ -150,7 +150,7 @@ private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, 
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
                     Spacer(Modifier.size(9.dp))
-                    Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+                    Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                     TextButton(onClick = { onOpen(link) }) { Text("فتح") }
                 }
             }
@@ -169,7 +169,7 @@ private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, o
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
             Spacer(Modifier.size(9.dp))
-            Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+            Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = { onPlay(link) }) { Icon(Icons.Filled.PlayArrow, "تشغيل") }
             IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }
         }
