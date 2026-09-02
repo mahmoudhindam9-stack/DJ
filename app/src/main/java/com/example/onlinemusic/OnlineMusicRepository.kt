@@ -32,14 +32,8 @@ class OnlineMusicRepository {
 
     suspend fun getSection(link: AlbumatyLink): AlbumatySection = withContext(Dispatchers.IO) {
         val html = getHtml(link.url)
-        val links = parseLinks(html)
-        val content = when (pageType(link.url)) {
-            "album" -> links.filter { it.isSong() || it.isAlbum() || it.isArtist() }
-            "singer", "artist" -> links.filter { it.isAlbum() || it.isSong() }
-            "lastalbums" -> links.filter { it.isAlbum() }
-            "cat", "category" -> links.filter { it.isAlbum() || it.isSong() || it.isArtist() }
-            else -> links.filter { it.isSong() || it.isAlbum() || it.isArtist() }
-        }
+        val type = pageType(link.url)
+        val content = parseSectionContent(html, type)
             .filterNot { it.url.trimEnd('/') == link.url.trimEnd('/') }
             .distinctBy { it.url }
             .take(500)
@@ -94,6 +88,46 @@ class OnlineMusicRepository {
             songs = links.filter { it.isSong() }.distinctBy { it.url }.take(100),
             artists = links.filter { it.isArtist() }.distinctBy { it.url }.take(300)
         )
+    }
+
+    /**
+     * Parse only the page's own content area.
+     *
+     * Albumaty repeats the global navigation, latest albums/songs and artist lists on
+     * many pages. Parsing every <a> on the document made those unrelated links leak
+     * into a selected category/artist/album screen. The first h1 marks the main page
+     * content on Albumaty, so we scope parsing to that region and then apply a stricter
+     * album rule so an album screen contains only its own songs.
+     */
+    private fun parseSectionContent(html: String, type: String): List<AlbumatyLink> {
+        val mainHtml = extractMainContentHtml(html)
+        if (mainHtml.isBlank()) return emptyList()
+
+        return when (type) {
+            "album" -> parseLinks(mainHtml)
+                .filter { it.isSong() }
+            "singer", "artist" -> parseLinks(mainHtml)
+                .filter { it.isAlbum() || it.isSong() }
+            "lastalbums" -> parseLinks(mainHtml)
+                .filter { it.isAlbum() }
+            "cat", "category" -> parseLinks(mainHtml)
+                .filter { it.isSong() || it.isAlbum() || it.isArtist() }
+            else -> parseLinks(mainHtml)
+                .filter { it.isSong() || it.isAlbum() || it.isArtist() }
+        }
+    }
+
+    private fun extractMainContentHtml(html: String): String {
+        val h1 = Regex("<h1\\b[^>]*>", RegexOption.IGNORE_CASE).find(html) ?: return html
+        val start = h1.range.first
+
+        val footerStart = Regex(
+            "<(?:footer|\\/footer)\\b|(?:اتصل بنا|contact us|about us|جميع الحقوق محفوظة)",
+            RegexOption.IGNORE_CASE
+        ).find(html, start + h1.value.length)?.range?.first ?: html.length
+
+        if (footerStart <= start) return html.substring(start)
+        return html.substring(start, footerStart)
     }
 
     private fun parseLinks(html: String): List<AlbumatyLink> {
