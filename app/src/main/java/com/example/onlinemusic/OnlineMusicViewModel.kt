@@ -37,12 +37,17 @@ class OnlineMusicViewModel(private val repository: OnlineMusicRepository) : View
     }
 
     fun openSection(link: AlbumatyLink) {
-        if (isLoading) return
+        // Switch to the destination screen immediately. A failed network request
+        // must never leave the user looking at the Online home page.
+        section = AlbumatySection(link.title, link.url)
+        isLoading = true
+        errorMessage = null
         viewModelScope.launch {
-            isLoading = true
-            errorMessage = null
             runCatching { repository.getSection(link) }
-                .onSuccess { section = it }
+                .onSuccess { loaded ->
+                    section = loaded
+                    errorMessage = null
+                }
                 .onFailure { errorMessage = it.message ?: "تعذر تحميل محتوى القسم" }
             isLoading = false
         }
@@ -51,6 +56,7 @@ class OnlineMusicViewModel(private val repository: OnlineMusicRepository) : View
     fun closeSection() {
         section = null
         errorMessage = null
+        isLoading = false
     }
 
     suspend fun resolveTrack(link: AlbumatyLink): OnlineMusicTrack {
