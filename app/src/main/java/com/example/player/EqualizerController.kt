@@ -1,28 +1,23 @@
 package com.example.player
 
 import android.content.Context
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
 
-/**
- * Player equalizer controller.
- * Manages EQ band levels and presets.
- * Now manages parameters to be passed to DeckFxAudioProcessor.
- */
-data class EqBand(
+class EqBand(
     val id: Int,
     val name: String,
     val minLevelDb: Int = -12,
     val maxLevelDb: Int = 12,
-    var currentLevelDb: Int = 0 // Made mutable for parameter updates
-)
+    initialLevelDb: Int = 0
+) {
+    var currentLevelDb by mutableStateOf(initialLevelDb.coerceIn(minLevelDb, maxLevelDb))
+}
 
 class EqualizerController(private val context: Context, private val onUpdate: () -> Unit = {}) {
-    init {
-        loadState()
-    }
+    init { loadState() }
 
     var isEnabled by mutableStateOf(false)
         private set
@@ -35,8 +30,6 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     var selectedPreset by mutableStateOf("Flat")
         private set
-
-    // Native AudioEffect removal - these remain for UI compatibility
     var quickBassDb by mutableStateOf(0)
         private set
     var quickMidDb by mutableStateOf(0)
@@ -45,7 +38,6 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         private set
     var isDolbyAtmosEnabled by mutableStateOf(false)
         private set
-
     var bassBoostLevel by mutableStateOf(0f)
         private set
     var trebleBoostLevel by mutableStateOf(0f)
@@ -53,8 +45,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     val presets = listOf(
         "Flat", "Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game",
-        "Bass Boost", "Rock", "Pop",
-        "Jazz", "Electronic", "Vocal", "Concert", "Custom"
+        "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Concert", "Custom"
     )
 
     fun toggleEnable() {
@@ -65,11 +56,11 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBandLevel(bandIndex: Int, levelDb: Int) {
         if (bandIndex !in bands.indices) return
-        val safe = levelDb.coerceIn(-12, 12)
-        bands[bandIndex].currentLevelDb = safe
+        bands[bandIndex].currentLevelDb = levelDb.coerceIn(-12, 12)
         selectedPreset = "Custom"
         syncQuickFromBands()
         persistState()
+        onUpdate()
     }
 
     fun setQuickBass(value: Int) = updateBandLevel(0, value)
@@ -78,14 +69,12 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBassBoost(level: Float) {
         bassBoostLevel = level.coerceIn(0f, 1f)
-        val target = (-12 + (bassBoostLevel * 24f)).toInt()
-        updateBandLevel(0, target)
+        updateBandLevel(0, (-12 + bassBoostLevel * 24f).toInt())
     }
 
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
-        val target = (-12 + (trebleBoostLevel * 24f)).toInt()
-        updateBandLevel(9, target)
+        updateBandLevel(9, (-12 + trebleBoostLevel * 24f).toInt())
     }
 
     fun applyPreset(presetName: String) {
@@ -136,18 +125,11 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         } catch (_: Throwable) { }
     }
 
-    fun release() {
-        persistState()
-    }
+    fun release() { persistState() }
 
-    fun attachToSession(newAudioSessionId: Int) {
-        // API Compatibility: No-op now as we use unified DSP
-    }
+    fun attachToSession(newAudioSessionId: Int) { onUpdate() }
 
     companion object {
-        fun adjustQuickBand(context: Context, band: Int) {
-            // API Compatibility: No-op now as we use unified DSP
-        }
+        fun adjustQuickBand(context: Context, band: Int) { }
     }
 }
-
