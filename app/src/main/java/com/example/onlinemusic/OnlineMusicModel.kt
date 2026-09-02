@@ -22,3 +22,15 @@ data class OnlineMusicArtist(
     val name: String,
     val artworkUrl: String?
 )
+
+data class AlbumatyLink(
+    val title: String,
+    val url: String
+)
+
+data class AlbumatyHomeData(
+    val categories: List<AlbumatyLink> = emptyList(),
+    val albums: List<AlbumatyLink> = emptyList(),
+    val songs: List<AlbumatyLink> = emptyList(),
+    val artists: List<AlbumatyLink> = emptyList()
+)
