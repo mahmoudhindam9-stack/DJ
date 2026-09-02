@@ -144,13 +144,6 @@ jobs:
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
 
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: DJ-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
-          if-no-files-found: error
-
       - name: Assemble release APK
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
 
@@ -160,9 +153,3 @@ jobs:
           test -n "$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
           echo "Release APK verification passed."
 
-      - name: Upload release APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: DJ-release-apk
-          path: app/build/outputs/apk/release/*.apk
-          if-no-files-found: error
