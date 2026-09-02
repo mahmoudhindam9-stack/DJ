@@ -11,19 +11,23 @@ if MARKER not in text:
     if text.count(old) != 1:
         raise SystemExit(f'Expected EQ bypass block once, found {text.count(old)}')
     DSP.write_text(text.replace(old, new, 1), encoding='utf-8')
-    print('Equalizer DSP bypass fixed.')
 else:
     print('Equalizer DSP already fixed.')
 
-# Kotlin compiler compatibility fix for the Online Music card rows.
-# Keep the same UI/behavior, but use explicit named arguments so Compose
-# resolves Text() deterministically with the current Material3/Kotlin setup.
 SCREEN = ROOT / 'app/src/main/java/com/example/onlinemusic/OnlineMusicScreen.kt'
 screen = SCREEN.read_text(encoding='utf-8')
-old_text = 'Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)'
-new_text = 'Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)'
-if old_text in screen:
-    SCREEN.write_text(screen.replace(old_text, new_text), encoding='utf-8')
-    print('Online Music Text() compile regression fixed.')
+replacements = {
+    'Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(16.dp))': 'Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp))',
+    'Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(10.dp))': 'Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp))',
+    'Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)': 'Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)'
+}
+changed = False
+for old, new in replacements.items():
+    if old in screen:
+        screen = screen.replace(old, new)
+        changed = True
+if changed:
+    SCREEN.write_text(screen, encoding='utf-8')
+    print('Online Music Kotlin compile errors fixed.')
 else:
-    print('Online Music Text() compile fix already applied.')
+    print('Online Music compile fixes already applied.')
