@@ -117,19 +117,6 @@ fun PlayerScreenV2(
         else infoMessage = "Storage permission denied; device music was not scanned"
     }
 
-    fun runDeviceScan() {
-        scope.launch {
-            val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }
-            addToLibrary(audioLibrary, songs, context)
-            infoMessage = "Scanned ${songs.size} device song(s)"
-        }
-    }
-
-    val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) runDeviceScan()
-        else infoMessage = "Storage permission denied; device music was not scanned"
-    }
-
     val scanDevice = {
         val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             Manifest.permission.READ_MEDIA_AUDIO
@@ -296,9 +283,4 @@ private fun MixPlaylistsDialog(playlists: List<Playlist>, library: List<AudioIte
     val selected = remember { mutableStateMapOf<String, Boolean>() }
     var shuffle by remember { mutableStateOf(true) }
     AlertDialog(onDismissRequest = onDismiss, title = { Text("Mix playlists") }, text = { Column { Text("Choose playlists to combine into one queue.", style = MaterialTheme.typography.bodySmall); playlists.forEach { p -> Row(Modifier.fillMaxWidth().clickable { selected[p.id] = selected[p.id] != true }, verticalAlignment = Alignment.CenterVertically) { Checkbox(selected[p.id] == true, { selected[p.id] = it }); Text(p.name) } }; Row(verticalAlignment = Alignment.CenterVertically) { Switch(shuffle, { shuffle = it }); Spacer(Modifier.width(7.dp)); Text("Shuffle combined queue") } } }, confirmButton = { TextButton(onClick = { val songs = playlists.filter { selected[it.id] == true }.flatMap { p -> p.songIds.mapNotNull { id -> library.firstOrNull { it.id == id } } }.distinctBy { it.id }; onPlay(songs, shuffle) }) { Text("Play") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
-}
-
-private fun addToLibrary(target: SnapshotStateList<AudioItem>, songs: Collection<AudioItem>, context: Context) {
-    val merged = (target + songs).distinctBy { it.id }.sortedBy { it.title.lowercase() }
-    target.clear(); target.addAll(merged); PlayerLibraryStore.save(context, target)
 }
