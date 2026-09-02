@@ -340,8 +340,6 @@ class DJDeck(context: Context, val deckName: String) {
         fxProcessor.crushEnabled = isCrushActive
     }
 
-    val maqamPlayer = MaqamPlayer()
-
     fun toggleEffect(effect: DJEffect) {
         val next = !(effectStates[effect] ?: false)
         effectStates[effect] = next
@@ -357,6 +355,9 @@ class DJDeck(context: Context, val deckName: String) {
     fun setEffectBeatDivision(value: Float) {
         fxProcessor.beatDivision = value.coerceIn(0.0625f, 1f)
     }
+
+    val maqamPlayer = MaqamPlayer()
+
 
 
 

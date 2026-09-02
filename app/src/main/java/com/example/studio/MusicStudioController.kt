@@ -126,6 +126,8 @@ class MusicStudioController(private val context: Context) {
     var filterCutoff by mutableStateOf(1.0f) // 1.0 = fully open (no LP)
     var warmthDrive by mutableStateOf(0.15f)
 
+    // STUDIO_FUNCTIONALITY_V1
+    // Forces Compose refresh after edits to nested mutable track data.
     var uiRevision by mutableStateOf(0)
         private set
 

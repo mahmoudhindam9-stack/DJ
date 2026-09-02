@@ -1,176 +1,82 @@
 package com.example.player
 
+import android.content.Context
+import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-/**
- * Pro equalizer & Dolby Atmos 3D Spatializer UI.
- */
 @Composable
 fun EqualizerScreen(eqController: EqualizerController) {
     val context = LocalContext.current
     val bands = eqController.bands
-    val presets = eqController.presets
-    val dolbyProfiles = listOf("Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game")
+    val presets = remember { eqController.presets }
 
     LazyColumn(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text("Pro Equalizer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                            Text("10-band • Hardware DSP • Custom presets", style = MaterialTheme.typography.bodySmall)
-                        }
-                        Switch(checked = eqController.isEnabled, onCheckedChange = { eqController.toggleEnable() })
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        if (eqController.isEnabled) "ACTIVE — EQ hardware filter applied to player"
-                        else "BYPASSED — original audio path untouched",
-                        style = MaterialTheme.typography.labelMedium
-                    )
-                }
-            }
-        }
-
-        // Dolby Atmos 3D Spatializer Card
-        item {
-            Card(
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(Modifier.padding(16.dp)) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                "Dolby Atmos 3D Spatializer",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                "Surround sound virtualization & System AudioFX bridge",
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        Switch(
-                            checked = eqController.isDolbyAtmosEnabled,
-                            onCheckedChange = { eqController.toggleDolbyAtmos() }
-                        )
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-                    Text("Dolby Sound Profiles", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
-                    Spacer(Modifier.height(4.dp))
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(dolbyProfiles) { profile ->
-                            FilterChip(
-                                selected = eqController.dolbyProfile == profile,
-                                onClick = { eqController.applyDolbyProfile(profile) },
-                                label = { Text(profile) }
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(10.dp))
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                        Text("3D Spatial Surround Strength", style = MaterialTheme.typography.bodySmall)
-                        Text("${(eqController.dolbySurroundStrength / 10f).toInt()}%", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    }
-                    Slider(
-                        value = eqController.dolbySurroundStrength.toFloat(),
-                        onValueChange = { eqController.updateDolbyStrength(it.toInt()) },
-                        valueRange = 0f..1000f,
-                        enabled = eqController.isDolbyAtmosEnabled
-                    )
-
-                    Spacer(Modifier.height(6.dp))
-                    OutlinedButton(
-                        onClick = { eqController.openDolbyAtmosSystemPanel(context) },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Open Device Dolby Atmos Control Panel")
-                    }
+                Column(Modifier.weight(1f)) {
+                    Text("Equalizer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                    Text("Safe EQ range: -6 dB to +6 dB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                Switch(checked = eqController.isEnabled, onCheckedChange = { eqController.toggleEnable() })
             }
         }
-
         item {
-            Text("All Presets", fontWeight = FontWeight.Bold)
-            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                items(presets) { preset ->
-                    FilterChip(
-                        selected = eqController.selectedPreset == preset,
-                        onClick = { eqController.applyPreset(preset) },
-                        label = { Text(preset) }
-                    )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                presets.take(4).forEach { preset ->
+                    FilterChip(selected = eqController.selectedPreset == preset, onClick = { eqController.applyPreset(preset) }, label = { Text(preset) })
                 }
             }
         }
-
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                presets.drop(4).forEach { preset ->
+                    FilterChip(selected = eqController.selectedPreset == preset, onClick = { eqController.applyPreset(preset) }, label = { Text(preset) })
+                }
+            }
+        }
         item {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
-                    Text("GM Quick Control", fontWeight = FontWeight.Bold)
-                    Text("Three controls shared with the home-screen widget", style = MaterialTheme.typography.labelSmall)
+                    Text("Bass Boost", fontWeight = FontWeight.SemiBold)
+                    Slider(value = eqController.bassBoostLevel, onValueChange = eqController::updateBassBoost, valueRange = 0f..1f)
+                    Text("${(eqController.bassBoostLevel * 100).toInt()}%")
                     Spacer(Modifier.height(8.dp))
-                    Text("Bass: ${eqController.quickBassDb} dB")
-                    Slider(
-                        value = eqController.quickBassDb.toFloat(),
-                        onValueChange = { eqController.setQuickBass(it.toInt()) },
-                        valueRange = -12f..12f
-                    )
-                    Text("Mid: ${eqController.quickMidDb} dB")
-                    Slider(
-                        value = eqController.quickMidDb.toFloat(),
-                        onValueChange = { eqController.setQuickMid(it.toInt()) },
-                        valueRange = -12f..12f
-                    )
-                    Text("Treble: ${eqController.quickTrebleDb} dB")
-                    Slider(
-                        value = eqController.quickTrebleDb.toFloat(),
-                        onValueChange = { eqController.setQuickTreble(it.toInt()) },
-                        valueRange = -12f..12f
-                    )
+                    Text("Treble Boost", fontWeight = FontWeight.SemiBold)
+                    Slider(value = eqController.trebleBoostLevel, onValueChange = eqController::updateTrebleBoost, valueRange = 0f..1f)
+                    Text("${(eqController.trebleBoostLevel * 100).toInt()}%")
                 }
             }
         }
-
         items(bands, key = { it.id }) { band ->
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
@@ -178,21 +84,27 @@ fun EqualizerScreen(eqController: EqualizerController) {
                         Text(band.name, fontWeight = FontWeight.SemiBold)
                         Text("${band.currentLevelDb} dB", color = MaterialTheme.colorScheme.primary)
                     }
-                    Slider(
-                        value = band.currentLevelDb.toFloat(),
-                        onValueChange = { eqController.updateBandLevel(band.id, it.toInt()) },
-                        valueRange = -12f..12f,
-                        steps = 23
-                    )
+                    Slider(value = band.currentLevelDb.toFloat(), onValueChange = { eqController.updateBandLevel(band.id, it.toInt()) }, valueRange = -6f..6f, steps = 11)
                 }
             }
         }
-
         item {
-            Button(onClick = { eqController.applyPreset("Flat") }, Modifier.fillMaxWidth()) {
-                Text("Reset to Flat")
+            Button(onClick = { openDolby(context) }, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Dolby Atmos")
             }
         }
     }
 }
 
+private fun openDolby(context: Context) {
+    val intent = listOf("com.dolby.daxappui2", "com.dolby.daxappui")
+        .asSequence()
+        .mapNotNull { context.packageManager.getLaunchIntentForPackage(it) }
+        .firstOrNull()
+    if (intent != null) {
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(intent)
+    } else {
+        Toast.makeText(context, "Dolby Atmos is not available on this device", Toast.LENGTH_SHORT).show()
+    }
+}
