@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets
 class OnlineMusicRepository {
     companion object {
         const val HOME_URL = "https://www.albumaty.com/cat/1.html"
+        private const val BASE_URL = "https://www.albumaty.com"
     }
 
     private val client = OkHttpClient.Builder()
@@ -37,22 +38,30 @@ class OnlineMusicRepository {
 
     suspend fun getSection(link: AlbumatyLink): AlbumatySection = withContext(Dispatchers.IO) {
         val html = getHtml(link.url)
-        AlbumatySection(link.title, link.url, parseSongLinks(html).take(80))
+        AlbumatySection(
+            title = link.title,
+            url = link.url,
+            songs = parseSongLinks(html).take(100)
+        )
     }
 
     suspend fun resolveTrack(song: AlbumatyLink): OnlineMusicTrack = withContext(Dispatchers.IO) {
+        require(song.url.contains("/song/", ignoreCase = true)) { "الرابط المحدد ليس أغنية" }
+
         val songHtml = getHtml(song.url)
         val downloadPageUrl = extractDownloadPage(songHtml)
             ?: error("لم يتم العثور على صفحة تحميل الأغنية")
         val downloadHtml = getHtml(downloadPageUrl)
         val audioUrl = extractAudioUrl(downloadHtml)
+            ?: extractAudioUrl(songHtml)
             ?: error("لم يتم العثور على رابط الصوت المباشر")
+
         OnlineMusicTrack(
             id = song.url,
-            title = song.title,
-            artist = "",
-            album = null,
-            artworkUrl = null,
+            title = extractSongTitle(songHtml).ifBlank { song.title },
+            artist = extractArtist(songHtml),
+            album = extractAlbum(songHtml),
+            artworkUrl = extractImageUrl(songHtml),
             streamUrl = audioUrl,
             downloadUrl = audioUrl
         )
@@ -95,20 +104,24 @@ class OnlineMusicRepository {
 
     private fun parseHome(html: String): AlbumatyHomeData {
         val links = parseLinks(html)
-        fun unique(prefix: String): List<AlbumatyLink> = links
-            .filter { it.url.contains("/$prefix/") }
-            .distinctBy { it.url }
-            .take(60)
         return AlbumatyHomeData(
-            categories = unique("cat"),
-            albums = unique("album"),
-            songs = unique("song"),
-            artists = unique("artist")
+            categories = links.filter { it.isPath("cat") }
+                .distinctBy { it.url }
+                .take(60),
+            albums = links.filter { it.isPath("album") }
+                .distinctBy { it.url }
+                .take(60),
+            songs = links.filter { it.isPath("song") }
+                .distinctBy { it.url }
+                .take(60),
+            artists = links.filter { it.isPath("singer") || it.isPath("artist") }
+                .distinctBy { it.url }
+                .take(120)
         )
     }
 
     private fun parseSongLinks(html: String): List<AlbumatyLink> = parseLinks(html)
-        .filter { it.url.contains("/song/") }
+        .filter { it.isPath("song") }
         .distinctBy { it.url }
 
     private fun parseLinks(html: String): List<AlbumatyLink> {
@@ -120,7 +133,7 @@ class OnlineMusicRepository {
             val title = stripHtml(match.groupValues[2])
             if (title.isBlank()) return@mapNotNull null
             val url = normalizeUrl(match.groupValues[1].trim())
-            if (!url.startsWith("https://www.albumaty.com/")) return@mapNotNull null
+            if (!isAlbumatyUrl(url)) return@mapNotNull null
             AlbumatyLink(title, url)
         }.toList()
     }
@@ -140,6 +153,12 @@ class OnlineMusicRepository {
         ).find(html)?.value
         if (directMp3 != null) return normalizeUrl(directMp3)
 
+        val source = Regex(
+            "<(?:audio|source)[^>]+src=[\\\"']([^\\\"']+)[\\\"']",
+            RegexOption.IGNORE_CASE
+        ).find(html)?.groupValues?.getOrNull(1)
+        if (source?.contains(".mp3", ignoreCase = true) == true) return normalizeUrl(source)
+
         val anchor = Regex(
             "<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>[^<]*(?:تحميل|download)[^<]*</a>",
             setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
@@ -147,14 +166,60 @@ class OnlineMusicRepository {
         return anchor?.let(::normalizeUrl)?.takeIf { it.contains(".mp3", ignoreCase = true) }
     }
 
+    private fun extractSongTitle(html: String): String {
+        val heading = Regex(
+            "<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+MP3\\s*</h1>",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        ).find(html)?.groupValues?.getOrNull(1)
+        return stripHtml(heading.orEmpty()).substringBeforeLast(" - ").trim()
+    }
+
+    private fun extractArtist(html: String): String {
+        val heading = Regex(
+            "<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+-\\s+(.+?)\\s+MP3\\s*</h1>",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        ).find(html)?.groupValues?.getOrNull(2)
+        return stripHtml(heading.orEmpty()).trim()
+    }
+
+    private fun extractAlbum(html: String): String? {
+        val album = Regex(
+            "اغاني\\s+اخرى\\s+من\\s+ألبوم\\s+([^<]+)",
+            setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+        ).find(stripHtml(html))?.groupValues?.getOrNull(1)
+        return album?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun extractImageUrl(html: String): String? {
+        val image = Regex(
+            "<img[^>]+(?:src|data-src)=[\\\"']([^\\\"']+)[\\\"']",
+            RegexOption.IGNORE_CASE
+        ).find(html)?.groupValues?.getOrNull(1)
+        return image?.let(::normalizeUrl)
+    }
+
     private fun normalizeUrl(value: String): String {
         val decoded = URLDecoder.decode(value.replace("&amp;", "&"), StandardCharsets.UTF_8.name())
         return when {
-            decoded.startsWith("http://") -> decoded.replaceFirst("http://", "https://")
-            decoded.startsWith("https://") -> decoded
-            decoded.startsWith("/") -> "https://www.albumaty.com$decoded"
-            else -> "https://www.albumaty.com/$decoded"
+            decoded.startsWith("http://", ignoreCase = true) -> decoded.replaceFirst("http://", "https://")
+            decoded.startsWith("https://", ignoreCase = true) -> decoded.replace("https://albumaty.com", BASE_URL, ignoreCase = true)
+                .replace("https://www.albumaty.com", BASE_URL, ignoreCase = true)
+            decoded.startsWith("//") -> "https:$decoded"
+            decoded.startsWith("/") -> "$BASE_URL$decoded"
+            else -> "$BASE_URL/$decoded"
         }
+    }
+
+    private fun isAlbumatyUrl(url: String): Boolean = try {
+        java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com"
+    } catch (_: Exception) {
+        false
+    }
+
+    private fun AlbumatyLink.isPath(segment: String): Boolean = try {
+        java.net.URI(url).path.orEmpty().split('/').contains(segment)
+    } catch (_: Exception) {
+        false
     }
 
     private fun stripHtml(value: String): String = value
