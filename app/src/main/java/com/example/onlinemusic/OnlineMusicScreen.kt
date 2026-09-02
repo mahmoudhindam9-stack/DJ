@@ -17,9 +17,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MusicNote
@@ -60,13 +60,9 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
 
     LaunchedEffect(Unit) { viewModel.loadHome() }
     var query by remember { mutableStateOf("") }
-
-    val filteredAlbums = remember(query, viewModel.home.albums) {
-        viewModel.home.albums.filter { it.title.contains(query.trim(), ignoreCase = true) }
-    }
-    val filteredSongs = remember(query, viewModel.home.songs) {
-        viewModel.home.songs.filter { it.title.contains(query.trim(), ignoreCase = true) }
-    }
+    val normalizedQuery = query.trim()
+    val filteredAlbums = viewModel.home.albums.filter { it.title.contains(normalizedQuery, ignoreCase = true) }
+    val filteredSongs = viewModel.home.songs.filter { it.title.contains(normalizedQuery, ignoreCase = true) }
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -76,9 +72,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
             Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp))
             Spacer(Modifier.size(8.dp))
             Text("ألبوماتي", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { viewModel.loadHome(true) }) {
-                Icon(Icons.Filled.Refresh, "تحديث")
-            }
+            IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "تحديث") }
         }
 
         OutlinedTextField(
@@ -107,27 +101,13 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
                 item {
                     AlbumatySection("الأقسام") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(viewModel.home.categories) { item ->
-                                AlbumatyChip(item.title) { openedUrl = item.url }
-                            }
+                            items(viewModel.home.categories) { item -> AlbumatyChip(item.title) { openedUrl = item.url } }
                         }
                     }
                 }
-                item {
-                    AlbumatySection("جديد الألبومات") {
-                        AlbumatyLinks(filteredAlbums) { openedUrl = it.url }
-                    }
-                }
-                item {
-                    AlbumatySection("جديد الأغاني") {
-                        AlbumatyLinks(filteredSongs) { openedUrl = it.url }
-                    }
-                }
-                item {
-                    AlbumatySection("الفنانين") {
-                        AlbumatyLinks(viewModel.home.artists) { openedUrl = it.url }
-                    }
-                }
+                item { AlbumatySection("جديد الألبومات") { AlbumatyLinks(filteredAlbums) { openedUrl = it.url } } }
+                item { AlbumatySection("جديد الأغاني") { AlbumatyLinks(filteredSongs) { openedUrl = it.url } } }
+                item { AlbumatySection("الفنانين") { AlbumatyLinks(viewModel.home.artists) { openedUrl = it.url } } }
                 item {
                     Text(
                         "المحتوى يتم تحميله من ألبوماتي داخل التطبيق، وعند فتح أغنية أو ألبوم تظهر صفحته الأصلية داخل التطبيق.",
@@ -156,10 +136,9 @@ private fun AlbumatyLinks(items: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> U
         items.forEach { item ->
             Card(Modifier.fillMaxWidth().clickable { onOpen(item) }) {
                 Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier.size(42.dp).background(MaterialTheme.colorScheme.surfaceVariant),
-                        contentAlignment = Alignment.Center
-                    ) { Icon(Icons.Filled.MusicNote, null) }
+                    Box(Modifier.size(42.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.MusicNote, null)
+                    }
                     Spacer(Modifier.size(10.dp))
                     Text(item.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Icon(Icons.Filled.OpenInNew, null, Modifier.size(18.dp))
@@ -198,7 +177,7 @@ private fun AlbumatyDetailWebView(url: String, onBack: () -> Unit) {
             IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "رجوع") }
             Text("ألبوماتي", style = MaterialTheme.typography.titleMedium)
         }
-        AndroidView(webView, modifier = Modifier.fillMaxSize())
+        AndroidView(factory = { webView }, modifier = Modifier.fillMaxSize())
     }
 
     DisposableEffect(webView) {
