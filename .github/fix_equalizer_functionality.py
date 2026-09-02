@@ -14,3 +14,16 @@ if MARKER not in text:
     print('Equalizer DSP bypass fixed.')
 else:
     print('Equalizer DSP already fixed.')
+
+# Kotlin compiler compatibility fix for the Online Music card rows.
+# Keep the same UI/behavior, but use explicit named arguments so Compose
+# resolves Text() deterministically with the current Material3/Kotlin setup.
+SCREEN = ROOT / 'app/src/main/java/com/example/onlinemusic/OnlineMusicScreen.kt'
+screen = SCREEN.read_text(encoding='utf-8')
+old_text = 'Text(link.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)'
+new_text = 'Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)'
+if old_text in screen:
+    SCREEN.write_text(screen.replace(old_text, new_text), encoding='utf-8')
+    print('Online Music Text() compile regression fixed.')
+else:
+    print('Online Music Text() compile fix already applied.')
