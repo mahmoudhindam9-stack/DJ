@@ -1,10 +1,12 @@
 package com.example.player
 
 import android.content.Context
+import android.media.audiofx.Equalizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import kotlin.math.abs
 
 class EqBand(
     val id: Int,
@@ -17,10 +19,8 @@ class EqBand(
 }
 
 class EqualizerController(private val context: Context, private val onUpdate: () -> Unit = {}) {
-    init { loadState() }
-
-    var isEnabled by mutableStateOf(false)
-        private set
+    private var nativeEqualizer: Equalizer? = null
+    private var attachedSessionId: Int = -1
 
     val bands = mutableStateListOf(
         EqBand(0, "60 Hz"), EqBand(1, "170 Hz"), EqBand(2, "310 Hz"), EqBand(3, "600 Hz"),
@@ -28,6 +28,10 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         EqBand(8, "14 kHz"), EqBand(9, "16 kHz")
     )
 
+    init { loadState() }
+
+    var isEnabled by mutableStateOf(false)
+        private set
     var selectedPreset by mutableStateOf("Flat")
         private set
     var quickBassDb by mutableStateOf(0)
@@ -50,6 +54,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun toggleEnable() {
         isEnabled = !isEnabled
+        applyToNative()
         persistState()
         onUpdate()
     }
@@ -59,6 +64,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         bands[bandIndex].currentLevelDb = levelDb.coerceIn(-12, 12)
         selectedPreset = "Custom"
         syncQuickFromBands()
+        applyToNative()
         persistState()
         onUpdate()
     }
@@ -69,17 +75,22 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBassBoost(level: Float) {
         bassBoostLevel = level.coerceIn(0f, 1f)
-        updateBandLevel(0, (-12 + bassBoostLevel * 24f).toInt())
+        updateBandLevel(0, (-6 + bassBoostLevel * 12f).toInt())
     }
 
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
-        updateBandLevel(9, (-12 + trebleBoostLevel * 24f).toInt())
+        updateBandLevel(9, (-6 + trebleBoostLevel * 12f).toInt())
     }
 
     fun applyPreset(presetName: String) {
         selectedPreset = if (presetName in presets) presetName else "Custom"
         val values = when (presetName) {
+            "Dolby Music" -> listOf(5, 4, 3, 1, 2, 3, 4, 5, 4, 3)
+            "Dolby Cinema" -> listOf(3, 2, 1, 0, 1, 3, 4, 5, 4, 3)
+            "Dolby Dynamic" -> listOf(4, 3, 2, 1, 2, 3, 5, 5, 4, 4)
+            "Dolby Voice" -> listOf(-3, -2, -1, 2, 5, 6, 4, 2, 1, 0)
+            "Dolby Game" -> listOf(4, 3, 1, 0, 2, 4, 5, 4, 3, 2)
             "Bass Boost" -> listOf(9, 7, 5, 3, 1, 0, -1, -1, -2, -2)
             "Rock" -> listOf(7, 6, 3, 4, 6, 6, 7, 5, 4, 3)
             "Pop" -> listOf(-2, 2, 5, 5, 3, 2, 0, 2, 4, 5)
@@ -91,6 +102,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         }
         for (i in bands.indices) bands[i].currentLevelDb = values[i].coerceIn(-12, 12)
         syncQuickFromBands()
+        isEnabled = true
+        applyToNative()
         persistState()
         onUpdate()
     }
@@ -99,6 +112,41 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         quickBassDb = bands[0].currentLevelDb
         quickMidDb = bands[4].currentLevelDb
         quickTrebleDb = bands[9].currentLevelDb
+    }
+
+    private fun desiredFrequenciesHz(): IntArray = intArrayOf(60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000)
+
+    private fun levelForNativeBand(nativeIndex: Int): Short {
+        val eq = nativeEqualizer ?: return 0
+        val centerHz = eq.getCenterFreq(nativeIndex.toShort()) / 1000
+        val sourceIndex = desiredFrequenciesHz().indices.minByOrNull { index ->
+            abs(desiredFrequenciesHz()[index] - centerHz)
+        } ?: 0
+        val range = eq.bandLevelRange
+        val milliDb = bands[sourceIndex].currentLevelDb * 100
+        return milliDb.coerceIn(range[0].toInt(), range[1].toInt()).toShort()
+    }
+
+    private fun applyToNative() {
+        val eq = nativeEqualizer ?: return
+        try {
+            eq.enabled = isEnabled
+            for (i in 0 until eq.numberOfBands.toInt()) {
+                eq.setBandLevel(i.toShort(), levelForNativeBand(i))
+            }
+        } catch (_: Throwable) { }
+    }
+
+    private fun recreateNativeEqualizer(sessionId: Int) {
+        if (sessionId <= 0 || sessionId == attachedSessionId) return
+        try { nativeEqualizer?.release() } catch (_: Throwable) { }
+        nativeEqualizer = try {
+            Equalizer(1000, sessionId).also { it.enabled = false }
+        } catch (_: Throwable) {
+            null
+        }
+        attachedSessionId = sessionId
+        applyToNative()
     }
 
     private fun persistState() {
@@ -125,9 +173,17 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         } catch (_: Throwable) { }
     }
 
-    fun release() { persistState() }
+    fun release() {
+        persistState()
+        try { nativeEqualizer?.release() } catch (_: Throwable) { }
+        nativeEqualizer = null
+        attachedSessionId = -1
+    }
 
-    fun attachToSession(newAudioSessionId: Int) { onUpdate() }
+    fun attachToSession(newAudioSessionId: Int) {
+        recreateNativeEqualizer(newAudioSessionId)
+        onUpdate()
+    }
 
     companion object {
         fun adjustQuickBand(context: Context, band: Int) { }

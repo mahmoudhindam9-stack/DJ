@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -75,7 +76,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     }
 
     viewModel.section?.let { section ->
-        OnlineSectionScreen(section, viewModel.isLoading, message, viewModel::closeSection, ::playSong, ::downloadSong)
+        OnlineSectionScreen(section, viewModel.isLoading, message, viewModel::closeSection, viewModel::openSection, ::playSong, ::downloadSong)
         return
     }
 
@@ -123,20 +124,44 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
 }
 
 @Composable
-private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, message: String?, onBack: () -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
+private fun OnlineSectionScreen(
+    section: AlbumatySection,
+    isLoading: Boolean,
+    message: String?,
+    onBack: () -> Unit,
+    onOpen: (AlbumatyLink) -> Unit,
+    onPlay: (AlbumatyLink) -> Unit,
+    onDownload: (AlbumatyLink) -> Unit
+) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
             Text(section.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (isLoading) CircularProgressIndicator(Modifier.size(22.dp))
         }
+        val content = section.content
         when {
-            section.songs.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            section.songs.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة في هذا القسم") }
+            content.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            content.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا يوجد محتوى متاح في هذا القسم") }
             else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                items(section.songs) { song -> OnlineSongCard(song, onPlay, onDownload) }
+                items(content, key = { it.url }) { link ->
+                    if (link.isSong()) OnlineSongCard(link, onPlay, onDownload)
+                    else SectionLinkCard(link, onOpen)
+                }
                 message?.let { item { Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) } }
             }
+        }
+    }
+}
+
+@Composable
+private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) {
+    Card(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
+        Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Folder, null) }
+            Spacer(Modifier.size(9.dp))
+            Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+            TextButton(onClick = { onOpen(link) }) { Text("فتح") }
         }
     }
 }
@@ -145,16 +170,7 @@ private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, me
 private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, limit: Int? = 24) {
     val visible = if (limit == null) links else links.take(limit)
     Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        visible.forEach { link ->
-            Card(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
-                Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
-                    Spacer(Modifier.size(9.dp))
-                    Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                    TextButton(onClick = { onOpen(link) }) { Text("فتح") }
-                }
-            }
-        }
+        visible.forEach { link -> SectionLinkCard(link, onOpen) }
     }
 }
 
@@ -169,7 +185,7 @@ private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, o
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
             Spacer(Modifier.size(9.dp))
-            Text(text = link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
+            Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
             IconButton(onClick = { onPlay(link) }) { Icon(Icons.Filled.PlayArrow, "تشغيل") }
             IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }
         }
@@ -180,6 +196,10 @@ private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, o
 private fun OnlineSection(title: String, content: @Composable () -> Unit) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); content() }
 }
+
+private fun AlbumatyLink.isSong(): Boolean = runCatching {
+    java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "song" || it.startsWith("song") }
+}.getOrDefault(false)
 
 private data class PendingOnlineDownload(val title: String, val audioUrl: String)
 private fun suggestedFileName(title: String): String {

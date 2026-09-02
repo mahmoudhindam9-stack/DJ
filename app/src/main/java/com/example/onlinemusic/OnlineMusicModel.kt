@@ -38,5 +38,11 @@ data class AlbumatyHomeData(
 data class AlbumatySection(
     val title: String,
     val url: String,
-    val songs: List<AlbumatyLink> = emptyList()
-)
+    val content: List<AlbumatyLink> = emptyList()
+) {
+    val songs: List<AlbumatyLink> get() = content.filter { it.isSongPath() }
+}
+
+private fun AlbumatyLink.isSongPath(): Boolean = runCatching {
+    java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "song" || it.startsWith("song") }
+}.getOrDefault(false)

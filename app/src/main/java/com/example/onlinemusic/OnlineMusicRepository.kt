@@ -20,7 +20,8 @@ class OnlineMusicRepository {
     private suspend fun getHtml(url: String): String = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(url)
             .header("User-Agent", "Mozilla/5.0 (Android) DJ Music Player")
-            .header("Accept", "text/html,application/xhtml+xml").build()
+            .header("Accept", "text/html,application/xhtml+xml")
+            .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Albumaty returned ${response.code}")
             response.body?.string().orEmpty()
@@ -31,11 +32,16 @@ class OnlineMusicRepository {
 
     suspend fun getSection(link: AlbumatyLink): AlbumatySection = withContext(Dispatchers.IO) {
         val html = getHtml(link.url)
-        AlbumatySection(link.title, link.url, parseSongLinks(html).take(200))
+        val content = parseLinks(html)
+            .filter { it.isSong() || it.isAlbum() || it.isArtist() || it.isCategory() }
+            .filterNot { it.url.trimEnd('/') == link.url.trimEnd('/') }
+            .distinctBy { it.url }
+            .take(500)
+        AlbumatySection(link.title, link.url, content)
     }
 
     suspend fun resolveTrack(song: AlbumatyLink): OnlineMusicTrack = withContext(Dispatchers.IO) {
-        require(song.url.contains("/song/", true)) { "الرابط المحدد ليس أغنية" }
+        require(song.isSong()) { "الرابط المحدد ليس أغنية" }
         val songHtml = getHtml(song.url)
         val downloadPageUrl = extractDownloadPage(songHtml) ?: error("لم يتم العثور على صفحة تحميل الأغنية")
         val downloadHtml = getHtml(downloadPageUrl)
@@ -83,8 +89,6 @@ class OnlineMusicRepository {
             artists = links.filter { it.isArtist() }.distinctBy { it.url }.take(300)
         )
     }
-
-    private fun parseSongLinks(html: String): List<AlbumatyLink> = parseLinks(html).filter { it.isSong() }.distinctBy { it.url }
 
     private fun parseLinks(html: String): List<AlbumatyLink> {
         val linkRegex = Regex("<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>(.*?)</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
@@ -135,8 +139,8 @@ class OnlineMusicRepository {
     private fun path(url: String): String = try { java.net.URI(url).path.orEmpty().trim('/').lowercase() } catch (_: Exception) { "" }
     private fun AlbumatyLink.isSong(): Boolean = path(url).split('/').any { it == "song" || it.startsWith("song") }
     private fun AlbumatyLink.isAlbum(): Boolean = path(url).split('/').any { it == "album" || it.startsWith("album") }
-    private fun AlbumatyLink.isArtist(): Boolean = path(url).split('/').any { it == "singer" || it == "artist" }
-    private fun AlbumatyLink.isCategory(): Boolean = path(url).split('/').any { it == "cat" || it == "category" }
+    private fun AlbumatyLink.isArtist(): Boolean = path(url).split('/').any { it == "singer" || it.startsWith("singer") || it == "artist" || it.startsWith("artist") }
+    private fun AlbumatyLink.isCategory(): Boolean = path(url).split('/').any { it == "cat" || it.startsWith("cat") || it == "category" || it.startsWith("category") }
 
     private fun stripHtml(value: String): String = value
         .replace(Regex("<script.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
