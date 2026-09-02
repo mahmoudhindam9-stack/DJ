@@ -10,10 +10,16 @@ import kotlinx.coroutines.launch
 class OnlineMusicViewModel(private val repository: OnlineMusicRepository) : ViewModel() {
     var home by mutableStateOf(AlbumatyHomeData())
         private set
+    var section by mutableStateOf<AlbumatySection?>(null)
+        private set
     var isLoading by mutableStateOf(false)
+        private set
+    var isResolvingTrack by mutableStateOf(false)
         private set
     var errorMessage by mutableStateOf<String?>(null)
         private set
+
+    private val resolvedTracks = mutableMapOf<String, OnlineMusicTrack>()
 
     fun loadHome(force: Boolean = false) {
         if (isLoading) return
@@ -25,6 +31,33 @@ class OnlineMusicViewModel(private val repository: OnlineMusicRepository) : View
                 .onSuccess { home = it }
                 .onFailure { errorMessage = it.message ?: "تعذر تحميل ألبوماتي" }
             isLoading = false
+        }
+    }
+
+    fun openSection(link: AlbumatyLink) {
+        if (isLoading) return
+        viewModelScope.launch {
+            isLoading = true
+            errorMessage = null
+            runCatching { repository.getSection(link) }
+                .onSuccess { section = it }
+                .onFailure { errorMessage = it.message ?: "تعذر تحميل محتوى القسم" }
+            isLoading = false
+        }
+    }
+
+    fun closeSection() {
+        section = null
+        errorMessage = null
+    }
+
+    suspend fun resolveTrack(link: AlbumatyLink): OnlineMusicTrack {
+        resolvedTracks[link.url]?.let { return it }
+        isResolvingTrack = true
+        return try {
+            repository.resolveTrack(link).also { resolvedTracks[link.url] = it }
+        } finally {
+            isResolvingTrack = false
         }
     }
 }
