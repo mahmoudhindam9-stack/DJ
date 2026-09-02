@@ -1163,7 +1163,12 @@ fun DJMixerScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Maqamat & Oriental Taqasim Section
+        MaqamatSection(djMixerController.maqamPlayer)
+
+        Spacer(modifier = Modifier.height(16.dp))
 
         // DJ_SAMPLER_CC0_V1
         // The former generated/legacy sound buttons are removed completely.

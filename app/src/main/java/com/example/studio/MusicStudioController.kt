@@ -16,15 +16,20 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
- * Lightweight in-app arranger/sequencer inspired by professional MIDI workstations.
- * It is original code: multi-track notes, chord stacking, fixed melody/rhythm banks,
- * persistent projects and a realtime polyphonic preview engine.
+ * Lightweight, high-performance in-app arranger/sequencer and music workstation.
+ * Includes multi-track piano roll, chords, melody/rhythm banks, live Darbuka pads,
+ * and a full Studio Master FX Rack (Reverb, Delay, Filter, Warmth).
  */
 class MusicStudioController(private val context: Context) {
     data class StudioNote(var pitch: Int, var startBeat: Float, var lengthBeats: Float = 1f, var velocity: Float = 0.9f)
@@ -82,7 +87,7 @@ class MusicStudioController(private val context: Context) {
     )
 
     val melodyPresets = listOf(
-        MelodyPreset("Alf Leila (ألف ليلةولييلة)", listOf(0, 2, 3, 5, 7, 8, 7, 5, 3, 2, 0)),
+        MelodyPreset("Alf Leila (ألف ليلة وليلة)", listOf(0, 2, 3, 5, 7, 8, 7, 5, 3, 2, 0)),
         MelodyPreset("Inta Omri (إنت عمري)", listOf(0, 1, 3, 5, 7, 5, 3, 1, 0)),
         MelodyPreset("Lamma Bada (لما بدا)", listOf(0, 2, 3, 5, 4, 3, 2, 0, 2, 3)),
         MelodyPreset("Zeyna (زينة)", listOf(0, 1, 3, 4, 3, 1, 0, -2, 0)),
@@ -99,10 +104,10 @@ class MusicStudioController(private val context: Context) {
     )
 
     val tracks = mutableStateListOf(
-        StudioTrack(0, "Lead", "Oud"),
-        StudioTrack(1, "Harmony", "Qanun"),
-        StudioTrack(2, "Counter", "Arabic Violin"),
-        StudioTrack(3, "Bass", "Bass")
+        StudioTrack(0, "Lead (صولو)", "Oud (عود)"),
+        StudioTrack(1, "Harmony (هارموني)", "Qanun (قانون)"),
+        StudioTrack(2, "Strings (وتريات)", "Arabic Violin (كمان شرقي)"),
+        StudioTrack(3, "Bass (باس)", "Bass Guitar (باس)")
     )
 
     var bpm by mutableStateOf(112)
@@ -115,18 +120,44 @@ class MusicStudioController(private val context: Context) {
     var isPlaying by mutableStateOf(false)
     var playheadBeat by mutableStateOf(0f)
 
-    // STUDIO_FUNCTIONALITY_V1
-    // Forces Compose refresh after edits to nested mutable track data.
+    // Studio Master Effects
+    var reverbAmount by mutableStateOf(0.25f)
+    var delayAmount by mutableStateOf(0.20f)
+    var filterCutoff by mutableStateOf(1.0f) // 1.0 = fully open (no LP)
+    var warmthDrive by mutableStateOf(0.15f)
+
     var uiRevision by mutableStateOf(0)
         private set
 
-    private fun bumpUi() { uiRevision++ }
+    fun bumpUi() { uiRevision++ }
 
     private var playbackJob: Job? = null
     private val prefs = context.getSharedPreferences("music_studio_project", Context.MODE_PRIVATE)
     private val sampleRate = 44100
 
-    init { loadProject() }
+    // High performance lookup table for fast sine wave synthesis
+    private val SINE_TABLE_SIZE = 4096
+    private val sineTable = FloatArray(SINE_TABLE_SIZE) { i ->
+        sin(2.0 * PI * i / SINE_TABLE_SIZE).toFloat()
+    }
+
+    private inline fun fastSin(phase: Double): Float {
+        val normalized = (phase / (2.0 * PI)) % 1.0
+        val p = if (normalized < 0) normalized + 1.0 else normalized
+        val idx = (p * SINE_TABLE_SIZE).toInt().coerceIn(0, SINE_TABLE_SIZE - 1)
+        return sineTable[idx]
+    }
+
+    // Studio FX Delay lines
+    private val delayBufferL = FloatArray(44100)
+    private val delayBufferR = FloatArray(44100)
+    private var delayWritePos = 0
+    private var filterStateL = 0f
+    private var filterStateR = 0f
+
+    init {
+        loadProject()
+    }
 
     val selectedTrack: StudioTrack get() = tracks.firstOrNull { it.id == selectedTrackId } ?: tracks.first()
     val selectedRhythm: RhythmPreset get() = rhythms.getOrElse(selectedRhythmIndex) { rhythms.first() }
@@ -135,26 +166,33 @@ class MusicStudioController(private val context: Context) {
     private var previewTrack: AudioTrack? = null
 
     fun playNotePreview(pitch: Int) {
-        CoroutineScope(Dispatchers.IO).launch {
+        CoroutineScope(Dispatchers.Default).launch {
             try {
                 val freq = midiToHz(pitch)
-                val durSec = 0.22
+                val durSec = 0.25
                 val samples = (sampleRate * durSec).toInt()
                 val pcm = ShortArray(samples * 2)
+                val inst = selectedTrack.instrument
+
                 for (i in 0 until samples) {
                     val t = i.toDouble() / sampleRate
-                    val env = Math.exp(-t * 9.0)
-                    val s = (waveform(selectedTrack.instrument, freq, t) * env * 14000.0).toInt().coerceIn(-32768, 32767).toShort()
+                    val progress = i.toDouble() / samples
+                    val env = exp(-progress * 4.5).toFloat()
+                    val wave = fastWaveform(inst, freq, t)
+                    val s = (wave * env * 18000.0f).toInt().coerceIn(-32768, 32767).toShort()
                     pcm[i * 2] = s
                     pcm[i * 2 + 1] = s
                 }
+
                 synchronized(this@MusicStudioController) {
                     try { previewTrack?.stop() } catch (_: Throwable) {}
                     try { previewTrack?.release() } catch (_: Throwable) {}
+
+                    val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(pcm.size * 2)
                     previewTrack = AudioTrack.Builder()
                         .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
                         .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
-                        .setBufferSizeInBytes(pcm.size * 2)
+                        .setBufferSizeInBytes(minBuf)
                         .setTransferMode(AudioTrack.MODE_STATIC)
                         .build()
                     previewTrack?.write(pcm, 0, pcm.size)
@@ -165,14 +203,14 @@ class MusicStudioController(private val context: Context) {
     }
 
     fun addNote(pitch: Int, beat: Float, length: Float = 1f) {
-        selectedTrack.notes.removeAll { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.01f }
+        selectedTrack.notes.removeAll { it.pitch == pitch && abs(it.startBeat - beat) < 0.01f }
         selectedTrack.notes += StudioNote(pitch, beat.coerceIn(0f, loopBeats - 0.25f), length.coerceIn(0.25f, 4f))
         playNotePreview(pitch)
         bumpUi()
     }
 
     fun removeNote(pitch: Int, beat: Float) {
-        selectedTrack.notes.removeAll { it.pitch == pitch && kotlin.math.abs(it.startBeat - beat) < 0.26f }
+        selectedTrack.notes.removeAll { it.pitch == pitch && abs(it.startBeat - beat) < 0.26f }
         bumpUi()
     }
 
@@ -181,7 +219,10 @@ class MusicStudioController(private val context: Context) {
         intervals.forEach { addNote(rootPitch + it, beat, 1f) }
     }
 
-    fun clearTrack() { selectedTrack.notes.clear(); bumpUi() }
+    fun clearTrack() {
+        selectedTrack.notes.clear()
+        bumpUi()
+    }
 
     fun duplicateTrack() {
         val nextId = (tracks.maxOfOrNull { it.id } ?: 0) + 1
@@ -239,45 +280,297 @@ class MusicStudioController(private val context: Context) {
         if (isPlaying) return
         isPlaying = true
         playbackJob?.cancel()
+
         playbackJob = scope.launch(Dispatchers.Default) {
+            val minBuf = AudioTrack.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_OUT_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT
+            ).coerceAtLeast(16384)
+
             val track = AudioTrack.Builder()
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
-                .setBufferSizeInBytes(sampleRate / 2 * 4)
+                .setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_MEDIA)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAudioFormat(
+                    AudioFormat.Builder()
+                        .setSampleRate(sampleRate)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setChannelMask(AudioFormat.CHANNEL_OUT_STEREO)
+                        .build()
+                )
+                .setBufferSizeInBytes(minBuf)
                 .setTransferMode(AudioTrack.MODE_STREAM)
                 .build()
+
             try {
                 track.play()
-                var beat = 0.0
-                val frameChunk = 512
+                var currentBeat = 0.0
+                val frameChunk = 2048
                 val buffer = ShortArray(frameChunk * 2)
                 val beatStep = (frameChunk.toDouble() / sampleRate) * (bpm / 60.0)
+
+                // Reset FX state
+                delayBufferL.fill(0f)
+                delayBufferR.fill(0f)
+                filterStateL = 0f
+                filterStateR = 0f
+
                 while (isActive && isPlaying) {
-                    playheadBeat = beat.toFloat()
-                    synthChunk(buffer, beat)
+                    playheadBeat = currentBeat.toFloat()
+                    synthChunkFast(buffer, currentBeat, frameChunk)
                     track.write(buffer, 0, buffer.size)
-                    beat += beatStep
-                    if (beat >= loopBeats) {
+
+                    currentBeat += beatStep
+                    if (currentBeat >= loopBeats) {
                         if (loopEnabled) {
-                            beat %= loopBeats
+                            currentBeat %= loopBeats
                         } else {
-                            isPlaying = false
+                            withContext(Dispatchers.Main) {
+                                isPlaying = false
+                                playheadBeat = 0f
+                            }
                             break
                         }
                     }
                 }
+            } catch (e: Exception) {
+                e.printStackTrace()
             } finally {
-                try { track.stop() } catch (_: Throwable) {}
-                track.release()
+                try {
+                    track.stop()
+                    track.release()
+                } catch (_: Throwable) {}
+                withContext(Dispatchers.Main) {
+                    isPlaying = false
+                    playheadBeat = 0f
+                }
             }
         }
     }
 
     fun stopPlayback() {
         isPlaying = false
+        playheadBeat = 0f
         playbackJob?.cancel()
         playbackJob = null
-        playheadBeat = 0f
+    }
+
+    private fun synthChunkFast(buffer: ShortArray, beatNow: Double, frames: Int) {
+        val soloExists = tracks.any { it.solo }
+        val beatPerFrame = (bpm / 60.0) / sampleRate
+
+        // Pre-filter active tracks
+        val activeTracks = tracks.filter { !it.muted && (!soloExists || it.solo) }
+
+        // Local FX params
+        val rev = reverbAmount.coerceIn(0f, 1f)
+        val dly = delayAmount.coerceIn(0f, 1f)
+        val dlyFrames = (sampleRate * 0.25).toInt().coerceIn(1, 44000)
+        val cutoff = filterCutoff.coerceIn(0.05f, 1f)
+        val alpha = (0.02f + 0.96f * cutoff)
+        val drive = (1f + warmthDrive * 2f)
+
+        for (f in 0 until frames) {
+            val beat = (beatNow + f * beatPerFrame) % loopBeats
+            var left = 0f
+            var right = 0f
+
+            for (tr in activeTracks) {
+                val inst = tr.instrument
+                val trVol = tr.volume
+
+                for (note in tr.notes) {
+                    val start = note.startBeat.toDouble()
+                    val len = note.lengthBeats.toDouble()
+                    val end = start + len
+
+                    // Accurate note triggering:
+                    val isNoteActive = if (end <= loopBeats) {
+                        beat in start..end
+                    } else {
+                        beat >= start || beat < (end % loopBeats)
+                    }
+
+                    if (isNoteActive) {
+                        val relBeat = if (beat >= start) beat - start else (beat + loopBeats - start)
+                        val t = relBeat * 60.0 / bpm
+                        val freq = midiToHz(note.pitch)
+
+                        // Smooth ADSR Envelope
+                        val env = if (relBeat < 0.04) {
+                            (relBeat / 0.04).toFloat()
+                        } else {
+                            exp(-relBeat / max(0.15, len * 0.6)).toFloat()
+                        }
+
+                        val wave = fastWaveform(inst, freq, t)
+                        val sample = wave * env * note.velocity * trVol * 0.22f
+
+                        left += sample
+                        right += sample
+                    }
+                }
+            }
+
+            // Percussion / Oriental Drum Rhythm
+            val rhythmSample = fastPercussionAt(beat)
+            left += rhythmSample * 0.20f
+            right += rhythmSample * 0.20f
+
+            // 1. Studio Master Filter (LP)
+            filterStateL += alpha * (left - filterStateL)
+            filterStateR += alpha * (right - filterStateR)
+            var procL = filterStateL
+            var procR = filterStateR
+
+            // 2. Studio Master Delay & Reverb
+            if (dly > 0.01f || rev > 0.01f) {
+                val delayReadIdx = (delayWritePos - dlyFrames + 44100) % 44100
+                val revReadIdx = (delayWritePos - (sampleRate * 0.045).toInt() + 44100) % 44100
+
+                val echoL = delayBufferL[delayReadIdx] * dly * 0.6f
+                val echoR = delayBufferR[delayReadIdx] * dly * 0.6f
+                val revL = delayBufferL[revReadIdx] * rev * 0.35f
+                val revR = delayBufferR[revReadIdx] * rev * 0.35f
+
+                procL += echoL + revL
+                procR += echoR + revR
+
+                delayBufferL[delayWritePos] = (procL * 0.5f).coerceIn(-1f, 1f)
+                delayBufferR[delayWritePos] = (procR * 0.5f).coerceIn(-1f, 1f)
+                delayWritePos = (delayWritePos + 1) % 44100
+            }
+
+            // 3. Warmth Drive / Soft Clipping
+            if (warmthDrive > 0.01f) {
+                procL = (procL * drive).coerceIn(-1f, 1f)
+                procR = (procR * drive).coerceIn(-1f, 1f)
+            }
+
+            val lShort = (procL.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
+            val rShort = (procR.coerceIn(-1f, 1f) * 32767f).toInt().toShort()
+            buffer[f * 2] = lShort
+            buffer[f * 2 + 1] = rShort
+        }
+    }
+
+    private fun fastWaveform(instrument: String, freq: Double, t: Double): Float {
+        val s1 = fastSin(2.0 * PI * freq * t)
+        val s2 = fastSin(2.0 * PI * freq * 2.0 * t)
+        val s3 = fastSin(2.0 * PI * freq * 3.0 * t)
+        val s4 = fastSin(2.0 * PI * freq * 4.0 * t)
+        val sub = fastSin(2.0 * PI * (freq * 0.5) * t)
+        val vibrato = 1.0f + 0.008f * fastSin(2.0 * PI * 5.5 * t)
+
+        return when {
+            instrument.contains("Oud") || instrument.contains("عود") ->
+                (s1 + 0.52f * s2 + 0.22f * s3 + 0.10f * s4) * exp(-t * 2.0).toFloat()
+            instrument.contains("Qanun") || instrument.contains("قانون") ->
+                (s1 + 0.72f * s2 + 0.44f * s3 + 0.28f * s4) * exp(-t * 2.5).toFloat()
+            instrument.contains("Nay") || instrument.contains("ناي") ->
+                (s1 * vibrato + 0.22f * s2)
+            instrument.contains("Mizmar") || instrument.contains("مزمار") ->
+                (if (s1 > 0) 0.75f else -0.75f) + 0.35f * s2
+            instrument.contains("Violin") || instrument.contains("وتريات") || instrument.contains("Strings") ->
+                (s1 * vibrato + 0.42f * s2 + 0.24f * s3 + 0.12f * s4)
+            instrument.contains("Cello") || instrument.contains("شيلو") ->
+                (s1 + 0.55f * s2 + 0.35f * s3 + 0.20f * sub)
+            instrument.contains("Guitar") || instrument.contains("جيتار") ->
+                (s1 + 0.45f * s2 + 0.25f * s3) * exp(-t * 2.2).toFloat()
+            instrument.contains("Bass") || instrument.contains("باس") ->
+                (s1 + 0.60f * s2 + 0.45f * sub)
+            instrument.contains("Accordion") || instrument.contains("أكورديون") ->
+                (s1 + 0.65f * s2 + 0.35f * s3)
+            instrument.contains("Piano") || instrument.contains("بيانو") ->
+                (s1 + 0.50f * s2 + 0.25f * s3) * exp(-t * 1.8).toFloat()
+            else ->
+                (s1 + 0.35f * s2 + 0.15f * s3)
+        } * 0.75f
+    }
+
+    private fun fastPercussionAt(beat: Double): Float {
+        val step = ((beat * 2.0).toInt() % 8)
+        val hit = selectedRhythm.pattern[step]
+        val t = (beat * 2.0) - (beat * 2.0).toInt()
+
+        return when (hit) {
+            1 -> {
+                // Doom
+                val freq = 85.0 * exp(-t * 14.0)
+                fastSin(2.0 * PI * freq * t) * exp(-t * 8.0).toFloat() * 1.2f
+            }
+            2 -> {
+                // Tak
+                val freq = 1200.0 * exp(-t * 22.0)
+                (fastSin(2.0 * PI * freq * t) * 0.7f + (if (t < 0.05) 0.3f else 0f)) * exp(-t * 24.0).toFloat()
+            }
+            3 -> {
+                // Riq / Sak
+                val freq = 2400.0 * exp(-t * 26.0)
+                fastSin(2.0 * PI * freq * t) * exp(-t * 28.0).toFloat() * 0.8f
+            }
+            else -> 0f
+        }
+    }
+
+    fun playLiveDarbuka(type: String) {
+        CoroutineScope(Dispatchers.Default).launch {
+            try {
+                val durSec = 0.30
+                val samples = (sampleRate * durSec).toInt()
+                val pcm = ShortArray(samples * 2)
+
+                for (i in 0 until samples) {
+                    val t = i.toDouble() / sampleRate
+                    val sample: Float = when (type) {
+                        "Doom" -> {
+                            val freq = 80.0 * exp(-t * 12.0)
+                            fastSin(2.0 * PI * freq * t) * exp(-t * 7.0).toFloat() * 1.5f
+                        }
+                        "Tak" -> {
+                            val freq = 1400.0 * exp(-t * 20.0)
+                            fastSin(2.0 * PI * freq * t) * exp(-t * 20.0).toFloat() * 1.1f
+                        }
+                        "Sak" -> {
+                            val noise = (Math.random().toFloat() * 2f - 1f)
+                            noise * exp(-t * 30.0).toFloat() * 0.9f
+                        }
+                        "Ka" -> {
+                            val freq = 1800.0 * exp(-t * 25.0)
+                            fastSin(2.0 * PI * freq * t) * exp(-t * 25.0).toFloat() * 1.0f
+                        }
+                        "Riq" -> {
+                            val jingle = fastSin(2.0 * PI * 3500.0 * t)
+                            jingle * exp(-t * 14.0).toFloat() * 0.9f
+                        }
+                        "Bandir" -> {
+                            val freq = 65.0 * exp(-t * 8.0)
+                            fastSin(2.0 * PI * freq * t) * exp(-t * 5.0).toFloat() * 1.6f
+                        }
+                        else -> fastSin(2.0 * PI * 400.0 * t) * exp(-t * 15.0).toFloat()
+                    }
+                    val s = (sample * 24000.0f).toInt().coerceIn(-32768, 32767).toShort()
+                    pcm[i * 2] = s
+                    pcm[i * 2 + 1] = s
+                }
+
+                val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(pcm.size * 2)
+                val track = AudioTrack.Builder()
+                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
+                    .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
+                    .setBufferSizeInBytes(minBuf)
+                    .setTransferMode(AudioTrack.MODE_STATIC)
+                    .build()
+                track.write(pcm, 0, pcm.size)
+                track.play()
+                delay(320)
+                track.release()
+            } catch (_: Throwable) {}
+        }
     }
 
     fun saveProject() {
@@ -300,23 +593,23 @@ class MusicStudioController(private val context: Context) {
                 }
             })
         }
-        prefs.edit().putString("project", root.toString()).apply()
+        prefs.edit().putString("saved_project_v2", root.toString()).apply()
     }
 
     private fun loadProject() {
-        val raw = prefs.getString("project", null) ?: return
+        val json = prefs.getString("saved_project_v2", null) ?: return
         try {
-            val root = JSONObject(raw)
-            bpm = root.optInt("bpm", bpm).coerceIn(50, 220)
-            bars = root.optInt("bars", bars).coerceIn(1, 32)
-            selectedScale = root.optString("scale", selectedScale)
-            selectedKey = root.optString("key", selectedKey)
-            selectedRhythmIndex = root.optInt("rhythm", 0).coerceIn(rhythms.indices)
+            val root = JSONObject(json)
+            bpm = root.optInt("bpm", 112)
+            bars = root.optInt("bars", 4)
+            selectedScale = root.optString("scale", "Hijaz")
+            selectedKey = root.optString("key", "D")
+            selectedRhythmIndex = root.optInt("rhythm", 0)
             loopEnabled = root.optBoolean("loop", true)
-            val saved = root.optJSONArray("tracks") ?: return
+            val trs = root.optJSONArray("tracks") ?: return
             tracks.clear()
-            for (i in 0 until saved.length()) {
-                val obj = saved.getJSONObject(i)
+            for (i in 0 until trs.length()) {
+                val obj = trs.getJSONObject(i)
                 val t = StudioTrack(obj.optInt("id", i), obj.optString("name", "Track ${i + 1}"), obj.optString("instrument", instruments.first()))
                 t.volume = obj.optDouble("volume", 0.9).toFloat(); t.muted = obj.optBoolean("muted", false); t.solo = obj.optBoolean("solo", false)
                 val notes = obj.optJSONArray("notes") ?: JSONArray()
@@ -328,152 +621,6 @@ class MusicStudioController(private val context: Context) {
             }
             selectedTrackId = tracks.firstOrNull()?.id ?: 0
         } catch (_: Throwable) { }
-    }
-
-    private fun synthChunk(buffer: ShortArray, beatNow: Double) {
-        val soloExists = tracks.any { it.solo }
-        var frame = 0
-        val beatPerFrame = (bpm / 60.0) / sampleRate
-        for (i in buffer.indices step 2) {
-            val beat = (beatNow + frame * beatPerFrame) % loopBeats
-            var left = 0.0
-            var right = 0.0
-            tracks.forEach { track ->
-                if (track.muted || (soloExists && !track.solo)) return@forEach
-                track.notes.forEach { note ->
-                    val rel = beat - note.startBeat
-                    val wrapped = if (rel < 0) rel + loopBeats else rel
-                    if (wrapped >= 0 && wrapped < note.lengthBeats) {
-                        val t = wrapped * 60.0 / bpm
-                        val freq = midiToHz(note.pitch)
-                        val env = if (wrapped < 0.04) wrapped / 0.04 else exp(-wrapped / max(0.12, note.lengthBeats * 0.55))
-                        val wave = waveform(track.instrument, freq, t)
-                        val sample = wave * env * note.velocity * track.volume * 0.16
-                        left += sample * (0.98 - track.id * 0.01).coerceIn(0.55, 0.98)
-                        right += sample * (0.94 + track.id * 0.01).coerceIn(0.55, 0.98)
-                    }
-                }
-            }
-            val rhythmSample = percussionAt(beat)
-            left += rhythmSample * 0.09
-            right += rhythmSample * 0.09
-            val l = (left.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
-            val r = (right.coerceIn(-1.0, 1.0) * Short.MAX_VALUE).toInt().toShort()
-            buffer[i] = l; buffer[i + 1] = r
-            frame++
-        }
-    }
-
-    fun playLiveDarbuka(type: String) {
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val durSec = 0.35
-                val samples = (sampleRate * durSec).toInt()
-                val pcm = ShortArray(samples * 2)
-                for (i in 0 until samples) {
-                    val t = i.toDouble() / sampleRate
-                    val sample: Double = when (type) {
-                        "Doom" -> {
-                            val freq = 80.0 * exp(-t * 12.0)
-                            sin(2.0 * PI * freq * t) * exp(-t * 7.0) * 1.5
-                        }
-                        "Tak" -> {
-                            val noise = (Math.random() * 2.0 - 1.0)
-                            val freq = 1400.0 * exp(-t * 20.0)
-                            (sin(2.0 * PI * freq * t) * 0.6 + noise * 0.4) * exp(-t * 22.0)
-                        }
-                        "Sak" -> {
-                            val noise = (Math.random() * 2.0 - 1.0)
-                            (noise * 0.8) * exp(-t * 35.0)
-                        }
-                        "Ka" -> {
-                            val freq = 1800.0 * exp(-t * 25.0)
-                            sin(2.0 * PI * freq * t) * exp(-t * 28.0)
-                        }
-                        "Riq" -> {
-                            val noise = (Math.random() * 2.0 - 1.0)
-                            val jingle = sin(2.0 * PI * 3500.0 * t)
-                            (jingle * 0.5 + noise * 0.5) * exp(-t * 14.0)
-                        }
-                        "Bandir" -> {
-                            val freq = 65.0 * exp(-t * 8.0)
-                            val buzz = (Math.random() * 2.0 - 1.0) * 0.2
-                            (sin(2.0 * PI * freq * t) + buzz) * exp(-t * 5.0) * 1.6
-                        }
-                        else -> (Math.random() * 2.0 - 1.0) * exp(-t * 15.0)
-                    }
-                    val s = (sample * 16000.0).toInt().coerceIn(-32768, 32767).toShort()
-                    pcm[i * 2] = s
-                    pcm[i * 2 + 1] = s
-                }
-                val track = AudioTrack.Builder()
-                    .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_MUSIC).build())
-                    .setAudioFormat(AudioFormat.Builder().setSampleRate(sampleRate).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_STEREO).build())
-                    .setBufferSizeInBytes(pcm.size * 2)
-                    .setTransferMode(AudioTrack.MODE_STATIC)
-                    .build()
-                track.write(pcm, 0, pcm.size)
-                track.play()
-                delay(380)
-                track.release()
-            } catch (_: Throwable) {}
-        }
-    }
-
-    private fun waveform(instrument: String, freq: Double, t: Double): Double {
-        val s1 = sin(2.0 * PI * freq * t)
-        val s2 = sin(2.0 * PI * freq * 2.0 * t)
-        val s3 = sin(2.0 * PI * freq * 3.0 * t)
-        val s4 = sin(2.0 * PI * freq * 4.0 * t)
-        val s5 = sin(2.0 * PI * freq * 5.0 * t)
-        val s6 = sin(2.0 * PI * freq * 6.0 * t)
-        val sub = sin(2.0 * PI * (freq * 0.5) * t)
-
-        val vibrato = 1.0 + 0.008 * sin(2.0 * PI * 5.5 * t)
-
-        return when {
-            instrument.contains("Oud") -> (s1 + 0.52 * s2 + 0.22 * s3 + 0.10 * s4) * exp(-t * 1.8)
-            instrument.contains("Qanun") || instrument.contains("Kanun") -> (s1 + 0.72 * s2 + 0.44 * s3 + 0.28 * s4) * exp(-t * 2.4)
-            instrument.contains("Nay") -> (s1 * vibrato + 0.22 * s2 + (Math.random() * 0.04 - 0.02))
-            instrument.contains("Mizmar") -> (if (s1 > 0) 0.8 else -0.8) + 0.4 * s2 + 0.2 * s3
-            instrument.contains("Violin") || instrument.contains(" وتريات") || instrument.contains("Strings") -> (s1 * vibrato + 0.42 * s2 + 0.24 * s3 + 0.12 * s4)
-            instrument.contains("Cello") || instrument.contains("شيلو") -> (s1 + 0.55 * s2 + 0.35 * s3 + 0.18 * sub)
-            instrument.contains("Bouzouki") || instrument.contains("بزق") -> (s1 + 0.65 * s2 + 0.45 * s4) * exp(-t * 2.2)
-            instrument.contains("Rebab") || instrument.contains("ربابة") -> (s1 * vibrato + 0.35 * s2 + 0.20 * s3)
-            instrument.contains("Accordion") || instrument.contains("أكورديون") -> (s1 + 0.65 * s2 + 0.35 * s3 + 0.25 * s5)
-            instrument.contains("Guitar") || instrument.contains("جيتار") -> (s1 + 0.45 * s2 + 0.25 * s3) * exp(-t * 2.0)
-            instrument.contains("Bass") || instrument.contains("باس") -> (s1 + 0.60 * s2 + 0.40 * sub)
-            instrument.contains("Sax") || instrument.contains("Flute") || instrument.contains("Clarinet") -> (s1 + 0.35 * s2 + 0.18 * s3)
-            instrument.contains("Organ") || instrument.contains("أورغن") -> (s1 + s2 * 0.8 + s3 * 0.6 + s4 * 0.4 + s5 * 0.3)
-            instrument.contains("Synth") || instrument.contains("Pad") -> (s1 + 0.50 * s2 + 0.30 * s3 + 0.15 * s4)
-            instrument.contains("Harp") || instrument.contains("هارب") -> (s1 + 0.55 * s2 + 0.30 * s3) * exp(-t * 3.0)
-            else -> s1 + 0.30 * s2 + 0.15 * s3
-        } * 0.68
-    }
-
-    private fun percussionAt(beat: Double): Double {
-        val step = ((beat * 2.0).toInt() % 8)
-        val hit = selectedRhythm.pattern[step]
-        val t = (beat * 2.0) - (beat * 2.0).toInt()
-        return when (hit) {
-            1 -> {
-                // Doom (deep resonant bass)
-                val freq = 85.0 * exp(-t * 14.0)
-                sin(2.0 * PI * freq * t) * exp(-t * 8.0) * 1.4
-            }
-            2 -> {
-                // Tak (sharp high edge)
-                val noise = (Math.random() * 2.0 - 1.0)
-                val freq = 1300.0 * exp(-t * 22.0)
-                (sin(2.0 * PI * freq * t) * 0.6 + noise * 0.4) * exp(-t * 24.0) * 0.9
-            }
-            3 -> {
-                // Riq / Sak (accented snap)
-                val noise = (Math.random() * 2.0 - 1.0)
-                (noise * 0.8) * exp(-t * 32.0) * 0.7
-            }
-            else -> 0.0
-        }
     }
 
     private fun keyBaseMidi(): Int = 60 + keys.indexOf(selectedKey).coerceAtLeast(0)
@@ -507,7 +654,7 @@ class MusicStudioController(private val context: Context) {
         return pattern[index] + octave * 12
     }
 
-    private fun midiToHz(midi: Int): Double = 440.0 * Math.pow(2.0, (midi - 69) / 12.0)
+    private fun midiToHz(midi: Int): Double = 440.0 * 2.0.pow((midi - 69) / 12.0)
 
     fun close() { stopPlayback() }
 }

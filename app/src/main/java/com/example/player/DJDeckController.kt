@@ -340,6 +340,8 @@ class DJDeck(context: Context, val deckName: String) {
         fxProcessor.crushEnabled = isCrushActive
     }
 
+    val maqamPlayer = MaqamPlayer()
+
     fun toggleEffect(effect: DJEffect) {
         val next = !(effectStates[effect] ?: false)
         effectStates[effect] = next
@@ -472,6 +474,7 @@ class DJMixerController(context: Context) {
     val deckA = DJDeck(context, "Deck A")
     val deckB = DJDeck(context, "Deck B")
     val soundPlayer = DJSoundPlayer(context)
+    val maqamPlayer = MaqamPlayer()
 
     var crossfader by mutableStateOf(0.5f)
         private set
@@ -489,6 +492,7 @@ class DJMixerController(context: Context) {
     fun pauseAll() {
         deckA.pause()
         deckB.pause()
+        maqamPlayer.stop()
     }
 
     fun playMelodyOverDeckA(melody: AudioItem): Boolean {
