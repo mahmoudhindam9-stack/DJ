@@ -198,12 +198,27 @@ fun PlayerScreenV2(
             } else {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(audioLibrary, key = { it.id }) { song ->
+                        val isCurrentSong = playerController.currentSong?.id == song.id
+                        val showPause = isCurrentSong && playerController.isPlaying
                         Card(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.MusicNote, null); Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                 IconButton(onClick = { addSongToPlaylist = song }) { Icon(Icons.Filled.Add, "Add to playlist") }
-                                FilledIconButton(onClick = { onPauseDJ(); playerController.playSong(song, audioLibrary); showNowPlaying = true }) { Icon(Icons.Filled.PlayArrow, "Play") }
+                                FilledIconButton(onClick = {
+                                    if (isCurrentSong) {
+                                        playerController.togglePlayPause()
+                                    } else {
+                                        onPauseDJ()
+                                        playerController.playSong(song, audioLibrary)
+                                    }
+                                    showNowPlaying = true
+                                }) {
+                                    Icon(
+                                        if (showPause) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                        if (showPause) "Pause" else "Play"
+                                    )
+                                }
                             }
                         }
                     }
