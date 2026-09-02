@@ -1,6 +1,7 @@
 name: Android Build Verification
 
 # PLAYER_DJ_UX_FUNCTIONALITY_2026-09-01
+# REBUILD_AFTER_ONLINE_MUSIC_COMPILE_FIX
 on:
   push:
     branches: [ main ]
@@ -37,8 +38,6 @@ jobs:
       - name: Normalize studio, notification and widget integration
         run: python3 .github/normalize_studio_main.py
 
-      # Player normalization can rewrite MainActivity.kt, so all DJ UI mounts
-      # must run after it and be persisted back to main.
       - name: Normalize player, playlists and session ownership
         run: python3 .github/normalize_player_experience.py
 
@@ -48,8 +47,6 @@ jobs:
       - name: Replace legacy DJ soundboard with professional CC0 sampler
         run: python3 .github/upgrade_dj_sampler.py
 
-      # Repair actual mixer routing and Studio state/playback semantics after all
-      # normalizers have touched the source, then persist the result.
       - name: Repair Mixer and Studio functionality
         run: python3 .github/fix_mixer_studio_functionality.py
 
