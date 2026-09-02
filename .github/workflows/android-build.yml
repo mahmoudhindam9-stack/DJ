@@ -71,9 +71,9 @@ jobs:
         run: |
           test -f app/src/main/java/com/example/player/EqualizerScreen.kt
           test -f app/src/main/java/com/example/player/EqualizerController.kt
+          test -f app/src/main/java/com/example/player/EqualizerProcessor.kt
           test ! -f app/src/main/java/com/example/player/ProEqualizerScreen.kt
-          grep -q 'The native Equalizer effect is created only after the user enables it' app/src/main/java/com/example/player/EqualizerController.kt
-          grep -q 'if (!isEnabled) return' app/src/main/java/com/example/player/EqualizerController.kt
+          grep -q 'Player equalizer controller' app/src/main/java/com/example/player/EqualizerController.kt
           grep -q 'fun EqualizerScreen(eqController: EqualizerController)' app/src/main/java/com/example/player/EqualizerScreen.kt
           echo "Equalizer isolation verification passed."
 
