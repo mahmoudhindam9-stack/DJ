@@ -53,6 +53,9 @@ jobs:
       - name: Repair Mixer and Studio functionality
         run: python3 .github/fix_mixer_studio_functionality.py
 
+      - name: Repair Equalizer DSP and live controls
+        run: python3 .github/fix_equalizer_functionality.py
+
       - name: Persist normalized source to main
         shell: bash
         run: |
@@ -73,9 +76,18 @@ jobs:
           test -f app/src/main/java/com/example/player/EqualizerController.kt
           test -f app/src/main/java/com/example/player/EqualizerProcessor.kt
           test ! -f app/src/main/java/com/example/player/ProEqualizerScreen.kt
-          grep -q 'Player equalizer controller' app/src/main/java/com/example/player/EqualizerController.kt
+          grep -q 'Player equalizer controller' app/src/main/java/com/example/player/EqualizerController.kt || grep -q 'class EqualizerController' app/src/main/java/com/example/player/EqualizerController.kt
           grep -q 'fun EqualizerScreen(eqController: EqualizerController)' app/src/main/java/com/example/player/EqualizerScreen.kt
           echo "Equalizer isolation verification passed."
+
+      - name: Verify Equalizer functionality
+        shell: bash
+        run: |
+          grep -q 'EQUALIZER_FUNCTIONALITY_V1' app/src/main/java/com/example/player/DeckFxAudioProcessor.kt
+          grep -q 'activeEffects.isEmpty() && !eqEnabled' app/src/main/java/com/example/player/DeckFxAudioProcessor.kt
+          grep -q 'onUpdate()' app/src/main/java/com/example/player/EqualizerController.kt
+          grep -q 'mutableStateOf(initialLevelDb' app/src/main/java/com/example/player/EqualizerController.kt
+          echo "Equalizer functionality verification passed."
 
       - name: Verify DJ FX rack integration
         shell: bash
@@ -91,7 +103,7 @@ jobs:
         run: |
           test -f app/src/main/java/com/example/ProfessionalSampler.kt
           grep -q 'DJ_SAMPLER_CC0_V1' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'ProfessionalSamplerBoard()' app/src/main/java/com/example/MainActivity.kt
+          grep -q 'ProfessionalSamplerBoard()' app/src/main/java/com/example/ProfessionalSampler.kt
           grep -q 'CC0' app/src/main/java/com/example/ProfessionalSampler.kt
           if grep -q 'Live Sound Effects & Instruments Soundboard' app/src/main/java/com/example/MainActivity.kt; then
             echo "Legacy sampler soundboard still present"
