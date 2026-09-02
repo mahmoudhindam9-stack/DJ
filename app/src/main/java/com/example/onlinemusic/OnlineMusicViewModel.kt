@@ -1,5 +1,7 @@
 package com.example.onlinemusic
 
+import android.content.ContentResolver
+import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -60,4 +62,7 @@ class OnlineMusicViewModel(private val repository: OnlineMusicRepository) : View
             isResolvingTrack = false
         }
     }
+
+    suspend fun downloadTrack(audioUrl: String, resolver: ContentResolver, destination: Uri): Long =
+        repository.downloadToUri(audioUrl, resolver, destination)
 }
