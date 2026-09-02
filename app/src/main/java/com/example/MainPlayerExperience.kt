@@ -1,4 +1,8 @@
 package com.example
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.core.content.ContextCompat
 
 import android.content.Context
 import android.content.Intent
@@ -98,6 +102,19 @@ fun PlayerScreenV2(
             }
             infoMessage = "Added ${songs.size} song(s) from folder"
         }
+    }
+
+    fun runDeviceScan() {
+        scope.launch {
+            val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }
+            addToLibrary(audioLibrary, songs, context)
+            infoMessage = "Scanned ${songs.size} device song(s)"
+        }
+    }
+
+    val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) runDeviceScan()
+        else infoMessage = "Storage permission denied; device music was not scanned"
     }
 
     fun runDeviceScan() {
