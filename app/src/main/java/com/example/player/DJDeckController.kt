@@ -276,7 +276,13 @@ class DJSoundPlayer(private val context: Context) {
 @OptIn(UnstableApi::class)
 class DJDeck(context: Context, val deckName: String) {
     val fxProcessor = DeckFxAudioProcessor()
+    val eqController = EqualizerController(context) { syncEq() }
     val effectStates = mutableStateMapOf<DJEffect, Boolean>()
+
+    private fun syncEq() {
+        val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
+        fxProcessor.setEqLevels(levels, eqController.isEnabled)
+    }
 
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
@@ -401,6 +407,7 @@ class DJDeck(context: Context, val deckName: String) {
 
 
     init {
+        syncEq()
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing

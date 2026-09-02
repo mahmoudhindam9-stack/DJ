@@ -47,12 +47,45 @@ class DeckFxAudioProcessor : AudioProcessor {
     @Volatile var amount = 0.65f
     @Volatile var beatDivision = 0.25f
 
+    private fun applyEq(sample: Float, ch: Int): Float {
+        var s = sample
+        if (needsEqUpdate) {
+            val freqs = floatArrayOf(60f, 170f, 310f, 600f, 1000f, 3000f, 6000f, 12000f, 14000f, 16000f)
+            for (c in 0 until channelCount) {
+                for (i in 0 until 10) {
+                    eqFilters[c][i].setPeakingEQ(freqs[i], eqLevels[i], 1.0f, sampleRate.toFloat())
+                }
+            }
+            needsEqUpdate = false
+        }
+        for (i in 0 until 10) {
+            s = eqFilters[ch][i].process(s)
+        }
+        return s
+    }
+
+    private fun applyLimiter(sample: Float): Float {
+        return sample.coerceIn(-1.0f, 1.0f)
+    }
+
     private var inputFormat = AudioProcessor.AudioFormat.NOT_SET
     private var buffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var outputBuffer: ByteBuffer = AudioProcessor.EMPTY_BUFFER
     private var inputEnded = false
     private var sampleRate = 44_100
     private var channelCount = 2
+
+    // EQ
+    private val eqFilters = Array(2) { Array(10) { BiquadFilter() } }
+    private var eqLevels = FloatArray(10)
+    @Volatile private var needsEqUpdate = true
+    @Volatile var eqEnabled = false
+
+    fun setEqLevels(levels: FloatArray, enabled: Boolean) {
+        eqLevels = levels
+        eqEnabled = enabled
+        needsEqUpdate = true
+    }
 
     // Delay lines & states
     private var maxDelayFrames = 44100
@@ -120,6 +153,15 @@ class DeckFxAudioProcessor : AudioProcessor {
         maxDelayFrames = sampleRate * 2 // 2 seconds
         delayLine = FloatArray(maxDelayFrames * channelCount)
         rollBuffer = FloatArray(maxDelayFrames * channelCount)
+        
+        // Initialize EQ filters
+        val freqs = floatArrayOf(60f, 170f, 310f, 600f, 1000f, 3000f, 6000f, 12000f, 14000f, 16000f)
+        for (ch in 0 until channelCount) {
+            for (i in 0 until 10) {
+                eqFilters[ch][i].setPeakingEQ(freqs[i], 0f, 1.0f, sampleRate.toFloat())
+            }
+        }
+        needsEqUpdate = true
         return inputAudioFormat
     }
 
@@ -173,7 +215,9 @@ class DeckFxAudioProcessor : AudioProcessor {
                 if (!inputBuffer.hasRemaining()) break
                 val inputShort = inputBuffer.short
                 var sample = inputShort.toFloat() / 32768.0f
-                val dry = sample
+                if (eqEnabled) {
+                    sample = applyEq(sample, ch)
+                }
 
                 // 1. Roll / Stutter / Beat Repeat (Buffer capture and repeat)
                 if (activeEffects.contains(Effect.ROLL) || activeEffects.contains(Effect.STUTTER) || activeEffects.contains(Effect.BEAT_REPEAT)) {
@@ -332,7 +376,7 @@ class DeckFxAudioProcessor : AudioProcessor {
                     sample *= decay
                 }
 
-                val outSample = sample.coerceIn(-1f, 1f)
+                val outSample = applyLimiter(sample)
 
                 // Save to delay line
                 val delayIdx = writeFrame * channelCount + ch
