@@ -153,3 +153,12 @@ jobs:
           test -n "$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
           echo "Release APK verification passed."
 
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJ-APK
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 7
