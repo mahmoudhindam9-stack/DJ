@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MAIN = ROOT / 'app/src/main/java/com/example/MainActivity.kt'
 PLAYER = ROOT / 'app/src/main/java/com/example/player/AudioPlayerController.kt'
 SERVICE = ROOT / 'app/src/main/java/com/example/player/MusicService.kt'
+PLAYER_UI = ROOT / 'app/src/main/java/com/example/MainPlayerExperience.kt'
 
 
 def replace_once(text: str, old: str, new: str, label: str) -> str:
@@ -24,11 +25,9 @@ def dedupe_player_guards(text: str) -> str:
 
 def remove_controls_navigation(text: str) -> str:
     block = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },\n                    label = { Text("Controls") },\n                    selected = currentDestination?.route == "controls",\n                    onClick = {\n                        navController.navigate("controls") {\n                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n                            launchSingleTop = true\n                            restoreState = true\n                        }\n                    }\n                )\n'''
-    if block in text:
-        text = text.replace(block, '', 1)
+    text = text.replace(block, '', 1)
     route = '''            composable("controls") {\n                NotificationControlScreen(context = context)\n            }\n'''
-    if route in text:
-        text = text.replace(route, '', 1)
+    text = text.replace(route, '', 1)
     return text
 
 
@@ -46,6 +45,19 @@ def normalize_main(text: str) -> str:
     if old_call in text:
         text = replace_once(text, old_call, new_call, 'player screen replacement')
     return remove_controls_navigation(text)
+
+
+def normalize_player_ui(text: str) -> str:
+    marker = '    val scanDevice = {\n'
+    start = text.find(marker)
+    if start == -1:
+        return text
+    end_marker = '\n\n    if (showNowPlaying && playerController.currentSong != null) {'
+    end = text.find(end_marker, start)
+    if end == -1:
+        raise SystemExit('device scan block: end marker not found')
+    replacement = '''    fun runDeviceScan() {\n        scope.launch {\n            val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }\n            addToLibrary(audioLibrary, songs, context)\n            infoMessage = "Scanned ${songs.size} device song(s)"\n        }\n    }\n\n    val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->\n        if (granted) runDeviceScan()\n        else infoMessage = "Storage permission denied; device music was not scanned"\n    }\n\n    val scanDevice = {\n        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {\n            Manifest.permission.READ_MEDIA_AUDIO\n        } else {\n            Manifest.permission.READ_EXTERNAL_STORAGE\n        }\n        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {\n            runDeviceScan()\n        } else {\n            scanPermissionLauncher.launch(permission)\n        }\n    }'''
+    return text[:start] + replacement + text[end:]
 
 
 def normalize_player(text: str) -> str:
@@ -72,9 +84,10 @@ def normalize_service(text: str) -> str:
 
 def main() -> None:
     MAIN.write_text(normalize_main(MAIN.read_text(encoding='utf-8')), encoding='utf-8')
+    PLAYER_UI.write_text(normalize_player_ui(PLAYER_UI.read_text(encoding='utf-8')), encoding='utf-8')
     PLAYER.write_text(normalize_player(PLAYER.read_text(encoding='utf-8')), encoding='utf-8')
     SERVICE.write_text(normalize_service(SERVICE.read_text(encoding='utf-8')), encoding='utf-8')
-    print('Player, playlist, queue and session ownership normalized')
+    print('Player, playlist, queue, device scan and session ownership normalized')
 
 
 if __name__ == '__main__':
