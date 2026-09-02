@@ -20,14 +20,11 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -64,23 +61,15 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
 
-    val saveDownloadLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.CreateDocument("audio/mpeg")
-    ) { uri: Uri? ->
+    val saveDownloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri: Uri? ->
         val pending = pendingDownload
         pendingDownload = null
         if (uri == null || pending == null) return@rememberLauncherForActivityResult
         scope.launch {
             message = "جاري تنزيل ${pending.title}..."
-            runCatching {
-                withContext(Dispatchers.IO) {
-                    viewModel.repository.downloadToUri(pending.audioUrl, context.contentResolver, uri)
-                }
-            }.onSuccess {
-                message = "تم تنزيل الأغنية بنجاح"
-            }.onFailure {
-                message = it.message ?: "فشل تنزيل الأغنية"
-            }
+            runCatching { withContext(Dispatchers.IO) { viewModel.downloadTrack(pending.audioUrl, context.contentResolver, uri) } }
+                .onSuccess { message = "تم تنزيل الأغنية بنجاح" }
+                .onFailure { message = it.message ?: "فشل تنزيل الأغنية" }
         }
     }
 
@@ -92,14 +81,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
             runCatching { viewModel.resolveTrack(link) }
                 .onSuccess { track ->
                     val audio = track.streamUrl ?: error("لا يوجد رابط صوت")
-                    val item = AudioItem(
-                        id = link.url,
-                        title = track.title,
-                        artist = track.artist.ifBlank { "ألبوماتي" },
-                        album = track.album ?: "Online Music",
-                        durationMs = 0L,
-                        uri = Uri.parse(audio)
-                    )
+                    val item = AudioItem(id = link.url, title = track.title, artist = track.artist.ifBlank { "ألبوماتي" }, album = track.album ?: "Online Music", durationMs = 0L, uri = Uri.parse(audio))
                     playerController.playSong(item, listOf(item))
                     message = "يتم تشغيل: ${track.title}"
                 }
@@ -120,15 +102,8 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
         }
     }
 
-    if (viewModel.section != null) {
-        OnlineSectionScreen(
-            section = viewModel.section!!,
-            isLoading = viewModel.isLoading,
-            message = message,
-            onBack = viewModel::closeSection,
-            onPlay = ::playLink,
-            onDownload = ::downloadLink
-        )
+    viewModel.section?.let { section ->
+        OnlineSectionScreen(section, viewModel.isLoading, message, viewModel::closeSection, ::playLink, ::downloadLink)
         return
     }
 
@@ -137,156 +112,78 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
     val songs = viewModel.home.songs.filter { it.title.contains(normalized, true) }
 
     Column(Modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
+        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp))
             Spacer(Modifier.size(8.dp))
             Text("ألبوماتي", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "تحديث") }
         }
-
-        OutlinedTextField(
-            value = query,
-            onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text("ابحث في ألبوماتي") }
-        )
+        OutlinedTextField(value = query, onValueChange = { query = it }, modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("ابحث في ألبوماتي") })
 
         if (viewModel.isLoading && viewModel.home.albums.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (viewModel.errorMessage != null && viewModel.home.albums.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(viewModel.errorMessage!!, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { viewModel.loadHome(true) }) { Text("إعادة المحاولة") }
-                }
-            }
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(viewModel.errorMessage!!, color = MaterialTheme.colorScheme.error); TextButton(onClick = { viewModel.loadHome(true) }) { Text("إعادة المحاولة") } } }
         } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(top = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 item {
                     OnlineSection("الأقسام") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(viewModel.home.categories) { link ->
-                                Card(Modifier.clickable { viewModel.openSection(link) }) {
-                                    Text(link.title, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1)
-                                }
-                            }
+                            items(viewModel.home.categories) { link -> Card(Modifier.clickable { viewModel.openSection(link) }) { Text(link.title, modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) } }
                         }
                     }
                 }
-                item {
-                    OnlineSection("جديد الألبومات") {
-                        LinkList(albums, onOpen = viewModel::openSection, onPlay = ::playLink, onDownload = ::downloadLink)
-                    }
-                }
-                item {
-                    OnlineSection("جديد الأغاني") {
-                        LinkList(songs, onOpen = ::playLink, onPlay = ::playLink, onDownload = ::downloadLink)
-                    }
-                }
-                item {
-                    OnlineSection("الفنانين") {
-                        LinkList(viewModel.home.artists, onOpen = viewModel::openSection, onPlay = ::playLink, onDownload = ::downloadLink)
-                    }
-                }
-                if (message != null) {
-                    item { Text(message!!, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) }
-                }
+                item { OnlineSection("جديد الألبومات") { LinkList(albums, viewModel::openSection, ::playLink, ::downloadLink) } }
+                item { OnlineSection("جديد الأغاني") { LinkList(songs, ::playLink, ::playLink, ::downloadLink) } }
+                item { OnlineSection("الفنانين") { LinkList(viewModel.home.artists, viewModel::openSection, ::playLink, ::downloadLink) } }
+                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
             }
         }
     }
 }
 
 @Composable
-private fun OnlineSectionScreen(
-    section: AlbumatySection,
-    isLoading: Boolean,
-    message: String?,
-    onBack: () -> Unit,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit
-) {
+private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, message: String?, onBack: () -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
             Text(section.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
             if (isLoading) CircularProgressIndicator(Modifier.size(22.dp))
         }
-        if (section.songs.isEmpty() && isLoading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        } else if (section.songs.isEmpty()) {
-            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Text("لا توجد أغاني متاحة في هذا القسم")
-            }
-        } else {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(7.dp)
-            ) {
-                items(section.songs) { song ->
-                    OnlineSongCard(song, onPlay, onDownload)
-                }
-                if (message != null) item { Text(message, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) }
-            }
+        if (section.songs.isEmpty() && isLoading) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        else if (section.songs.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة في هذا القسم") }
+        else LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(section.songs) { song -> OnlineSongCard(song, onPlay, onDownload) }
+            message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) } }
         }
     }
 }
 
 @Composable
-private fun LinkList(
-    links: List<AlbumatyLink>,
-    onOpen: (AlbumatyLink) -> Unit,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) {
-        links.take(24).forEach { link ->
-            OnlineSongCard(link, onPlay, onDownload, onOpen)
-        }
-    }
+private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { links.take(24).forEach { link -> OnlineSongCard(link, onPlay, onDownload, onOpen) } }
 }
 
 @Composable
-private fun OnlineSongCard(
-    link: AlbumatyLink,
-    onPlay: (AlbumatyLink) -> Unit,
-    onDownload: (AlbumatyLink) -> Unit,
-    onOpen: ((AlbumatyLink) -> Unit)? = null
-) {
+private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onOpen: ((AlbumatyLink) -> Unit)? = null) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) { Icon(Icons.Filled.MusicNote, null) }
+            Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }
             Spacer(Modifier.size(9.dp))
             Column(Modifier.weight(1f)) {
                 Text(link.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                if (onOpen != null) Text("اضغط لعرض المحتوى داخل التطبيق", style = MaterialTheme.typography.labelSmall)
+                if (onOpen != null) Text("اضغط فتح لعرض محتوى الصفحة داخل التطبيق", style = MaterialTheme.typography.labelSmall)
             }
             IconButton(onClick = { onPlay(link) }) { Icon(Icons.Filled.PlayArrow, "تشغيل") }
             IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }
-            if (onOpen != null) {
-                TextButton(onClick = { onOpen(link) }) { Text("فتح") }
-            }
+            if (onOpen != null) TextButton(onClick = { onOpen(link) }) { Text("فتح") }
         }
     }
 }
 
 @Composable
 private fun OnlineSection(title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
-        Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(6.dp))
-        content()
-    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); content() }
 }
 
 private data class PendingOnlineDownload(val title: String, val audioUrl: String)
