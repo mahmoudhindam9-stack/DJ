@@ -116,7 +116,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
                 item { OnlineSection("جديد الألبومات") { LinkList(albums, viewModel::openSection) } }
                 item { OnlineSection("جديد الأغاني") { SongList(songs, ::playSong, ::downloadSong) } }
                 item { OnlineSection("الفنانين") { LinkList(artists, viewModel::openSection, limit = null) } }
-                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(16.dp)) } }
+                message?.let { item { Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
             }
         }
     }
@@ -135,7 +135,7 @@ private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, me
             section.songs.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة في هذا القسم") }
             else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 items(section.songs) { song -> OnlineSongCard(song, onPlay, onDownload) }
-                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, Modifier.padding(10.dp)) } }
+                message?.let { item { Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) } }
             }
         }
     }
