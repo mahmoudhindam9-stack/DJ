@@ -34,3 +34,9 @@ data class AlbumatyHomeData(
     val songs: List<AlbumatyLink> = emptyList(),
     val artists: List<AlbumatyLink> = emptyList()
 )
+
+data class AlbumatySection(
+    val title: String,
+    val url: String,
+    val songs: List<AlbumatyLink> = emptyList()
+)
