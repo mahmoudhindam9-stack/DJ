@@ -160,7 +160,7 @@ private fun OnlineSectionScreen(
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(errorMessage, color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
                     Spacer(Modifier.height(8.dp))
-                    TextButton(onClick = { onOpen(section.copy(content = emptyList())) }) { Text("إعادة المحاولة") }
+                    TextButton(onClick = { onOpen(AlbumatyLink(section.title, section.url)) }) { Text("إعادة المحاولة") }
                 }
             }
             content.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا يوجد محتوى متاح في هذا القسم") }
