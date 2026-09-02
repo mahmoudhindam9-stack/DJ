@@ -175,7 +175,11 @@ class DeckFxAudioProcessor : AudioProcessor {
         val bytes = inputBuffer.remaining()
         if (bytes <= 0) return
 
-        if (activeEffects.isEmpty()) {
+        // EQUALIZER_FUNCTIONALITY_V1
+        // EQ is itself an audio effect. Never bypass the PCM processing path
+        // merely because no DJ FX button is active. Otherwise the equalizer
+        // has no audible effect during normal playback.
+        if (activeEffects.isEmpty() && !eqEnabled) {
             val output = replaceOutputBuffer(bytes)
             output.put(inputBuffer)
             output.flip()
