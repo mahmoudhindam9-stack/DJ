@@ -15,18 +15,20 @@ def replace_once(text: str, old: str, new: str, label: str) -> str:
 
 def dedupe_player_guards(text: str) -> str:
     guard = '''            val existingController = MusicService.instance?.playerController\n            if (existingController != null && existingController !== this) return\n'''
-    # Collapse any accidental repeated guard pairs created by earlier normalizers.
     text = re.sub(r'(?:' + re.escape(guard) + r'){2,}', guard, text)
-
     resume = '            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this\n'
     text = re.sub(r'(?:' + re.escape(resume) + r'){2,}', resume, text)
+    text = re.sub(r'            exoPlayer\.playWhenReady = savedPlaying(?: && canAutoResume)+\n', '            exoPlayer.playWhenReady = savedPlaying && canAutoResume\n', text, count=1)
+    return text
 
-    text = re.sub(
-        r'            exoPlayer\.playWhenReady = savedPlaying(?: && canAutoResume)+\n',
-        '            exoPlayer.playWhenReady = savedPlaying && canAutoResume\n',
-        text,
-        count=1,
-    )
+
+def remove_controls_navigation(text: str) -> str:
+    block = '''                NavigationBarItem(\n                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },\n                    label = { Text("Controls") },\n                    selected = currentDestination?.route == "controls",\n                    onClick = {\n                        navController.navigate("controls") {\n                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n                            launchSingleTop = true\n                            restoreState = true\n                        }\n                    }\n                )\n'''
+    if block in text:
+        text = text.replace(block, '', 1)
+    route = '''            composable("controls") {\n                NotificationControlScreen(context = context)\n            }\n'''
+    if route in text:
+        text = text.replace(route, '', 1)
     return text
 
 
@@ -43,26 +45,22 @@ def normalize_main(text: str) -> str:
     new_call = '''                PlayerScreenV2(\n                    playerController = playerController,\n                    audioLibrary = audioLibrary,\n                    playlists = playlists,\n                    onPauseDJ = { djMixerController.pauseAll() },\n                    navController = navController\n                )'''
     if old_call in text:
         text = replace_once(text, old_call, new_call, 'player screen replacement')
-    return text
+    return remove_controls_navigation(text)
 
 
 def normalize_player(text: str) -> str:
     text = dedupe_player_guards(text)
-
     companion_start = '    companion object {\n'
     obtain_block = '''        @JvmStatic\n        fun obtain(context: Context): AudioPlayerController {\n            return activeInstance\n                ?: MusicService.instance?.playerController\n                ?: AudioPlayerController(context.applicationContext)\n        }\n\n'''
     if 'fun obtain(context: Context): AudioPlayerController' not in text:
         text = replace_once(text, companion_start, companion_start + obtain_block, 'player companion helper')
-
     if 'val canAutoResume' not in text:
         old_restore = '            exoPlayer.playWhenReady = savedPlaying\n'
         if old_restore in text:
             text = replace_once(text, old_restore, '''            val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this\n            exoPlayer.playWhenReady = savedPlaying && canAutoResume\n''', 'session resume guard')
-
     old_sync = '''            val serviceIntent = Intent(context, MusicService::class.java)\n            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {\n                context.startForegroundService(serviceIntent)\n            } else {\n                context.startService(serviceIntent)\n            }\n            MusicService.instance?.playerController = this'''
     if old_sync in text and 'val existingController = MusicService.instance?.playerController' not in text:
         text = replace_once(text, old_sync, '''            val existingController = MusicService.instance?.playerController\n            if (existingController != null && existingController !== this) return\n            val serviceIntent = Intent(context, MusicService::class.java)\n            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {\n                context.startForegroundService(serviceIntent)\n            } else {\n                context.startService(serviceIntent)\n            }\n            MusicService.instance?.playerController = this''', 'service ownership guard')
-
     return dedupe_player_guards(text)
 
 
