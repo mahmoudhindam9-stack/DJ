@@ -193,18 +193,6 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.NotificationsActive, contentDescription = "Controls") },
-                    label = { Text("Controls") },
-                    selected = currentDestination?.route == "controls",
-                    onClick = {
-                        navController.navigate("controls") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
                     label = { Text("Mic") },
                     selected = currentDestination?.route == "mic",
@@ -260,9 +248,6 @@ fun MainApp() {
             }
             composable("studio") {
                 MusicStudioScreen(musicStudioController)
-            }
-            composable("controls") {
-                NotificationControlScreen(context = context)
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })

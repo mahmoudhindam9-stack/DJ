@@ -100,11 +100,29 @@ fun PlayerScreenV2(
         }
     }
 
-    val scanDevice = {
+    fun runDeviceScan() {
         scope.launch {
             val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }
             addToLibrary(audioLibrary, songs, context)
             infoMessage = "Scanned ${songs.size} device song(s)"
+        }
+    }
+
+    val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) runDeviceScan()
+        else infoMessage = "Storage permission denied; device music was not scanned"
+    }
+
+    val scanDevice = {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+        if (ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED) {
+            runDeviceScan()
+        } else {
+            scanPermissionLauncher.launch(permission)
         }
     }
 
