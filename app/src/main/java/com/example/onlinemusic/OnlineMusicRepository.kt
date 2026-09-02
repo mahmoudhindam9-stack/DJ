@@ -32,8 +32,14 @@ class OnlineMusicRepository {
 
     suspend fun getSection(link: AlbumatyLink): AlbumatySection = withContext(Dispatchers.IO) {
         val html = getHtml(link.url)
-        val content = parseLinks(html)
-            .filter { it.isSong() || it.isAlbum() || it.isArtist() || it.isCategory() }
+        val links = parseLinks(html)
+        val content = when (pageType(link.url)) {
+            "album" -> links.filter { it.isSong() || it.isAlbum() || it.isArtist() }
+            "singer", "artist" -> links.filter { it.isAlbum() || it.isSong() }
+            "lastalbums" -> links.filter { it.isAlbum() }
+            "cat", "category" -> links.filter { it.isAlbum() || it.isSong() || it.isArtist() }
+            else -> links.filter { it.isSong() || it.isAlbum() || it.isArtist() }
+        }
             .filterNot { it.url.trimEnd('/') == link.url.trimEnd('/') }
             .distinctBy { it.url }
             .take(500)
@@ -137,10 +143,11 @@ class OnlineMusicRepository {
     private fun isAlbumatyUrl(url: String): Boolean = try { java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com" } catch (_: Exception) { false }
 
     private fun path(url: String): String = try { java.net.URI(url).path.orEmpty().trim('/').lowercase() } catch (_: Exception) { "" }
-    private fun AlbumatyLink.isSong(): Boolean = path(url).split('/').any { it == "song" || it.startsWith("song") }
-    private fun AlbumatyLink.isAlbum(): Boolean = path(url).split('/').any { it == "album" || it.startsWith("album") }
-    private fun AlbumatyLink.isArtist(): Boolean = path(url).split('/').any { it == "singer" || it.startsWith("singer") || it == "artist" || it.startsWith("artist") }
-    private fun AlbumatyLink.isCategory(): Boolean = path(url).split('/').any { it == "cat" || it.startsWith("cat") || it == "category" || it.startsWith("category") }
+    private fun pageType(url: String): String = path(url).split('/').firstOrNull().orEmpty()
+    private fun AlbumatyLink.isSong(): Boolean = pageType(url) == "song"
+    private fun AlbumatyLink.isAlbum(): Boolean = pageType(url) == "album"
+    private fun AlbumatyLink.isArtist(): Boolean = pageType(url) == "singer" || pageType(url) == "artist"
+    private fun AlbumatyLink.isCategory(): Boolean = pageType(url) == "cat" || pageType(url) == "category"
 
     private fun stripHtml(value: String): String = value
         .replace(Regex("<script.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
