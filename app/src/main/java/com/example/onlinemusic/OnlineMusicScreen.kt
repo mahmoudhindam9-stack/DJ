@@ -75,8 +75,21 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
         }
     }
 
+    fun activateLink(link: AlbumatyLink) {
+        if (link.isSong()) playSong(link) else viewModel.openSection(link)
+    }
+
     viewModel.section?.let { section ->
-        OnlineSectionScreen(section, viewModel.isLoading, message, viewModel::closeSection, viewModel::openSection, ::playSong, ::downloadSong)
+        OnlineSectionScreen(
+            section = section,
+            isLoading = viewModel.isLoading,
+            errorMessage = viewModel.errorMessage,
+            message = message,
+            onBack = viewModel::closeSection,
+            onOpen = ::activateLink,
+            onPlay = ::playSong,
+            onDownload = ::downloadSong
+        )
         return
     }
 
@@ -109,14 +122,14 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
                     OnlineSection("الأقسام") {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             items(viewModel.home.categories) { link ->
-                                Card(Modifier.clickable { viewModel.openSection(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) }
+                                Card(Modifier.clickable { activateLink(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) }
                             }
                         }
                     }
                 }
-                item { OnlineSection("جديد الألبومات") { LinkList(albums, viewModel::openSection) } }
+                item { OnlineSection("جديد الألبومات") { LinkList(albums, ::activateLink) } }
                 item { OnlineSection("جديد الأغاني") { SongList(songs, ::playSong, ::downloadSong) } }
-                item { OnlineSection("الفنانين") { LinkList(artists, viewModel::openSection, limit = null) } }
+                item { OnlineSection("الفنانين") { LinkList(artists, ::activateLink, limit = null) } }
                 message?.let { item { Text(text = it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
             }
         }
@@ -127,6 +140,7 @@ fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
 private fun OnlineSectionScreen(
     section: AlbumatySection,
     isLoading: Boolean,
+    errorMessage: String?,
     message: String?,
     onBack: () -> Unit,
     onOpen: (AlbumatyLink) -> Unit,
@@ -142,6 +156,13 @@ private fun OnlineSectionScreen(
         val content = section.content
         when {
             content.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            content.isEmpty() && errorMessage != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(errorMessage, color = MaterialTheme.colorScheme.error, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(8.dp))
+                    TextButton(onClick = { onOpen(AlbumatyLink(section.title, section.url)) }) { Text("إعادة المحاولة") }
+                }
+            }
             content.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا يوجد محتوى متاح في هذا القسم") }
             else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                 items(content, key = { it.url }) { link ->
