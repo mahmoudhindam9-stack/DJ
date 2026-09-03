@@ -57,7 +57,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     Text("Independent digital make-up gain before the soft limiter", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Slider(
                         value = eqController.preampDb,
-                        onValueChange = eqController::updatePreampDb,
+                        onValueChange = eqController::setPreampDb,
                         valueRange = 0f..12f,
                         steps = 23
                     )
