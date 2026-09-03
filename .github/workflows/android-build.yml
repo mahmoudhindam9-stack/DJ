@@ -24,7 +24,7 @@ jobs:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Apply DJ page layout polish
+      - name: Apply DJ page layout polish and build compatibility fix
         shell: bash
         run: |
           python3 - <<'PY'
@@ -38,6 +38,11 @@ jobs:
                   raise SystemExit("DJ layout marker not found")
               s = s.replace(marker, insert + marker, 1)
               p.write_text(s, encoding="utf-8")
+
+          eq = Path("app/src/main/java/com/example/player/EqualizerScreen.kt")
+          es = eq.read_text(encoding="utf-8")
+          es = es.replace("eqController::setPreampDb", "eqController::updatePreampDb")
+          eq.write_text(es, encoding="utf-8")
           PY
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
