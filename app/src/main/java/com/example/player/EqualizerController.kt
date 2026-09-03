@@ -99,7 +99,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         updateBandLevel(9, (-6 + trebleBoostLevel * 12f).toInt())
     }
 
-    fun setPreampDb(value: Float) {
+    // Named updatePreampDb to avoid the JVM setter clash with the preampDb property.
+    fun updatePreampDb(value: Float) {
         preampDb = value.coerceIn(0f, 12f)
         persistState()
         broadcastState()
