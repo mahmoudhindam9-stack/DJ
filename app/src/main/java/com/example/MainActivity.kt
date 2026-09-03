@@ -48,6 +48,8 @@ import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
 import com.example.model.AudioItem
 import com.example.model.Playlist
+import com.example.onlinemusic.OnlineDjBridge
+import com.example.onlinemusic.OnlineDeckTarget
 import com.example.player.*
 import com.example.studio.MusicStudioController
 import com.example.studio.MusicStudioScreen
@@ -79,6 +81,14 @@ fun MainApp() {
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
     val musicStudioController = remember { MusicStudioController(context) }
+
+    LaunchedEffect(OnlineDjBridge.request?.id) {
+        val request = OnlineDjBridge.request ?: return@LaunchedEffect
+        playerController.pause()
+        when(request.deck){ OnlineDeckTarget.A -> djMixerController.deckA.loadTrack(request.song); OnlineDeckTarget.B -> djMixerController.deckB.loadTrack(request.song) }
+        navController.navigate("dj"){ popUpTo(navController.graph.findStartDestination().id){saveState=true}; launchSingleTop=true; restoreState=true }
+        OnlineDjBridge.clear()
+    }
 
     // Master Library and Playlists State & Room DB Repository
     val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }
@@ -255,7 +265,7 @@ fun MainApp() {
             composable("online_music") {
                 val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }
                 val vm = remember { com.example.onlinemusic.OnlineMusicViewModel(repo) }
-                com.example.onlinemusic.OnlineMusicScreen(vm)
+                com.example.onlinemusic.OnlineMusicScreen(vm, playerController)
             }
         }
     }

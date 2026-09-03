@@ -1,0 +1,160 @@
+name: Repair Online shared player queue and DJ deck routing
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Apply shared player, queue and deck routing
+        shell: python
+        run: |
+          from pathlib import Path
+
+          online = Path('app/src/main/java/com/example/onlinemusic/OnlineMusicScreen.kt')
+          text = online.read_text(encoding='utf-8')
+          original = text
+
+          text = text.replace(
+              'import androidx.compose.material.icons.filled.MusicNote\n',
+              'import androidx.compose.material.icons.filled.MusicNote\nimport androidx.compose.material.icons.filled.Headset\nimport androidx.compose.material.icons.automirrored.filled.PlaylistAdd\n'
+          )
+
+          text = text.replace(
+              'fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {\n    val context = LocalContext.current\n    val playerController = remember { AudioPlayerController.obtain(context) }',
+              'fun OnlineMusicScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController) {\n    val context = LocalContext.current'
+          )
+
+          text = text.replace(
+              '        OnlineSectionScreen(section, viewModel.isLoading, viewModel.errorMessage, message, viewModel::closeSection, ::activate, ::playSong, ::downloadSong, playerController)',
+              '        OnlineSectionScreen(section, viewModel.isLoading, viewModel.errorMessage, message, viewModel::closeSection, ::activate, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)'
+          )
+
+          # Arabic/Albumaty queue + DJ deck actions.
+          marker = '''    fun downloadSong(link: AlbumatyLink) {\n        scope.launch {\n            message = "جاري تجهيز رابط التنزيل..."\n            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->\n                val audio = track.downloadUrl ?: track.streamUrl ?: error("لا يوجد رابط تنزيل")\n                pendingDownload = PendingOnlineDownload(track.title, audio); saveDownloadLauncher.launch(suggestedFileName(track.title))\n            }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }\n        }\n    }\n'''
+          addition = marker + '''    fun queueSong(link: AlbumatyLink) {\n        scope.launch {\n            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->\n                val audio = track.streamUrl ?: error("لا يوجد رابط صوت")\n                val item = AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio))\n                playerController.enqueueOnlineSong(item)\n                message = "تمت إضافة ${track.title} إلى قائمة التشغيل"\n            }.onFailure { message = it.message ?: "تعذر إضافة الأغنية إلى قائمة التشغيل" }\n        }\n    }\n\n    fun sendToDeck(link: AlbumatyLink, deck: OnlineDeckTarget) {\n        scope.launch {\n            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->\n                val audio = track.streamUrl ?: error("لا يوجد رابط صوت")\n                val item = AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio))\n                OnlineDjBridge.send(item, deck)\n                message = "تم إرسال ${track.title} إلى Deck ${deck.name}"\n            }.onFailure { message = it.message ?: "تعذر إرسال الأغنية إلى الـDJ" }\n        }\n    }\n'''
+          if marker not in text:
+              raise SystemExit('Arabic action insertion marker not found')
+          text = text.replace(marker, addition, 1)
+
+          # Foreign/Audius queue + DJ deck actions.
+          marker = '''    fun downloadSong(track: AudiusTrack) {\n        scope.launch {\n            message = "جاري تجهيز رابط التنزيل..."\n            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->\n                val audio = resolved.downloadUrl ?: resolved.streamUrl ?: error("هذه الأغنية لا تسمح بالتنزيل")\n                pendingDownload = PendingOnlineDownload(resolved.title, audio); saveDownloadLauncher.launch(suggestedFileName(resolved.title))\n            }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }\n        }\n    }\n'''
+          addition = marker + '''    fun queueSong(track: AudiusTrack) {\n        scope.launch {\n            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->\n                val audio = resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل")\n                val item = AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio))\n                playerController.enqueueOnlineSong(item)\n                message = "تمت إضافة ${resolved.title} إلى قائمة التشغيل"\n            }.onFailure { message = it.message ?: "تعذر إضافة الأغنية إلى قائمة التشغيل" }\n        }\n    }\n\n    fun sendToDeck(track: AudiusTrack, deck: OnlineDeckTarget) {\n        scope.launch {\n            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->\n                val audio = resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل")\n                val item = AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio))\n                OnlineDjBridge.send(item, deck)\n                message = "تم إرسال ${resolved.title} إلى Deck ${deck.name}"\n            }.onFailure { message = it.message ?: "تعذر إرسال الأغنية إلى الـDJ" }\n        }\n    }\n'''
+          if marker not in text:
+              raise SystemExit('Audius action insertion marker not found')
+          text = text.replace(marker, addition, 1)
+
+          # Audius detail/list/card callbacks.
+          text = text.replace(
+              'viewModel::closeAudiusDetail, ::playSong, ::downloadSong, playerController',
+              'viewModel::closeAudiusDetail, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController'
+          )
+          text = text.replace(
+              'AudiusSongList(trending, ::playSong, ::downloadSong, playerController)',
+              'AudiusSongList(trending, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)'
+          )
+          text = text.replace(
+              'AudiusSongList(latest, ::playSong, ::downloadSong, playerController)',
+              'AudiusSongList(latest, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)'
+          )
+
+          text = text.replace(
+              'private fun AudiusDetailScreen(title: String, subtitle: String, tracks: List<AudiusTrack>, isLoading: Boolean, errorMessage: String?, onBack: () -> Unit, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController)',
+              'private fun AudiusDetailScreen(title: String, subtitle: String, tracks: List<AudiusTrack>, isLoading: Boolean, errorMessage: String?, onBack: () -> Unit, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          text = text.replace(
+              'AudiusSongCard(it, onPlay, onDownload, playerController)',
+              'AudiusSongCard(it, onPlay, onDownload, onQueue, onDeck, playerController)'
+          )
+          text = text.replace(
+              'private fun AudiusSongList(tracks: List<AudiusTrack>, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController)',
+              'private fun AudiusSongList(tracks: List<AudiusTrack>, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          text = text.replace(
+              'private fun AudiusSongCard(track: AudiusTrack, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController)',
+              'private fun AudiusSongCard(track: AudiusTrack, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          old = 'IconButton(onClick = { onPlay(track) }, enabled = track.streamable) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onDownload(track) }) { Icon(Icons.Filled.Download, "تنزيل") }'
+          new = 'IconButton(onClick = { onPlay(track) }, enabled = track.streamable) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onQueue(track) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "إضافة إلى قائمة التشغيل") }; OnlineDeckButton { onDeck(track, it) }; IconButton(onClick = { onDownload(track) }) { Icon(Icons.Filled.Download, "تنزيل") }'
+          if old not in text:
+              raise SystemExit('Audius card action row not found')
+          text = text.replace(old, new, 1)
+
+          # Arabic section screen/list/card callbacks.
+          text = text.replace(
+              'private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, errorMessage: String?, message: String?, onBack: () -> Unit, onOpen: (AlbumatyLink) -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController)',
+              'private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, errorMessage: String?, message: String?, onBack: () -> Unit, onOpen: (AlbumatyLink) -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          text = text.replace(
+              'OnlineSongCard(link, onPlay, onDownload, playerController)',
+              'OnlineSongCard(link, onPlay, onDownload, onQueue, onDeck, playerController)'
+          )
+          text = text.replace(
+              'private fun SongList(links: List<AlbumatyLink>, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController)',
+              'private fun SongList(links: List<AlbumatyLink>, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          text = text.replace(
+              'SongList(songs, ::playSong, ::downloadSong, playerController)',
+              'SongList(songs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)'
+          )
+          text = text.replace(
+              'private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController)',
+              'private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController)'
+          )
+          old = 'IconButton(onClick = { onPlay(link) }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }'
+          new = 'IconButton(onClick = { onPlay(link) }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onQueue(link) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "إضافة إلى قائمة التشغيل") }; OnlineDeckButton { onDeck(link, it) }; IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") }'
+          if old not in text:
+              raise SystemExit('Arabic card action row not found')
+          text = text.replace(old, new, 1)
+
+          # Add the A/B picker at the end, before the helper data class.
+          marker = 'private data class PendingOnlineDownload(val title: String, val audioUrl: String)'
+          helper = '''enum class OnlineDeckTarget(val name: String) { A("A"), B("B") }\n\n@Composable\nprivate fun OnlineDeckButton(onSelected: (OnlineDeckTarget) -> Unit) {\n    var showPicker by remember { mutableStateOf(false) }\n    IconButton(onClick = { showPicker = true }) {\n        Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck")\n    }\n    if (showPicker) {\n        AlertDialog(\n            onDismissRequest = { showPicker = false },\n            title = { Text("إرسال الأغنية إلى أي Deck؟") },\n            text = { Text("اختر A أو B لتجهيز الأغنية في مشغل الـDJ المناسب.") },\n            confirmButton = {\n                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {\n                    TextButton(onClick = { showPicker = false; onSelected(OnlineDeckTarget.A) }) { Text("A") }\n                    TextButton(onClick = { showPicker = false; onSelected(OnlineDeckTarget.B) }) { Text("B") }\n                }\n            }\n        )\n    }\n}\n\n'''
+          if marker not in text:
+              raise SystemExit('Bottom helper marker not found')
+          text = text.replace(marker, helper + marker, 1)
+
+          if text == original:
+              raise SystemExit('OnlineMusicScreen was not changed')
+          online.write_text(text, encoding='utf-8')
+
+          bridge = Path('app/src/main/java/com/example/onlinemusic/OnlineDjBridge.kt')
+          bridge.write_text('''package com.example.onlinemusic\n\nimport androidx.compose.runtime.getValue\nimport androidx.compose.runtime.mutableStateOf\nimport androidx.compose.runtime.setValue\nimport com.example.model.AudioItem\n\ndata class OnlineDjRequest(val id: Long, val song: AudioItem, val deck: OnlineDeckTarget)\n\nobject OnlineDjBridge {\n    private var nextId = 0L\n    var request by mutableStateOf<OnlineDjRequest?>(null)\n        private set\n\n    fun send(song: AudioItem, deck: OnlineDeckTarget) {\n        nextId += 1L\n        request = OnlineDjRequest(nextId, song, deck)\n    }\n\n    fun clear() {\n        request = null\n    }\n}\n''', encoding='utf-8')
+
+          router = Path('app/src/main/java/com/example/onlinemusic/OnlinePlayerRouting.kt')
+          router.write_text('''package com.example.onlinemusic\n\nimport androidx.media3.common.MediaItem\nimport com.example.model.AudioItem\nimport com.example.player.AudioPlayerController\n\nfun AudioPlayerController.enqueueOnlineSong(song: AudioItem) {\n    if (playlist.any { it.id == song.id }) return\n    playlist.add(song)\n    exoPlayer.addMediaItem(MediaItem.fromUri(song.uri))\n}\n''', encoding='utf-8')
+
+          main = Path('app/src/main/java/com/example/MainActivity.kt')
+          main_text = main.read_text(encoding='utf-8')
+          main_text = main_text.replace(
+              'import com.example.model.Playlist\n',
+              'import com.example.model.Playlist\nimport com.example.onlinemusic.OnlineDjBridge\nimport com.example.onlinemusic.OnlineDeckTarget\n'
+          )
+          main_text = main_text.replace(
+              '    val musicStudioController = remember { MusicStudioController(context) }\n',
+              '    val musicStudioController = remember { MusicStudioController(context) }\n\n    LaunchedEffect(OnlineDjBridge.request?.id) {\n        val request = OnlineDjBridge.request ?: return@LaunchedEffect\n        playerController.pause()\n        when (request.deck) {\n            OnlineDeckTarget.A -> djMixerController.deckA.loadTrack(request.song)\n            OnlineDeckTarget.B -> djMixerController.deckB.loadTrack(request.song)\n        }\n        navController.navigate("dj") {\n            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n            launchSingleTop = true\n            restoreState = true\n        }\n        OnlineDjBridge.clear()\n    }\n'
+          )
+          main_text = main_text.replace(
+              'com.example.onlinemusic.OnlineMusicScreen(vm)',
+              'com.example.onlinemusic.OnlineMusicScreen(vm, playerController)'
+          )
+          main.write_text(main_text, encoding='utf-8')
+
+      - name: Persist source changes
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java/com/example/onlinemusic app/src/main/java/com/example/MainActivity.kt
+          git diff --cached --quiet && exit 0
+          git commit -m "Use shared player for Online queue and DJ deck routing"
+          git push origin HEAD:main

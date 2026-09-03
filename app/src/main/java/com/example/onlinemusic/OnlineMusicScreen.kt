@@ -14,6 +14,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Headset
+import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
@@ -32,9 +34,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun OnlineMusicScreen(viewModel: OnlineMusicViewModel) {
+fun OnlineMusicScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController) {
     val context = LocalContext.current
-    val playerController = remember { AudioPlayerController.obtain(context) }
     val scope = rememberCoroutineScope()
     var foreign by rememberSaveable { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
@@ -79,9 +80,11 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
         }
     }
+    fun queueSong(link: AlbumatyLink) { scope.launch { runCatching { viewModel.resolveTrack(link) }.onSuccess { track -> val audio=track.streamUrl ?: error("لا يوجد رابط صوت"); playerController.enqueueOnlineSong(AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio))); message="تمت إضافة ${track.title} إلى قائمة التشغيل" }.onFailure { message=it.message ?: "تعذر إضافة الأغنية إلى قائمة التشغيل" } } }
+    fun sendToDeck(link: AlbumatyLink, deck: OnlineDeckTarget) { scope.launch { runCatching { viewModel.resolveTrack(link) }.onSuccess { track -> val audio=track.streamUrl ?: error("لا يوجد رابط صوت"); OnlineDjBridge.send(AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio)), deck); message="تم إرسال ${track.title} إلى Deck ${deck.name}" }.onFailure { message=it.message ?: "تعذر إرسال الأغنية إلى الـDJ" } } }
     fun activate(link: AlbumatyLink) { if (link.isSong()) playSong(link) else viewModel.openSection(link) }
     viewModel.section?.let { section ->
-        OnlineSectionScreen(section, viewModel.isLoading, viewModel.errorMessage, message, viewModel::closeSection, ::activate, ::playSong, ::downloadSong, playerController)
+        OnlineSectionScreen(section, viewModel.isLoading, viewModel.errorMessage, message, viewModel::closeSection, ::activate, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)
         return
     }
     val normalized = query.trim()
@@ -98,7 +101,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
         else LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             item { OnlineSection("الأقسام") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(viewModel.home.categories) { link -> Card(Modifier.clickable { activate(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) } } } } }
             item { OnlineSection("جديد الألبومات") { LinkList(albums, ::activate, playerController) } }
-            item { OnlineSection("جديد الأغاني") { SongList(songs, ::playSong, ::downloadSong, playerController) } }
+            item { OnlineSection("جديد الأغاني") { SongList(songs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
             item { OnlineSection("الفنانين") { LinkList(artists, ::activate, playerController, null) } }
             message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
         }
@@ -138,8 +141,10 @@ private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController
             }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
         }
     }
-    viewModel.audiusArtistDetail?.let { detail -> AudiusDetailScreen(detail.artist.name, "Artist", detail.tracks, viewModel.isLoading, viewModel.errorMessage, viewModel::closeAudiusDetail, ::playSong, ::downloadSong, playerController); return }
-    viewModel.audiusGenreDetail?.let { (genre, tracks) -> AudiusDetailScreen(genre, "Genre", tracks, viewModel.isLoading, viewModel.errorMessage, viewModel::closeAudiusDetail, ::playSong, ::downloadSong, playerController); return }
+    fun queueSong(track: AudiusTrack) { scope.launch { runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved -> val audio=resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل"); playerController.enqueueOnlineSong(AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio))); message="تمت إضافة ${resolved.title} إلى قائمة التشغيل" }.onFailure { message=it.message ?: "تعذر إضافة الأغنية إلى قائمة التشغيل" } } }
+    fun sendToDeck(track: AudiusTrack, deck: OnlineDeckTarget) { scope.launch { runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved -> val audio=resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل"); OnlineDjBridge.send(AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio)), deck); message="تم إرسال ${resolved.title} إلى Deck ${deck.name}" }.onFailure { message=it.message ?: "تعذر إرسال الأغنية إلى الـDJ" } } }
+    viewModel.audiusArtistDetail?.let { detail -> AudiusDetailScreen(detail.artist.name, "Artist", detail.tracks, viewModel.isLoading, viewModel.errorMessage, viewModel::closeAudiusDetail, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController); return }
+    viewModel.audiusGenreDetail?.let { (genre, tracks) -> AudiusDetailScreen(genre, "Genre", tracks, viewModel.isLoading, viewModel.errorMessage, viewModel::closeAudiusDetail, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController); return }
     val searchResults = viewModel.audiusSearchResults
     val latest = if (query.isBlank()) viewModel.audiusHome.latest else searchResults
     val trending = if (query.isBlank()) viewModel.audiusHome.trending else searchResults
@@ -153,39 +158,41 @@ private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController
             if (query.isBlank()) {
                 item { OnlineSection("الأنواع") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(viewModel.audiusHome.genres) { genre -> Card(Modifier.clickable { viewModel.openAudiusGenre(genre) }) { Text(genre, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) } } } } }
                 item { OnlineSection("الفنانين") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(viewModel.audiusHome.artists) { artist -> Card(Modifier.width(170.dp).clickable { viewModel.openAudiusArtist(artist) }) { Column(Modifier.padding(12.dp)) { Icon(Icons.Filled.MusicNote, null, Modifier.size(30.dp)); Spacer(Modifier.height(6.dp)); Text(artist.name, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold) } } } } } }
-                item { OnlineSection("الأكثر رواجًا") { AudiusSongList(trending, ::playSong, ::downloadSong, playerController) } }
+                item { OnlineSection("الأكثر رواجًا") { AudiusSongList(trending, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
             }
-            item { OnlineSection(if (query.isBlank()) "أحدث الأغاني" else "نتائج البحث") { AudiusSongList(latest, ::playSong, ::downloadSong, playerController) } }
+            item { OnlineSection(if (query.isBlank()) "أحدث الأغاني" else "نتائج البحث") { AudiusSongList(latest, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
             message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
         }
     }
 }
 
 @Composable
-private fun AudiusDetailScreen(title: String, subtitle: String, tracks: List<AudiusTrack>, isLoading: Boolean, errorMessage: String?, onBack: () -> Unit, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController) {
+private fun AudiusDetailScreen(title: String, subtitle: String, tracks: List<AudiusTrack>, isLoading: Boolean, errorMessage: String?, onBack: () -> Unit, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) {
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }; Column(Modifier.weight(1f)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(subtitle, style = MaterialTheme.typography.bodySmall) }; if (isLoading) CircularProgressIndicator(Modifier.size(22.dp)) }
-        when { tracks.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; tracks.isEmpty() && errorMessage != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(errorMessage, color = MaterialTheme.colorScheme.error) }; tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة") }; else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { items(tracks, key = { it.id }) { AudiusSongCard(it, onPlay, onDownload, playerController) } } }
+        when { tracks.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; tracks.isEmpty() && errorMessage != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(errorMessage, color = MaterialTheme.colorScheme.error) }; tracks.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا توجد أغاني متاحة") }; else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { items(tracks, key = { it.id }) { AudiusSongCard(it, onPlay, onDownload, onQueue, onDeck, playerController) } } }
     }
 }
 
-@Composable private fun AudiusSongList(tracks: List<AudiusTrack>, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController) { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { tracks.take(50).forEach { AudiusSongCard(it, onPlay, onDownload, playerController) } } }
+@Composable private fun AudiusSongList(tracks: List<AudiusTrack>, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { tracks.take(50).forEach { AudiusSongCard(it, onPlay, onDownload, onQueue, onDeck, playerController) } } }
 
-@Composable private fun AudiusSongCard(track: AudiusTrack, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, playerController: AudioPlayerController) {
+@Composable private fun AudiusSongCard(track: AudiusTrack, onPlay: (AudiusTrack) -> Unit, onDownload: (AudiusTrack) -> Unit, onQueue: (AudiusTrack) -> Unit, onDeck: (AudiusTrack, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) {
     val active = playerController.currentSong?.id == "audius:${track.id}"; val playing = active && playerController.isPlaying
-    Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }; Spacer(Modifier.size(9.dp)); Column(Modifier.weight(1f)) { Text(track.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) }; IconButton(onClick = { onPlay(track) }, enabled = track.streamable) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onDownload(track) }) { Icon(Icons.Filled.Download, "تنزيل") } } }
+    Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }; Spacer(Modifier.size(9.dp)); Column(Modifier.weight(1f)) { Text(track.title, maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall) }; IconButton(onClick = { onPlay(track) }, enabled = track.streamable) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onQueue(track) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "إضافة إلى قائمة التشغيل") }; OnlineDeckButton { onDeck(track, it) }; IconButton(onClick = { onDownload(track) }) { Icon(Icons.Filled.Download, "تنزيل") } } }
 }
 
 @Composable
-private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, errorMessage: String?, message: String?, onBack: () -> Unit, onOpen: (AlbumatyLink) -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController) {
+private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, errorMessage: String?, message: String?, onBack: () -> Unit, onOpen: (AlbumatyLink) -> Unit, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) {
     Column(Modifier.fillMaxSize()) { Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }; Text(section.title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); if (isLoading) CircularProgressIndicator(Modifier.size(22.dp)) }; val content = section.content; when { content.isEmpty() && isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }; content.isEmpty() && errorMessage != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(errorMessage, color = MaterialTheme.colorScheme.error) }; content.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text("لا يوجد محتوى متاح في هذا القسم") }; else -> LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) { items(content, key = { it.url }) { link -> if (link.isSong()) OnlineSongCard(link, onPlay, onDownload, playerController) else SectionLinkCard(link, onOpen) }; message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(10.dp)) } } } } }
 }
 
 @Composable private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) { Card(Modifier.fillMaxWidth().clickable { onOpen(link) }) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Folder, null) }; Spacer(Modifier.size(9.dp)); Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); TextButton(onClick = { onOpen(link) }) { Text("فتح") } } } }
 @Composable private fun LinkList(links: List<AlbumatyLink>, onOpen: (AlbumatyLink) -> Unit, playerController: AudioPlayerController, limit: Int? = 24) { val visible = if (limit == null) links else links.take(limit); Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { visible.forEach { SectionLinkCard(it, onOpen) } } }
-@Composable private fun SongList(links: List<AlbumatyLink>, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController) { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { links.take(24).forEach { OnlineSongCard(it, onPlay, onDownload, playerController) } } }
-@Composable private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, playerController: AudioPlayerController) { val active = playerController.currentSong?.id == link.url; val playing = active && playerController.isPlaying; Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }; Spacer(Modifier.size(9.dp)); Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); IconButton(onClick = { onPlay(link) }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") } } } }
+@Composable private fun SongList(links: List<AlbumatyLink>, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) { Column(verticalArrangement = Arrangement.spacedBy(7.dp)) { links.take(24).forEach { OnlineSongCard(it, onPlay, onDownload, playerController) } } }
+@Composable private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) { val active = playerController.currentSong?.id == link.url; val playing = active && playerController.isPlaying; Card(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }; Spacer(Modifier.size(9.dp)); Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); IconButton(onClick = { onPlay(link) }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "إيقاف مؤقت" else "تشغيل") }; IconButton(onClick = { onQueue(link) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "إضافة إلى قائمة التشغيل") }; OnlineDeckButton { onDeck(link, it) }; IconButton(onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "تنزيل") } } } }
 @Composable private fun OnlineSection(title: String, content: @Composable () -> Unit) { Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); content() } }
 private fun AlbumatyLink.isSong(): Boolean = runCatching { java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "song" || it.startsWith("song") } }.getOrDefault(false)
+enum class OnlineDeckTarget(val name: String) { A("A"), B("B") }
+@Composable private fun OnlineDeckButton(onSelected: (OnlineDeckTarget) -> Unit) { var showPicker by remember { mutableStateOf(false) }; IconButton(onClick = { showPicker=true }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }; if(showPicker) AlertDialog(onDismissRequest={showPicker=false}, title={Text("إرسال الأغنية إلى أي Deck؟")}, text={Text("اختر A أو B")}, confirmButton={Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={showPicker=false;onSelected(OnlineDeckTarget.A)}){Text("A")};TextButton(onClick={showPicker=false;onSelected(OnlineDeckTarget.B)}){Text("B")}}}) }
 private data class PendingOnlineDownload(val title: String, val audioUrl: String)
 private fun suggestedFileName(title: String): String { val safe = title.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "online_music" }; return if (safe.lowercase().endsWith(".mp3")) safe else "$safe.mp3" }
