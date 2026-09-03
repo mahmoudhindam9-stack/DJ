@@ -68,10 +68,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     fun toggleEnable() {
         val nextEnabled = !isEnabled
         isEnabled = nextEnabled
-        if (!nextEnabled) {
-            // EQ OFF must immediately mean no EQ/preamp/limiter processing.
-            DeckFxAudioProcessor.setGlobalPreampDb(0f)
-        }
+        if (!nextEnabled) DeckFxAudioProcessor.setGlobalPreampDb(0f)
         persistState()
         broadcastState()
     }
@@ -99,7 +96,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         updateBandLevel(9, (-6 + trebleBoostLevel * 12f).toInt())
     }
 
-    fun setPreampDb(value: Float) {
+    fun updatePreampDb(value: Float) {
         preampDb = value.coerceIn(0f, 12f)
         persistState()
         broadcastState()
@@ -151,7 +148,6 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         onUpdate()
     }
 
-    /** Push one authoritative EQ snapshot to every deck-owned controller. */
     private fun broadcastState() {
         val levels = bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
         val enabled = isEnabled
