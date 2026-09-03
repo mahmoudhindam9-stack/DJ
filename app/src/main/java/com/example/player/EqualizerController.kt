@@ -1,12 +1,11 @@
 package com.example.player
 
 import android.content.Context
-import android.media.audiofx.Equalizer
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import kotlin.math.abs
+import java.util.concurrent.CopyOnWriteArraySet
 
 class EqBand(
     val id: Int,
@@ -18,9 +17,16 @@ class EqBand(
     var currentLevelDb by mutableStateOf(initialLevelDb.coerceIn(minLevelDb, maxLevelDb))
 }
 
+/**
+ * UI/state controller for the app EQ.
+ *
+ * Android's native Equalizer is intentionally never attached. All EQ work is
+ * performed by DeckFxAudioProcessor in the PCM path. Multiple controller
+ * instances exist because each deck owns one, so changes are broadcast to all
+ * instances to keep the visible EQ and the real deck DSP synchronized.
+ */
 class EqualizerController(private val context: Context, private val onUpdate: () -> Unit = {}) {
-    private var nativeEqualizer: Equalizer? = null
-    private var attachedSessionId: Int = -1
+    private val instanceRegistry = companionObjectRegistry
 
     val bands = mutableStateListOf(
         EqBand(0, "60 Hz"), EqBand(1, "170 Hz"), EqBand(2, "310 Hz"), EqBand(3, "600 Hz"),
@@ -28,7 +34,10 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         EqBand(8, "14 kHz"), EqBand(9, "16 kHz")
     )
 
-    init { loadState() }
+    init {
+        instanceRegistry.add(this)
+        loadState()
+    }
 
     var isEnabled by mutableStateOf(false)
         private set
@@ -47,16 +56,21 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     var trebleBoostLevel by mutableStateOf(0f)
         private set
 
+    /** Independent digital make-up gain applied inside the PCM EQ path. */
+    var preampDb by mutableStateOf(0f)
+        private set
+
     val presets = listOf(
         "Flat", "Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game",
         "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Concert", "Custom"
     )
 
     fun toggleEnable() {
-        isEnabled = !isEnabled
-        applyToNative()
+        val nextEnabled = !isEnabled
+        isEnabled = nextEnabled
+        if (!nextEnabled) DeckFxAudioProcessor.setGlobalPreampDb(0f)
         persistState()
-        onUpdate()
+        broadcastState()
     }
 
     fun updateBandLevel(bandIndex: Int, levelDb: Int) {
@@ -64,9 +78,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         bands[bandIndex].currentLevelDb = levelDb.coerceIn(-12, 12)
         selectedPreset = "Custom"
         syncQuickFromBands()
-        applyToNative()
         persistState()
-        onUpdate()
+        broadcastState()
     }
 
     fun setQuickBass(value: Int) = updateBandLevel(0, value)
@@ -81,6 +94,12 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
         updateBandLevel(9, (-6 + trebleBoostLevel * 12f).toInt())
+    }
+
+    fun updatePreampDb(value: Float) {
+        preampDb = value.coerceIn(0f, 12f)
+        persistState()
+        broadcastState()
     }
 
     fun applyPreset(presetName: String) {
@@ -103,9 +122,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         for (i in bands.indices) bands[i].currentLevelDb = values[i].coerceIn(-12, 12)
         syncQuickFromBands()
         isEnabled = true
-        applyToNative()
         persistState()
-        onUpdate()
+        broadcastState()
     }
 
     private fun syncQuickFromBands() {
@@ -114,17 +132,31 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         quickTrebleDb = bands[9].currentLevelDb
     }
 
-    private fun applyToNative() {
-        // The app uses DeckFxAudioProcessor for the real PCM EQ path.
-        // Keep this controller's public behavior/UI state intact, but do not
-        // attach Android's second native EQ because it causes double EQ and
-        // audible attenuation on some devices.
+    private fun applySharedSnapshot(
+        levels: FloatArray,
+        enabled: Boolean,
+        preset: String,
+        sharedPreampDb: Float
+    ) {
+        for (i in bands.indices) {
+            bands[i].currentLevelDb = levels.getOrElse(i) { 0f }.toInt().coerceIn(-12, 12)
+        }
+        isEnabled = enabled
+        selectedPreset = preset
+        preampDb = sharedPreampDb.coerceIn(0f, 12f)
+        syncQuickFromBands()
+        onUpdate()
     }
 
-    private fun recreateNativeEqualizer(sessionId: Int) {
-        // Kept as a compatibility hook for existing callers. Native Android
-        // Equalizer is intentionally not used; DSP is handled in the deck.
-        attachedSessionId = sessionId
+    private fun broadcastState() {
+        val levels = bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
+        val enabled = isEnabled
+        val preset = selectedPreset
+        val sharedPreamp = if (enabled) preampDb else 0f
+        DeckFxAudioProcessor.setGlobalPreampDb(sharedPreamp)
+        for (controller in instanceRegistry) {
+            controller.applySharedSnapshot(levels, enabled, preset, sharedPreamp)
+        }
     }
 
     private fun persistState() {
@@ -135,6 +167,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 .putInt("treble", quickTrebleDb)
                 .putString("preset", selectedPreset)
                 .putBoolean("enabled", isEnabled)
+                .putFloat("preamp", preampDb)
                 .apply()
         } catch (_: Throwable) { }
     }
@@ -147,23 +180,24 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             bands[9].currentLevelDb = prefs.getInt("treble", 0).coerceIn(-12, 12)
             selectedPreset = prefs.getString("preset", "Flat") ?: "Flat"
             isEnabled = prefs.getBoolean("enabled", false)
+            preampDb = prefs.getFloat("preamp", 0f).coerceIn(0f, 12f)
+            if (isEnabled) DeckFxAudioProcessor.setGlobalPreampDb(preampDb) else DeckFxAudioProcessor.setGlobalPreampDb(0f)
             syncQuickFromBands()
         } catch (_: Throwable) { }
     }
 
     fun release() {
         persistState()
-        try { nativeEqualizer?.release() } catch (_: Throwable) { }
-        nativeEqualizer = null
-        attachedSessionId = -1
+        instanceRegistry.remove(this)
     }
 
-    fun attachToSession(newAudioSessionId: Int) {
-        recreateNativeEqualizer(newAudioSessionId)
+    fun attachToSession(@Suppress("UNUSED_PARAMETER") newAudioSessionId: Int) {
         onUpdate()
     }
 
     companion object {
+        private val companionObjectRegistry = CopyOnWriteArraySet<EqualizerController>()
+
         fun adjustQuickBand(context: Context, band: Int) { }
     }
 }
