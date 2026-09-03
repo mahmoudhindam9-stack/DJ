@@ -45,9 +45,24 @@ fun EqualizerScreen(eqController: EqualizerController) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text("Equalizer", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Safe EQ range: -6 dB to +6 dB", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("PCM DSP EQ: -12 dB to +12 dB • 10 bands", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = eqController.isEnabled, onCheckedChange = { eqController.toggleEnable() })
+            }
+        }
+        item {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(14.dp)) {
+                    Text("Preamp", fontWeight = FontWeight.SemiBold)
+                    Text("Independent digital make-up gain before the soft limiter", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Slider(
+                        value = eqController.preampDb,
+                        onValueChange = eqController::setPreampDb,
+                        valueRange = 0f..12f,
+                        steps = 23
+                    )
+                    Text("${eqController.preampDb.toInt()} dB", color = MaterialTheme.colorScheme.primary)
+                }
             }
         }
         item {
@@ -84,7 +99,12 @@ fun EqualizerScreen(eqController: EqualizerController) {
                         Text(band.name, fontWeight = FontWeight.SemiBold)
                         Text("${band.currentLevelDb} dB", color = MaterialTheme.colorScheme.primary)
                     }
-                    Slider(value = band.currentLevelDb.toFloat(), onValueChange = { eqController.updateBandLevel(band.id, it.toInt()) }, valueRange = -6f..6f, steps = 11)
+                    Slider(
+                        value = band.currentLevelDb.toFloat(),
+                        onValueChange = { eqController.updateBandLevel(band.id, it.toInt()) },
+                        valueRange = -12f..12f,
+                        steps = 23
+                    )
                 }
             }
         }
