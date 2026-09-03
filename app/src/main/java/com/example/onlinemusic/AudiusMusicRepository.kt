@@ -9,15 +9,18 @@ import okhttp3.Request
 import org.json.JSONArray
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.util.concurrent.TimeUnit
 
-/** Audius-backed provider. Kept separate so the existing Albumaty/Arabic provider is untouched. */
 class AudiusMusicRepository {
     companion object {
-        private const val DEFAULT_NODE = "https://api.audius.co/v1"
+        private const val PRIMARY_NODE = "https://discoveryprovider.audius.co/v1"
+        private const val API_NODE = "https://api.audius.co/v1"
         private const val APP_NAME = "DJMusicPlayer"
     }
 
     private val client = OkHttpClient.Builder()
+        .connectTimeout(12, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .followRedirects(true)
         .followSslRedirects(true)
         .build()
@@ -50,15 +53,24 @@ class AudiusMusicRepository {
     }
 
     suspend fun resolveTrack(track: AudiusTrack): OnlineMusicTrack = withContext(Dispatchers.IO) {
-        val details = parseSingleTrack(getData("/tracks/${track.id}"))
-        val stream = if (details.streamable) "$DEFAULT_NODE/tracks/${track.id}/stream?app_name=$APP_NAME" else null
-        val download = if (details.downloadable) "$DEFAULT_NODE/tracks/${track.id}/download?app_name=$APP_NAME" else null
+        val streamCandidates = listOf(PRIMARY_NODE, API_NODE)
+            .distinct()
+            .map { "$it/tracks/${track.id}/stream?app_name=$APP_NAME" }
+        val stream = streamCandidates.firstOrNull(::isReachableStream) ?: streamCandidates.first()
+        val download = if (track.downloadable) {
+            listOf(PRIMARY_NODE, API_NODE)
+                .distinct()
+                .map { "$it/tracks/${track.id}/download?app_name=$APP_NAME" }
+                .firstOrNull(::isReachableStream)
+                ?: "$PRIMARY_NODE/tracks/${track.id}/download?app_name=$APP_NAME"
+        } else null
+
         OnlineMusicTrack(
-            id = details.id,
-            title = details.title,
-            artist = details.artist,
-            album = details.album,
-            artworkUrl = details.artworkUrl,
+            id = track.id,
+            title = track.title,
+            artist = track.artist,
+            album = track.album,
+            artworkUrl = track.artworkUrl,
             streamUrl = stream,
             downloadUrl = download
         )
@@ -68,6 +80,7 @@ class AudiusMusicRepository {
         val request = Request.Builder()
             .url(audioUrl)
             .header("User-Agent", "DJ Music Player/1.0 Android")
+            .header("Accept", "audio/mpeg,audio/*;q=0.9,*/*;q=0.8")
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("فشل تنزيل الملف: HTTP ${response.code}")
@@ -90,17 +103,37 @@ class AudiusMusicRepository {
     }
 
     private fun getData(path: String): JSONArray {
-        val request = Request.Builder()
-            .url("$DEFAULT_NODE$path${if (path.contains('?')) '&' else '?'}app_name=$APP_NAME")
-            .header("User-Agent", "DJ Music Player/1.0 Android")
-            .header("Accept", "application/json")
-            .build()
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("Audius returned ${response.code}")
-            val root = JSONObject(response.body?.string().orEmpty())
-            return root.optJSONArray("data") ?: JSONArray()
+        var lastFailure: Throwable? = null
+        for (base in listOf(PRIMARY_NODE, API_NODE).distinct()) {
+            val request = Request.Builder()
+                .url("$base$path${if (path.contains('?')) '&' else '?'}app_name=$APP_NAME")
+                .header("User-Agent", "DJ Music Player/1.0 Android")
+                .header("Accept", "application/json")
+                .build()
+            try {
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        lastFailure = IllegalStateException("Audius returned ${response.code}")
+                    } else {
+                        val root = JSONObject(response.body?.string().orEmpty())
+                        return root.optJSONArray("data") ?: JSONArray()
+                    }
+                }
+            } catch (t: Throwable) {
+                lastFailure = t
+            }
         }
+        throw lastFailure ?: IllegalStateException("تعذر الاتصال بخدمة Audius")
     }
+
+    private fun isReachableStream(url: String): Boolean = runCatching {
+        val request = Request.Builder()
+            .url(url)
+            .header("User-Agent", "DJ Music Player/1.0 Android")
+            .header("Range", "bytes=0-1")
+            .build()
+        client.newCall(request).execute().use { response -> response.isSuccessful }
+    }.getOrDefault(false)
 
     private fun parseTracks(array: JSONArray): List<AudiusTrack> = buildList {
         for (i in 0 until array.length()) {
@@ -111,20 +144,11 @@ class AudiusMusicRepository {
             val artist = user?.optString("name").orEmpty().ifBlank { user?.optString("handle").orEmpty() }
             val artistId = user?.optString("id").orEmpty()
             val artwork = item.optJSONObject("artwork")
-            add(
-                AudiusTrack(
-                    id = id,
-                    title = item.optString("title").ifBlank { "Untitled" },
-                    artist = artist.ifBlank { "Unknown Artist" },
-                    artistId = artistId,
-                    album = item.optString("album_backlink").takeIf { it.isNotBlank() },
-                    artworkUrl = artwork?.optString("_480x480")?.takeIf { it.isNotBlank() }
-                        ?: artwork?.optString("_150x150")?.takeIf { it.isNotBlank() },
-                    genre = item.optString("genre").takeIf { it.isNotBlank() },
-                    streamable = item.optBoolean("is_streamable", true),
-                    downloadable = item.optBoolean("is_downloadable", false)
-                )
-            )
+            add(AudiusTrack(id, item.optString("title").ifBlank { "Untitled" }, artist.ifBlank { "Unknown Artist" }, artistId,
+                item.optString("album_backlink").takeIf { it.isNotBlank() },
+                artwork?.optString("_480x480")?.takeIf { it.isNotBlank() } ?: artwork?.optString("_150x150")?.takeIf { it.isNotBlank() },
+                item.optString("genre").takeIf { it.isNotBlank() },
+                item.optBoolean("is_streamable", true), item.optBoolean("is_downloadable", false)))
         }
     }.distinctBy { it.id }
 
@@ -132,43 +156,14 @@ class AudiusMusicRepository {
         val item = array.optJSONObject(0) ?: error("لم يتم العثور على الفنان")
         val id = item.optString("id")
         val name = item.optString("name").ifBlank { item.optString("handle") }.ifBlank { "Artist" }
-        val image = item.optJSONObject("profile_picture")?.optString("_480x480")
-            ?: item.optJSONObject("profile_picture")?.optString("_150x150")
+        val image = item.optJSONObject("profile_picture")?.optString("_480x480") ?: item.optJSONObject("profile_picture")?.optString("_150x150")
         return AudiusArtist(id, name, image?.takeIf { it.isNotBlank() })
     }
-
-    private fun parseSingleTrack(array: JSONArray): AudiusTrack =
-        parseTracks(array).firstOrNull() ?: error("لم يتم العثور على الأغنية")
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 }
 
-data class AudiusHomeData(
-    val trending: List<AudiusTrack> = emptyList(),
-    val latest: List<AudiusTrack> = emptyList(),
-    val artists: List<AudiusArtist> = emptyList(),
-    val genres: List<String> = emptyList()
-)
-
-data class AudiusArtistDetail(
-    val artist: AudiusArtist,
-    val tracks: List<AudiusTrack>
-)
-
-data class AudiusTrack(
-    val id: String,
-    val title: String,
-    val artist: String,
-    val artistId: String,
-    val album: String?,
-    val artworkUrl: String?,
-    val genre: String?,
-    val streamable: Boolean,
-    val downloadable: Boolean
-)
-
-data class AudiusArtist(
-    val id: String,
-    val name: String,
-    val artworkUrl: String?
-)
+data class AudiusHomeData(val trending: List<AudiusTrack> = emptyList(), val latest: List<AudiusTrack> = emptyList(), val artists: List<AudiusArtist> = emptyList(), val genres: List<String> = emptyList())
+data class AudiusArtistDetail(val artist: AudiusArtist, val tracks: List<AudiusTrack>)
+data class AudiusTrack(val id: String, val title: String, val artist: String, val artistId: String, val album: String?, val artworkUrl: String?, val genre: String?, val streamable: Boolean, val downloadable: Boolean)
+data class AudiusArtist(val id: String, val name: String, val artworkUrl: String?)

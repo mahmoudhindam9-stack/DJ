@@ -1,5 +1,6 @@
 package com.example.studio
 
+import android.content.Context
 import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -143,11 +144,15 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
     val context = androidx.compose.ui.platform.LocalContext.current
     val playerController = remember { AudioPlayerController.obtain(context) }
     val scope = rememberCoroutineScope()
+    val favoritePrefs = remember { context.getSharedPreferences("radio_preferences", Context.MODE_PRIVATE) }
 
     var country by remember { mutableStateOf("EG") }
     var search by remember { mutableStateOf("") }
     var refreshToken by remember { mutableIntStateOf(0) }
     var stations by remember { mutableStateOf<List<RadioStation>>(emptyList()) }
+    var favorites by remember {
+        mutableStateOf(favoritePrefs.getStringSet("favorite_station_ids", emptySet())?.toSet() ?: emptySet())
+    }
     var loading by remember { mutableStateOf(true) }
     var error by remember { mutableStateOf<String?>(null) }
     var deckPicker by remember { mutableStateOf<RadioStation?>(null) }
@@ -189,13 +194,12 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
 
             try {
                 playerController.playSong(audio, listOf(audio))
-                val mediaItem = MediaItem.Builder()
-                    .setUri(resolvedUrl)
-                    .apply {
-                        radioMime(station.codec, resolvedUrl)?.let { setMimeType(it) }
-                    }
-                    .build()
-                playerController.exoPlayer.setMediaItem(mediaItem)
+                playerController.exoPlayer.setMediaItem(
+                    MediaItem.Builder()
+                        .setUri(resolvedUrl)
+                        .apply { radioMime(station.codec, resolvedUrl)?.let { setMimeType(it) } }
+                        .build()
+                )
                 playerController.exoPlayer.prepare()
                 playerController.exoPlayer.play()
                 statuses[station.id] = RadioStatus.LOADING
@@ -289,7 +293,10 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
         Spacer(Modifier.height(8.dp))
         if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
         error?.let { message ->
-            Card(Modifier.fillMaxWidth().padding(top = 8.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+            Card(
+                Modifier.fillMaxWidth().padding(top = 8.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.WifiOff, null)
                     Spacer(Modifier.width(8.dp))
@@ -300,10 +307,12 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
         }
 
         Spacer(Modifier.height(8.dp))
+        val visibleStations = stations.sortedByDescending { favorites.contains(it.id) }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
-            items(stations, key = { it.id }) { station ->
+            items(visibleStations, key = { it.id }) { station ->
                 val status = statuses[station.id] ?: RadioStatus.IDLE
                 val current = playerController.currentSong?.id == station.id
+                val isFavorite = favorites.contains(station.id)
                 val label = when (status) {
                     RadioStatus.LOADING -> "تحميل البث..."
                     RadioStatus.LIVE -> "LIVE • شغال الآن"
@@ -329,8 +338,10 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
                         Column(Modifier.weight(1f)) {
                             Text(station.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
-                                listOf(station.codec.takeIf { it.isNotBlank() }, station.bitrate.takeIf { it > 0 }?.let { "$it kbps" })
-                                    .filterNotNull().joinToString(" • ").ifBlank { station.tags.take(45).ifBlank { "بث مباشر" } },
+                                listOf(
+                                    station.codec.takeIf { it.isNotBlank() },
+                                    station.bitrate.takeIf { it > 0 }?.let { "$it kbps" }
+                                ).filterNotNull().joinToString(" • ").ifBlank { station.tags.take(45).ifBlank { "بث مباشر" } },
                                 style = MaterialTheme.typography.labelSmall,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -339,6 +350,16 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
                             Text(label, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                         }
                         if (status == RadioStatus.LOADING) CircularProgressIndicator(Modifier.size(22.dp), strokeWidth = 2.dp)
+                        IconButton(onClick = {
+                            val updated = if (isFavorite) favorites - station.id else favorites + station.id
+                            favorites = updated
+                            favoritePrefs.edit().putStringSet("favorite_station_ids", updated).apply()
+                        }) {
+                            Icon(
+                                if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
+                                if (isFavorite) "إزالة من المفضلة" else "إضافة إلى المفضلة"
+                            )
+                        }
                         IconButton(onClick = { deckPicker = station }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }
                         FilledIconButton(onClick = {
                             if (current && status == RadioStatus.LIVE) playerController.pause()
