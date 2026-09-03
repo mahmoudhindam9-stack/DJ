@@ -18,41 +18,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
           cache: gradle
-      - name: Apply DJ page layout polish and build compatibility fix
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          p = Path("app/src/main/java/com/example/MainActivity.kt")
-          s = p.read_text(encoding="utf-8")
-          marker = "        // Maqamat & Oriental Taqasim Section"
-          if "// DJ_PAGE_LAYOUT_V1" not in s:
-              insert = '''        // DJ_PAGE_LAYOUT_V1\n        // Crossfader remains directly below Deck A & Deck B.\n        // Keep the library counter compact and horizontal rather than stacked vertically.\n        Card(\n            modifier = Modifier.fillMaxWidth(),\n            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)\n        ) {\n            Row(\n                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),\n                verticalAlignment = Alignment.CenterVertically,\n                horizontalArrangement = Arrangement.SpaceBetween\n            ) {\n                Row(verticalAlignment = Alignment.CenterVertically) {\n                    Icon(Icons.Filled.QueueMusic, contentDescription = null, modifier = Modifier.size(20.dp))\n                    Spacer(Modifier.width(8.dp))\n                    Text("SONG COUNTER", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)\n                }\n                Text(\n                    "${audioLibrary.size} SONGS",\n                    fontWeight = FontWeight.Bold,\n                    color = MaterialTheme.colorScheme.primary,\n                    style = MaterialTheme.typography.titleSmall\n                )\n            }\n        }\n\n'''
-              if marker not in s:
-                  raise SystemExit("DJ layout marker not found")
-              s = s.replace(marker, insert + marker, 1)
-              p.write_text(s, encoding="utf-8")
 
-          eq = Path("app/src/main/java/com/example/player/EqualizerScreen.kt")
-          es = eq.read_text(encoding="utf-8")
-          es = es.replace("eqController::setPreampDb", "eqController::updatePreampDb")
-          eq.write_text(es, encoding="utf-8")
-          PY
+      - name: Apply DJ UI-only polish
+        shell: bash
+        run: python3 .github/dj_ui_polish.py
+
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
+
       - name: Assemble debug APK
         run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+
       - name: Assemble release APK
         run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+
       - name: Verify release APK exists
         shell: bash
         run: test -n "$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' -print -quit)"
+
       - name: Upload APK artifacts
         uses: actions/upload-artifact@v4
         with:
