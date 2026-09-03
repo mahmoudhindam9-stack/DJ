@@ -1,9 +1,5 @@
 name: Android Build Verification
 
-# ONLINE_LINK_ROUTING_REPAIR_2026-09-02
-# PLAYER_DJ_UX_FUNCTIONALITY_2026-09-01
-# REBUILD_AFTER_ONLINE_MUSIC_COMPILE_FIX
-# FINAL_ANDROID_VERIFICATION
 on:
   push:
     branches: [ main ]
@@ -18,88 +14,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Normalize microphone source when needed
-        shell: bash
-        run: |
-          if grep -q 'var beatFxEnabled by mutableStateOf(true)' app/src/main/java/com/example/player/MicController.kt; then echo "Microphone source already normalized."; else python3 .github/normalize_mic_source.py; fi
-      - name: Normalize studio, notification and widget integration
-        run: python3 .github/normalize_studio_main.py
-      - name: Normalize player, playlists and session ownership
-        run: python3 .github/normalize_player_experience.py
-      - name: Integrate Mixxx-inspired DJ FX rack
-        run: python3 .github/upgrade_dj_fx_rack.py
-      - name: Replace legacy DJ soundboard with professional CC0 sampler
-        run: python3 .github/upgrade_dj_sampler.py
-      - name: Repair Mixer and Studio functionality
-        run: python3 .github/fix_mixer_studio_functionality.py
-      - name: Repair Equalizer DSP and live controls
-        run: python3 .github/fix_equalizer_functionality.py
-      - name: Persist normalized source to main
-        shell: bash
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then echo "No generated source changes to persist."; else git add app/src/main/java .github app/src/main/AndroidManifest.xml; git commit -m "Repair DJ mixer and Studio functionality"; git push origin HEAD:main; fi
-      - name: Verify equalizer isolation
-        shell: bash
-        run: |
-          test -f app/src/main/java/com/example/player/EqualizerScreen.kt
-          test -f app/src/main/java/com/example/player/EqualizerController.kt
-          test -f app/src/main/java/com/example/player/EqualizerProcessor.kt
-          test ! -f app/src/main/java/com/example/player/ProEqualizerScreen.kt
-          grep -q 'Player equalizer controller' app/src/main/java/com/example/player/EqualizerController.kt || grep -q 'class EqualizerController' app/src/main/java/com/example/player/EqualizerController.kt
-          grep -q 'fun EqualizerScreen(eqController: EqualizerController)' app/src/main/java/com/example/player/EqualizerScreen.kt
-      - name: Verify Equalizer functionality
-        shell: bash
-        run: |
-          grep -q 'EQUALIZER_FUNCTIONALITY_V1' app/src/main/java/com/example/player/DeckFxAudioProcessor.kt
-          grep -q 'activeEffects.isEmpty() && !eqEnabled' app/src/main/java/com/example/player/DeckFxAudioProcessor.kt
-          grep -q 'onUpdate()' app/src/main/java/com/example/player/EqualizerController.kt
-          grep -q 'mutableStateOf(initialLevelDb' app/src/main/java/com/example/player/EqualizerController.kt
-      - name: Verify DJ FX rack integration
-        run: |
-          test -f app/src/main/java/com/example/DJFxRackScreen.kt
-          grep -q 'DJ_FX_RACK_V2' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'DJFxRack(deck)' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'DJEffect.values().size' app/src/main/java/com/example/DJFxRackScreen.kt
-      - name: Verify professional sampler integration
-        run: |
-          test -f app/src/main/java/com/example/ProfessionalSampler.kt
-          grep -q 'DJ_SAMPLER_CC0_V1' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'ProfessionalSamplerBoard()' app/src/main/java/com/example/ProfessionalSampler.kt
-          grep -q 'CC0' app/src/main/java/com/example/ProfessionalSampler.kt
-          if grep -q 'Live Sound Effects & Instruments Soundboard' app/src/main/java/com/example/MainActivity.kt; then exit 1; fi
-      - name: Verify player experience integration
-        run: |
-          test -f app/src/main/java/com/example/MainPlayerExperience.kt
-          test -f app/src/main/java/com/example/PlayerLibraryStore.kt
-          test -f app/src/main/java/com/example/FolderAudioImporter.kt
-          grep -q 'PlayerScreenV2' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'AudioPlayerController.obtain(context)' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'PlayerLibraryStore.load(context)' app/src/main/java/com/example/MainActivity.kt
-          grep -q 'fun obtain(context: Context): AudioPlayerController' app/src/main/java/com/example/player/AudioPlayerController.kt
-          grep -q 'canAutoResume' app/src/main/java/com/example/player/AudioPlayerController.kt
-          grep -q 'existingController' app/src/main/java/com/example/player/AudioPlayerController.kt
-      - name: Verify Mixer functionality
-        run: |
-          grep -q 'MIXER_FUNCTIONALITY_V1' app/src/main/java/com/example/player/DJDeckController.kt
-          grep -q 'fun setMixerGain' app/src/main/java/com/example/player/DJDeckController.kt
-          grep -q 'deckA.setMixerGain(1f - crossfader)' app/src/main/java/com/example/player/DJDeckController.kt
-          grep -q 'deckB.setMixerGain(crossfader)' app/src/main/java/com/example/player/DJDeckController.kt
-      - name: Verify Studio functionality
-        run: |
-          grep -q 'STUDIO_FUNCTIONALITY_V1' app/src/main/java/com/example/studio/MusicStudioController.kt
-          grep -q 'var uiRevision by mutableStateOf(0)' app/src/main/java/com/example/studio/MusicStudioController.kt
-          grep -q 'if (loopEnabled)' app/src/main/java/com/example/studio/MusicStudioController.kt
-          grep -q 'bumpUi()' app/src/main/java/com/example/studio/MusicStudioController.kt
       - name: Set up JDK 17
         uses: actions/setup-java@v5
         with:

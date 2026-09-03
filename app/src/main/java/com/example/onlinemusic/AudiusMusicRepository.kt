@@ -13,7 +13,7 @@ import java.net.URLEncoder
 /** Audius-backed provider. Kept separate so the existing Albumaty/Arabic provider is untouched. */
 class AudiusMusicRepository {
     companion object {
-        private const val DEFAULT_NODE = "https://discoveryprovider.audius.co/v1"
+        private const val DEFAULT_NODE = "https://api.audius.co/v1"
         private const val APP_NAME = "DJMusicPlayer"
     }
 

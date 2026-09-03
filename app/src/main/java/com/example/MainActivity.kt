@@ -191,8 +191,8 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "Studio") },
-                    label = { Text("Studio") },
+                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "Radio") },
+                    label = { Text("Radio") },
                     selected = currentDestination?.route == "studio",
                     onClick = {
                         navController.navigate("studio") {
