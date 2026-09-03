@@ -114,39 +114,17 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         quickTrebleDb = bands[9].currentLevelDb
     }
 
-    private fun desiredFrequenciesHz(): IntArray = intArrayOf(60, 170, 310, 600, 1000, 3000, 6000, 12000, 14000, 16000)
-
-    private fun levelForNativeBand(nativeIndex: Int): Short {
-        val eq = nativeEqualizer ?: return 0
-        val centerHz = eq.getCenterFreq(nativeIndex.toShort()) / 1000
-        val sourceIndex = desiredFrequenciesHz().indices.minByOrNull { index ->
-            abs(desiredFrequenciesHz()[index] - centerHz)
-        } ?: 0
-        val range = eq.bandLevelRange
-        val milliDb = bands[sourceIndex].currentLevelDb * 100
-        return milliDb.coerceIn(range[0].toInt(), range[1].toInt()).toShort()
-    }
-
     private fun applyToNative() {
-        val eq = nativeEqualizer ?: return
-        try {
-            eq.enabled = isEnabled
-            for (i in 0 until eq.numberOfBands.toInt()) {
-                eq.setBandLevel(i.toShort(), levelForNativeBand(i))
-            }
-        } catch (_: Throwable) { }
+        // The app uses DeckFxAudioProcessor for the real PCM EQ path.
+        // Keep this controller's public behavior/UI state intact, but do not
+        // attach Android's second native EQ because it causes double EQ and
+        // audible attenuation on some devices.
     }
 
     private fun recreateNativeEqualizer(sessionId: Int) {
-        if (sessionId <= 0 || sessionId == attachedSessionId) return
-        try { nativeEqualizer?.release() } catch (_: Throwable) { }
-        nativeEqualizer = try {
-            Equalizer(1000, sessionId).also { it.enabled = false }
-        } catch (_: Throwable) {
-            null
-        }
+        // Kept as a compatibility hook for existing callers. Native Android
+        // Equalizer is intentionally not used; DSP is handled in the deck.
         attachedSessionId = sessionId
-        applyToNative()
     }
 
     private fun persistState() {
