@@ -21,7 +21,6 @@ android {
     targetSdk = 36
     versionCode = 1
     versionName = "1.0"
-
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -85,12 +84,9 @@ secrets {
 
 googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
-// Real CC0 factory audio. These files are fetched only at BUILD TIME and become
-// Android assets; runtime playback never needs the network.
 data class FactoryFxDownload(val relativePath: String, val url: String)
 
 val factoryFxDownloads = listOf(
-  // Bank A — DJ FX — code4fukui/sound-cc0 + Kenney Sci-Fi Sounds
   FactoryFxDownload("factory_fx/dj/bell1.wav", "https://raw.githubusercontent.com/code4fukui/sound-cc0/main/bell1.wav"),
   FactoryFxDownload("factory_fx/dj/cracker1.wav", "https://raw.githubusercontent.com/code4fukui/sound-cc0/main/cracker1.wav"),
   FactoryFxDownload("factory_fx/dj/cracker1v-stereo.wav", "https://raw.githubusercontent.com/code4fukui/sound-cc0/main/cracker1v-stereo.wav"),
@@ -108,7 +104,6 @@ val factoryFxDownloads = listOf(
   FactoryFxDownload("factory_fx/kenney/forceField_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/forceField_001.ogg"),
   FactoryFxDownload("factory_fx/kenney/computerNoise_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/computerNoise_000.ogg"),
 
-  // Bank B — Drums — Boochi44/free-drum-samples (CC0)
   FactoryFxDownload("factory_fx/drums/hard-kick-01.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/01-hard-trap/kicks/hard-kick-01.wav"),
   FactoryFxDownload("factory_fx/drums/hard-kick-02.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/01-hard-trap/kicks/hard-kick-02.wav"),
   FactoryFxDownload("factory_fx/drums/hard-kick-03.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/01-hard-trap/kicks/hard-kick-03.wav"),
@@ -126,7 +121,6 @@ val factoryFxDownloads = listOf(
   FactoryFxDownload("factory_fx/drums/perc-rimshot.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/01-hard-trap/percs/perc-rimshot.wav"),
   FactoryFxDownload("factory_fx/drums/fx-cymbal.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/01-hard-trap/fx/fx-cymbal.wav"),
 
-  // Bank C — Electronic — Boochi44/free-drum-samples Bounce kit (CC0)
   FactoryFxDownload("factory_fx/electronic/bounce-kick-01.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/02-bounce/kicks/bounce-kick-01.wav"),
   FactoryFxDownload("factory_fx/electronic/bounce-kick-02.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/02-bounce/kicks/bounce-kick-02.wav"),
   FactoryFxDownload("factory_fx/electronic/bounce-kick-03.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/02-bounce/kicks/bounce-kick-03.wav"),
@@ -144,17 +138,15 @@ val factoryFxDownloads = listOf(
   FactoryFxDownload("factory_fx/electronic/fx-cymbal.wav", "https://raw.githubusercontent.com/Boochi44/free-drum-samples/main/drum-samples/02-bounce/fx/fx-cymbal.wav"),
   FactoryFxDownload("factory_fx/electronic/laserSmall_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserSmall_000.ogg"),
 
-  // Bank D — Party / Impact — Kenney + CC0 sound-cc0
   FactoryFxDownload("factory_fx/party/doorOpen_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorOpen_000.ogg"),
   FactoryFxDownload("factory_fx/party/doorOpen_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorOpen_001.ogg"),
   FactoryFxDownload("factory_fx/party/doorClose_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorClose_000.ogg"),
   FactoryFxDownload("factory_fx/party/doorClose_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorClose_001.ogg"),
   FactoryFxDownload("factory_fx/party/laserSmall_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserSmall_001.ogg"),
-  FactoryFxDownload("factory_fx/party/laserSmall_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserSmall_002.ogg"),
+  FactoryFxDownload("factory_fx/party/laserSmall_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/ThirdParty/Kenney/SciFiSounds/laserSmall_002.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_000.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_001.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_002.ogg"),
-  FactoryFxDownload("factory_fx/party/explosionCrunch_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/explosionCrunch_000.ogg"),
   FactoryFxDownload("factory_fx/party/explosionCrunch_004.ogg", "https://raw.githubusercontent.com/euuuuuuan/voidclad-public/main/assets/sfx/kenney/explosionCrunch_004.ogg"),
   FactoryFxDownload("factory_fx/party/lowFrequency_explosion_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/lowFrequency_explosion_000.ogg"),
   FactoryFxDownload("factory_fx/party/engineCircular_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/engineCircular_000.ogg"),
