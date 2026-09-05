@@ -17,21 +17,36 @@ class DjFxRepository(private val context: Context) {
                     name = entry.name,
                     category = entry.category,
                     source = "CC0 Open Source",
-                    license = "CC0-1.0",
-                    sourceUrl = entry.url
+                    license = entry.source,
+                    sourceUrl = "asset:///${entry.assetPath}"
                 )
             }
         missing.forEach { insertFx(it) }
         dao.getAllFx().map { it.toItem() }
     }
 
-    private fun DjFxEntity.toItem() = DjFxItem(id, name, category, source, license, sourceUrl, localUri, isFavorite)
+    private fun DjFxEntity.toItem() = DjFxItem(
+        id = id,
+        name = name,
+        category = category,
+        source = source,
+        license = license,
+        sourceUrl = sourceUrl,
+        localUri = localUri,
+        isFavorite = isFavorite
+    )
 
     suspend fun insertFx(item: DjFxItem) = withContext(Dispatchers.IO) {
         dao.insertFx(
             DjFxEntity(
-                item.id, item.name, item.category, item.source, item.license,
-                item.sourceUrl, item.localUri, item.isFavorite
+                item.id,
+                item.name,
+                item.category,
+                item.source,
+                item.license,
+                item.sourceUrl,
+                item.localUri,
+                item.isFavorite
             )
         )
     }
@@ -42,7 +57,12 @@ class DjFxRepository(private val context: Context) {
 
     suspend fun ensureFactoryPadAssignments() = withContext(Dispatchers.IO) {
         val existing = dao.getAllPads().associate { it.padKey to it.fxId }
-        val bankByCategory = mapOf("DJ FX" to "A", "Drums" to "B", "Electronic" to "C", "Party" to "D")
+        val bankByCategory = mapOf(
+            "DJ FX" to "A",
+            "Drums" to "B",
+            "Electronic" to "C",
+            "Party" to "D"
+        )
         FactoryFxCatalog.entries.groupBy { it.category }.forEach { (category, entries) ->
             val bank = bankByCategory[category] ?: return@forEach
             entries.take(16).forEachIndexed { index, entry ->
