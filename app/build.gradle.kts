@@ -143,7 +143,7 @@ val factoryFxDownloads = listOf(
   FactoryFxDownload("factory_fx/party/doorClose_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorClose_000.ogg"),
   FactoryFxDownload("factory_fx/party/doorClose_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorClose_001.ogg"),
   FactoryFxDownload("factory_fx/party/laserSmall_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserSmall_001.ogg"),
-  FactoryFxDownload("factory_fx/party/laserSmall_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/ThirdParty/Kenney/SciFiSounds/laserSmall_002.ogg"),
+  FactoryFxDownload("factory_fx/party/laserSmall_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserSmall_002.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_000.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_000.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_001.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_001.ogg"),
   FactoryFxDownload("factory_fx/party/impactMetal_002.ogg", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/impactMetal_002.ogg"),
