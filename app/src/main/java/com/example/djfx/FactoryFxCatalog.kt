@@ -126,7 +126,7 @@ object FactoryFxCatalog {
         cc0Remote("co_nope", "Nope", "كوميدي", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/nope.mp3"),
 
         // NEW BANK — VIRAL / TRENDS (PUBLIC DOMAIN / CC0)
-        cc0Remote("tr_access", "Access Granted", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/access%20granted.mp3"),
+        cc0Remote("tr_access", "Air Horn", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/hype%20air%20horn.mp3"),
         cc0Remote("tr_bye", "Bye Bye", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/bye%20bye.mp3"),
         cc0Remote("tr_bruh", "Bruh", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/bruh.mp3"),
         cc0Remote("tr_correct", "That's Correct", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/correct%20that's%20correct%20radio.mp3"),

@@ -9,19 +9,33 @@ class DjFxRepository(private val context: Context) {
 
     suspend fun getAllFx(): List<DjFxItem> = withContext(Dispatchers.IO) {
         val existing = dao.getAllFx().map { it.toItem() }
-        val missing = FactoryFxCatalog.entries
-            .filter { entry -> existing.none { it.id == entry.id } }
-            .map { entry ->
-                DjFxItem(
-                    id = entry.id,
-                    name = entry.name,
-                    category = entry.category,
-                    source = "CC0 Open Source",
-                    license = entry.source,
-                    sourceUrl = entry.sourceUrl ?: "asset:///${entry.assetPath}"
+        val missing = mutableListOf<DjFxItem>()
+        val updates = mutableListOf<DjFxItem>()
+
+        FactoryFxCatalog.entries.forEach { entry ->
+            val existingItem = existing.find { it.id == entry.id }
+            val targetSourceUrl = entry.sourceUrl ?: "asset:///${entry.assetPath}"
+            val targetLicense = entry.source
+            
+            if (existingItem == null) {
+                missing.add(
+                    DjFxItem(
+                        id = entry.id,
+                        name = entry.name,
+                        category = entry.category,
+                        source = "CC0 Open Source",
+                        license = targetLicense,
+                        sourceUrl = targetSourceUrl
+                    )
                 )
+            } else if (existingItem.sourceUrl != targetSourceUrl || existingItem.name != entry.name) {
+                updates.add(existingItem.copy(sourceUrl = targetSourceUrl, name = entry.name))
             }
+        }
+        
         missing.forEach { insertFx(it) }
+        updates.forEach { insertFx(it) }
+        
         dao.getAllFx().map { it.toItem() }
     }
 
