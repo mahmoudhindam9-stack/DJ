@@ -7,34 +7,51 @@ import kotlinx.coroutines.withContext
 class DjFxRepository(private val context: Context) {
     private val dao = DjFxDatabase.getDatabase(context).djFxDao()
 
-    private val defaultFxCatalog = listOf(
-        DjFxItem("fx_alarm_1", "Bugle Alarm", "FX", "Google Actions", "CC0", "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg", "https://actions.google.com/sounds/v1/alarms/bugle_tune.ogg"),
-        DjFxItem("fx_crowd_1", "Crowd Cheer", "Crowd", "Google Actions", "CC0", "https://actions.google.com/sounds/v1/crowds/crowd_cheer.ogg", "https://actions.google.com/sounds/v1/crowds/crowd_cheer.ogg"),
-        DjFxItem("fx_bell_1", "Bicycle Bell", "FX", "Google Actions", "CC0", "https://actions.google.com/sounds/v1/alarms/bicycle_bell_fast.ogg", "https://actions.google.com/sounds/v1/alarms/bicycle_bell_fast.ogg"),
-        DjFxItem("fx_whistle_1", "Whistle", "FX", "Google Actions", "CC0", "https://actions.google.com/sounds/v1/sports/football_whistle.ogg", "https://actions.google.com/sounds/v1/sports/football_whistle.ogg")
-    )
-
     suspend fun getAllFx(): List<DjFxItem> = withContext(Dispatchers.IO) {
-        val dbFx = dao.getAllFx().map {
-            DjFxItem(it.id, it.name, it.category, it.source, it.license, it.sourceUrl, it.localUri, it.isFavorite)
-        }
-        val defaultMissing = defaultFxCatalog.filter { defaultItem -> dbFx.none { it.id == defaultItem.id } }
-        
-        defaultMissing.forEach { insertFx(it) }
-        
-        if (defaultMissing.isNotEmpty()) {
-            dao.getAllFx().map { DjFxItem(it.id, it.name, it.category, it.source, it.license, it.sourceUrl, it.localUri, it.isFavorite) }
-        } else {
-            dbFx
-        }
+        val existing = dao.getAllFx().map { it.toItem() }
+        val missing = FactoryFxCatalog.entries
+            .filter { entry -> existing.none { it.id == entry.id } }
+            .map { entry ->
+                DjFxItem(
+                    id = entry.id,
+                    name = entry.name,
+                    category = entry.category,
+                    source = "CC0 Open Source",
+                    license = "CC0-1.0",
+                    sourceUrl = entry.url
+                )
+            }
+        missing.forEach { insertFx(it) }
+        dao.getAllFx().map { it.toItem() }
     }
 
+    private fun DjFxEntity.toItem() = DjFxItem(id, name, category, source, license, sourceUrl, localUri, isFavorite)
+
     suspend fun insertFx(item: DjFxItem) = withContext(Dispatchers.IO) {
-        dao.insertFx(DjFxEntity(item.id, item.name, item.category, item.source, item.license, item.sourceUrl, item.localUri, item.isFavorite))
+        dao.insertFx(
+            DjFxEntity(
+                item.id, item.name, item.category, item.source, item.license,
+                item.sourceUrl, item.localUri, item.isFavorite
+            )
+        )
     }
 
     suspend fun getPadAssignments(): Map<String, String> = withContext(Dispatchers.IO) {
         dao.getAllPads().associate { it.padKey to it.fxId }
+    }
+
+    suspend fun ensureFactoryPadAssignments() = withContext(Dispatchers.IO) {
+        val existing = dao.getAllPads().associate { it.padKey to it.fxId }
+        val bankByCategory = mapOf("DJ FX" to "A", "Drums" to "B", "Electronic" to "C", "Party" to "D")
+        FactoryFxCatalog.entries.groupBy { it.category }.forEach { (category, entries) ->
+            val bank = bankByCategory[category] ?: return@forEach
+            entries.take(16).forEachIndexed { index, entry ->
+                val key = "${bank}_$index"
+                if (key !in existing) {
+                    dao.insertPad(DjFxPadEntity(key, entry.id))
+                }
+            }
+        }
     }
 
     suspend fun assignPad(bank: String, index: Int, fxId: String) = withContext(Dispatchers.IO) {

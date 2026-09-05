@@ -29,14 +29,13 @@ class DjFxController(private val context: Context) {
     private fun loadData() {
         scope.launch {
             allFx = repository.getAllFx()
+            repository.ensureFactoryPadAssignments()
             padAssignments = repository.getPadAssignments()
         }
     }
 
     fun setBank(bank: String) {
-        if (bank in banks) {
-            currentBank = bank
-        }
+        if (bank in banks) currentBank = bank
     }
 
     fun assignFxToPad(bank: String, index: Int, fxId: String) {
@@ -54,42 +53,38 @@ class DjFxController(private val context: Context) {
     }
 
     fun playFx(fxId: String) {
-        val fx = allFx.find { it.id == fxId }
-        val uri = fx?.localUri ?: fx?.sourceUrl
-        if (uri != null) {
-            audioEngine.play(uri)
+        allFx.find { it.id == fxId }?.let { fx ->
+            audioEngine.play(fx.localUri ?: fx.sourceUrl)
         }
     }
 
-    fun playPreview(uri: String) {
-        audioEngine.play(uri)
-    }
+    fun playPreview(uri: String) = audioEngine.play(uri)
 
     fun importFromUris(uris: List<android.net.Uri>) {
         scope.launch(Dispatchers.IO) {
             uris.forEach { uri ->
-                try {
+                runCatching {
                     val audio = com.example.utils.MusicScanner.parsePickedUri(context, uri)
-                    val inputStream = context.contentResolver.openInputStream(uri)
-                    if (inputStream != null) {
-                        val file = java.io.File(context.filesDir, "djfx_${System.currentTimeMillis()}_${audio.title.replace(Regex("[^a-zA-Z0-9.-]"), "_")}.mp3")
-                        val outputStream = java.io.FileOutputStream(file)
-                        inputStream.copyTo(outputStream)
-                        inputStream.close()
-                        outputStream.close()
-                        
-                        val newFx = DjFxItem(
-                            id = "local_${System.currentTimeMillis()}",
-                            name = audio.title,
-                            category = "Local",
-                            source = "Device",
-                            license = "User",
-                            sourceUrl = uri.toString(),
-                            localUri = file.absolutePath
+                    context.contentResolver.openInputStream(uri)?.use { input ->
+                        val safeName = audio.title.replace(Regex("[^a-zA-Z0-9.-]"), "_")
+                        val file = java.io.File(
+                            context.filesDir,
+                            "djfx_${System.currentTimeMillis()}_$safeName.mp3"
                         )
-                        repository.insertFx(newFx)
+                        file.outputStream().use { output -> input.copyTo(output) }
+                        repository.insertFx(
+                            DjFxItem(
+                                id = "local_${System.nanoTime()}",
+                                name = audio.title,
+                                category = "Local",
+                                source = "Device",
+                                license = "User",
+                                sourceUrl = uri.toString(),
+                                localUri = file.absolutePath
+                            )
+                        )
                     }
-                } catch(e: Exception) { e.printStackTrace() }
+                }
             }
             val updated = repository.getAllFx()
             kotlinx.coroutines.withContext(Dispatchers.Main) { allFx = updated }
@@ -106,8 +101,7 @@ class DjFxController(private val context: Context) {
     fun toggleFavorite(fxId: String) {
         scope.launch {
             val fx = allFx.find { it.id == fxId } ?: return@launch
-            val updated = fx.copy(isFavorite = !fx.isFavorite)
-            repository.insertFx(updated)
+            repository.insertFx(fx.copy(isFavorite = !fx.isFavorite))
             allFx = repository.getAllFx()
         }
     }
