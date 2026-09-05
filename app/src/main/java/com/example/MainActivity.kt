@@ -74,6 +74,8 @@ class MainActivity : ComponentActivity() {
 fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val prefs = remember { context.getSharedPreferences("app_session", Context.MODE_PRIVATE) }
+    val initialRoute = remember { prefs.getString("last_route", "player") ?: "player" }
 
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController.obtain(context) }
@@ -82,6 +84,14 @@ fun MainApp() {
     val micController = remember { MicController(context) }
     val musicStudioController = remember { MusicStudioController(context) }
     val djFxController = remember { com.example.djfx.DjFxController(context) }
+
+    LaunchedEffect(navController) {
+        navController.currentBackStackEntryFlow.collect { entry ->
+            entry.destination.route?.let { route ->
+                prefs.edit().putString("last_route", route).apply()
+            }
+        }
+    }
 
     LaunchedEffect(OnlineDjBridge.request?.id) {
         val request = OnlineDjBridge.request ?: return@LaunchedEffect
@@ -249,7 +259,7 @@ fun MainApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "player",
+            startDestination = initialRoute,
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("player") {

@@ -114,6 +114,8 @@ class DJDeck(context: Context, val deckName: String) {
     var isReverbActive by mutableStateOf(false)
     var isEchoActive by mutableStateOf(false)
     var isCrushActive by mutableStateOf(false)
+    
+    private val prefs = context.getSharedPreferences("dj_deck_${deckName.replace(" ", "_")}", Context.MODE_PRIVATE)
 
     fun toggleFlanger(){ isFlangerActive=!isFlangerActive; fxProcessor.flangerEnabled=isFlangerActive }
     fun toggleReverb(){ isReverbActive=!isReverbActive; fxProcessor.reverbEnabled=isReverbActive }
@@ -123,15 +125,60 @@ class DJDeck(context: Context, val deckName: String) {
     fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect]?:false
     fun setEffectAmount(value: Float){ fxProcessor.amount=value.coerceIn(0f,1f) }
     fun setEffectBeatDivision(value: Float){ fxProcessor.beatDivision=value.coerceIn(0.0625f,1f) }
+    
+    private fun persistState() {
+        val editor = prefs.edit()
+        val t = track
+        if (t != null) {
+            editor.putString("track_id", t.id)
+            editor.putString("track_title", t.title)
+            editor.putString("track_artist", t.artist)
+            editor.putString("track_album", t.album)
+            editor.putLong("track_duration", t.durationMs)
+            editor.putString("track_uri", t.uri.toString())
+            editor.putLong("track_size", t.sizeBytes)
+        } else {
+            editor.remove("track_uri")
+        }
+        editor.putFloat("pitchSpeed", pitchSpeed)
+        editor.putFloat("volume", volume)
+        editor.apply()
+    }
+    
+    private fun restoreState() {
+        val uriStr = prefs.getString("track_uri", null)
+        if (uriStr != null) {
+            val t = AudioItem(
+                id = prefs.getString("track_id", "") ?: "",
+                title = prefs.getString("track_title", "Unknown") ?: "Unknown",
+                artist = prefs.getString("track_artist", "Unknown") ?: "Unknown",
+                album = prefs.getString("track_album", "Unknown") ?: "Unknown",
+                durationMs = prefs.getLong("track_duration", 0L),
+                uri = android.net.Uri.parse(uriStr),
+                sizeBytes = prefs.getLong("track_size", 0L)
+            )
+            track = t
+            exoPlayer.setMediaItem(MediaItem.fromUri(t.uri))
+            exoPlayer.prepare()
+        }
+        setPitchAndSpeed(prefs.getFloat("pitchSpeed", 1.0f))
+        setDeckVolume(prefs.getFloat("volume", 0.8f))
+    }
 
-    init { syncEq(); exoPlayer.addListener(object:Player.Listener{ override fun onIsPlayingChanged(playing:Boolean){isPlaying=playing} }) }
-    fun loadTrack(audioItem: AudioItem){ track=audioItem; exoPlayer.setMediaItem(MediaItem.fromUri(audioItem.uri)); exoPlayer.prepare(); applyMixerGain(); currentPositionMs=0L; durationMs=0L }
+    init { 
+        syncEq()
+        exoPlayer.addListener(object:Player.Listener{ 
+            override fun onIsPlayingChanged(playing:Boolean){isPlaying=playing} 
+        })
+        restoreState()
+    }
+    fun loadTrack(audioItem: AudioItem){ track=audioItem; exoPlayer.setMediaItem(MediaItem.fromUri(audioItem.uri)); exoPlayer.prepare(); applyMixerGain(); currentPositionMs=0L; durationMs=0L; persistState() }
     fun seekTo(positionMs:Long){ exoPlayer.seekTo(positionMs); currentPositionMs=positionMs }
     fun updateProgress(){ if(exoPlayer.isPlaying||durationMs==0L){ currentPositionMs=exoPlayer.currentPosition.coerceAtLeast(0L); val dur=exoPlayer.duration; if(dur>0L)durationMs=dur } }
     fun togglePlayPause(onPlayStarted:()->Unit={}){ if(exoPlayer.isPlaying)exoPlayer.pause() else if(track!=null){onPlayStarted();exoPlayer.play()} }
     fun pause(){exoPlayer.pause()}
-    fun setPitchAndSpeed(newRate:Float){pitchSpeed=newRate.coerceIn(0.5f,1.5f);exoPlayer.playbackParameters=PlaybackParameters(pitchSpeed,pitchSpeed)}
-    fun setDeckVolume(vol:Float){volume=vol.coerceIn(0f,1f);applyMixerGain()}
+    fun setPitchAndSpeed(newRate:Float){pitchSpeed=newRate.coerceIn(0.5f,1.5f);exoPlayer.playbackParameters=PlaybackParameters(pitchSpeed,pitchSpeed); persistState()}
+    fun setDeckVolume(vol:Float){volume=vol.coerceIn(0f,1f);applyMixerGain(); persistState()}
     fun setMixerGain(gain:Float){mixerGainValue=gain.coerceIn(0f,1f);applyMixerGain()}
     private fun applyMixerGain(){exoPlayer.volume=(volume*mixerGainValue).coerceIn(0f,1f)}
     fun release(){exoPlayer.release()}
