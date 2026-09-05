@@ -3,8 +3,6 @@ package com.example.djfx
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,14 +17,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.utils.MusicScanner
 
 @Composable
 fun DjFxBoard(controller: DjFxController) {
@@ -66,7 +62,6 @@ fun DjFxBoard(controller: DjFxController) {
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
         ) {
             Column(Modifier.padding(12.dp)) {
-                // Bank Selector
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -78,10 +73,15 @@ fun DjFxBoard(controller: DjFxController) {
                             shape = RoundedCornerShape(8.dp),
                             color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
                             contentColor = if (isSelected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f).height(36.dp)
+                            modifier = Modifier.weight(1f).height(42.dp)
                         ) {
                             Box(contentAlignment = Alignment.Center) {
-                                Text("BANK $bank", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Text(
+                                    controller.bankLabels[bank] ?: "BANK $bank",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
+                                )
                             }
                         }
                     }
@@ -89,12 +89,11 @@ fun DjFxBoard(controller: DjFxController) {
 
                 Spacer(Modifier.height(12.dp))
 
-                // 16 Pads Grid
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(4),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.height(280.dp) // Fixed height to not break scroll
+                    modifier = Modifier.height(280.dp)
                 ) {
                     items(16) { index ->
                         val padKey = "${controller.currentBank}_$index"
@@ -128,7 +127,6 @@ fun DjFxBoard(controller: DjFxController) {
                                         maxLines = 2,
                                         overflow = TextOverflow.Ellipsis
                                     )
-                                    // Small delete icon in corner
                                     IconButton(
                                         onClick = { controller.removeFxFromPad(controller.currentBank, index) },
                                         modifier = Modifier.align(Alignment.TopEnd).size(20.dp)
@@ -136,7 +134,7 @@ fun DjFxBoard(controller: DjFxController) {
                                         Icon(Icons.Filled.Close, contentDescription = "Remove", modifier = Modifier.size(12.dp))
                                     }
                                 } else {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add FX", modifier = Modifier.size(24.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
+                                    Icon(Icons.Filled.Add, contentDescription = "Add FX", modifier = Modifier.size(24.dp))
                                 }
                             }
                         }
@@ -154,7 +152,6 @@ fun DjFxBoard(controller: DjFxController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
-    val context = LocalContext.current
     var selectedCategory by remember { mutableStateOf("All") }
     val categories = listOf("All", "Favorites") + controller.allFx.map { it.category }.distinct().filter { it.isNotBlank() }
 
@@ -267,7 +264,7 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                             FilterChip(
                                 selected = selectedPadBank == b,
                                 onClick = { selectedPadBank = b },
-                                label = { Text("Bank $b") }
+                                label = { Text(controller.bankLabels[b] ?: "Bank $b") }
                             )
                         }
                     }
@@ -298,7 +295,7 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                     showPadSelector = null
                     onDismiss()
                 }) {
-                    Text("Assign to ${selectedPadBank}${selectedPadIndex + 1}")
+                    Text("Assign to ${controller.bankLabels[selectedPadBank] ?: "Bank $selectedPadBank"} ${selectedPadIndex + 1}")
                 }
             },
             dismissButton = {
