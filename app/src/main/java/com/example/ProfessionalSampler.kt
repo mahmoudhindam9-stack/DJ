@@ -225,4 +225,7 @@ fun ProfessionalSamplerBoard() {
             Text("Source: Boochi44/free-drum-samples — CC0 1.0", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
+
+    Spacer(Modifier.height(12.dp))
+    DjFxLibraryCard()
 }
