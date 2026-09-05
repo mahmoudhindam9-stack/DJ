@@ -18,7 +18,7 @@ class DjFxRepository(private val context: Context) {
                     category = entry.category,
                     source = "CC0 Open Source",
                     license = entry.source,
-                    sourceUrl = "asset:///${entry.assetPath}"
+                    sourceUrl = entry.sourceUrl ?: "asset:///${entry.assetPath}"
                 )
             }
         missing.forEach { insertFx(it) }
@@ -57,8 +57,12 @@ class DjFxRepository(private val context: Context) {
 
     suspend fun ensureFactoryPadAssignments() = withContext(Dispatchers.IO) {
         val existing = dao.getAllPads().associate { it.padKey to it.fxId }
+        val factoryIds = FactoryFxCatalog.entries.mapTo(mutableSetOf()) { it.id }
         val bankByCategory = mapOf(
             "DJ FX" to "A",
+            "شرقي" to "B",
+            "كوميدي" to "C",
+            "تريندات" to "D",
             "Drums" to "B",
             "Electronic" to "C",
             "Party" to "D"
@@ -67,7 +71,8 @@ class DjFxRepository(private val context: Context) {
             val bank = bankByCategory[category] ?: return@forEach
             entries.take(16).forEachIndexed { index, entry ->
                 val key = "${bank}_$index"
-                if (key !in existing) {
+                val current = existing[key]
+                if (current == null || current in factoryIds) {
                     dao.insertPad(DjFxPadEntity(key, entry.id))
                 }
             }
