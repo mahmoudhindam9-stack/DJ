@@ -22,6 +22,13 @@ class DjFxController(private val context: Context) {
 
     val banks = listOf("A", "B", "C", "D")
 
+    val bankLabels = mapOf(
+        "A" to "DJ FX",
+        "B" to "شرقي",
+        "C" to "كوميدي",
+        "D" to "تريندات"
+    )
+
     init {
         loadData()
     }
