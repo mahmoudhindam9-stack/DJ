@@ -280,7 +280,6 @@ class MicController(private val context: Context) {
                     val beatDelay = ((sampleRate * 60f / currentBpm) * beatFxDivision.beats).toInt().coerceIn(1, delayBuffer.size - 1)
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
-                        if (voiceProcessingEnabled && kotlin.math.abs(sample) < 0.012f) sample *= 0.08f
                         val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
                             MicFilter.CHIPMUNK -> sample *= 1.12f

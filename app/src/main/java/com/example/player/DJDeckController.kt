@@ -123,7 +123,6 @@ class DJDeck(context: Context, val deckName: String) {
     fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect]?:false
     fun setEffectAmount(value: Float){ fxProcessor.amount=value.coerceIn(0f,1f) }
     fun setEffectBeatDivision(value: Float){ fxProcessor.beatDivision=value.coerceIn(0.0625f,1f) }
-    val maqamPlayer=MaqamPlayer()
 
     init { syncEq(); exoPlayer.addListener(object:Player.Listener{ override fun onIsPlayingChanged(playing:Boolean){isPlaying=playing} }) }
     fun loadTrack(audioItem: AudioItem){ track=audioItem; exoPlayer.setMediaItem(MediaItem.fromUri(audioItem.uri)); exoPlayer.prepare(); applyMixerGain(); currentPositionMs=0L; durationMs=0L }
@@ -142,11 +141,10 @@ class DJMixerController(context: Context) {
     val deckA=DJDeck(context,"Deck A")
     val deckB=DJDeck(context,"Deck B")
     val soundPlayer=DJSoundPlayer(context)
-    val maqamPlayer=MaqamPlayer()
     var crossfader by mutableStateOf(0.5f); private set
     init{updateCrossfader(0.5f)}
     fun updateCrossfader(position:Float){crossfader=position.coerceIn(0f,1f);deckA.setMixerGain(1f-crossfader);deckB.setMixerGain(crossfader)}
-    fun pauseAll(){deckA.pause();deckB.pause();maqamPlayer.stop()}
+    fun pauseAll(){deckA.pause();deckB.pause()}
     fun playMelodyOverDeckA(melody:AudioItem):Boolean{if(deckA.track==null)return false;deckB.loadTrack(melody);deckA.setMixerGain(1f-crossfader);deckB.setMixerGain(crossfader);deckA.exoPlayer.play();deckB.exoPlayer.play();return true}
     fun release(){deckA.release();deckB.release()}
 }

@@ -81,6 +81,7 @@ fun MainApp() {
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
     val musicStudioController = remember { MusicStudioController(context) }
+    val djFxController = remember { com.example.djfx.DjFxController(context) }
 
     LaunchedEffect(OnlineDjBridge.request?.id) {
         val request = OnlineDjBridge.request ?: return@LaunchedEffect
@@ -95,18 +96,34 @@ fun MainApp() {
     val playlists = remember { mutableStateListOf<Playlist>() }
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    // NOTIFICATION_PERMISSION_V1
-    val notificationPermissionLauncher = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { }
-    } else null
+    val multiplePermissionsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { _ -> }
 
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        val permissionsToRequest = mutableListOf<String>()
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
+            permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
+        }
+
+        val missingPermissions = permissionsToRequest.filter {
             androidx.core.content.ContextCompat.checkSelfPermission(
-                context, Manifest.permission.POST_NOTIFICATIONS
+                context, it
             ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionLauncher?.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            multiplePermissionsLauncher.launch(missingPermissions.toTypedArray())
         }
     }
 
@@ -144,6 +161,7 @@ fun MainApp() {
             djMixerController.release()
             eqController.release()
             musicStudioController.close()
+            djFxController.release()
         }
     }
 
@@ -246,6 +264,7 @@ fun MainApp() {
             composable("dj") {
                 DJMixerScreen(
                     djMixerController = djMixerController,
+                    djFxController = djFxController,
                     audioLibrary = audioLibrary,
                     onPauseMainPlayer = { playerController.pause() }
                 )
@@ -1086,6 +1105,7 @@ fun NowPlayingCard(
 @Composable
 fun DJMixerScreen(
     djMixerController: DJMixerController,
+    djFxController: com.example.djfx.DjFxController,
     audioLibrary: SnapshotStateList<AudioItem>,
     onPauseMainPlayer: () -> Unit
 ) {
@@ -1115,10 +1135,39 @@ fun DJMixerScreen(
             color = MaterialTheme.colorScheme.primary
         )
         Text(
-            text = "Live soundboard, instruments, crowd effects & dual deck control",
+            text = "Dual deck control & FX",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // Crossfader Control Section (Moved to top)
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("DECK A (${((1f - djMixerController.crossfader) * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    Text("CROSSFADER", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    Text("DECK B (${(djMixerController.crossfader * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                }
+
+                Slider(
+                    value = djMixerController.crossfader,
+                    onValueChange = { djMixerController.updateCrossfader(it) },
+                    valueRange = 0f..1f,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
 
         Spacer(modifier = Modifier.height(16.dp))
 
@@ -1148,44 +1197,7 @@ fun DJMixerScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Crossfader Control Section
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("DECK A (${((1f - djMixerController.crossfader) * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    Text("CROSSFADER", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
-                    Text("DECK B (${(djMixerController.crossfader * 100).toInt()}%)", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                }
-
-                Slider(
-                    value = djMixerController.crossfader,
-                    onValueChange = { djMixerController.updateCrossfader(it) },
-                    valueRange = 0f..1f,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // Maqamat & Oriental Taqasim Section
-        MaqamatSection(djMixerController.maqamPlayer)
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // DJ_SAMPLER_CC0_V1
-        // The former generated/legacy sound buttons are removed completely.
-        // This is the only sampler surface shown in the DJ page.
-        ProfessionalSamplerBoard()
+        com.example.djfx.DjFxBoard(controller = djFxController)
 
     }
 }
