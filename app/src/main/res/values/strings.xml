@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">Music Player</string>
+    <string name="widget_music_player_label">Music Player Widget</string>
+    <string name="widget_quick_player_label">Quick Player Widget</string>
+    <string name="widget_dj_mixer_label">DJ Mixer Widget</string>
+    <string name="widget_time_weather_label">Time &amp; Weather Widget</string>
+    <string name="widget_music_player_description">Music playback controls and current track.</string>
+    <string name="widget_quick_player_description">Quick playback controls for the active track.</string>
+    <string name="widget_dj_mixer_description">Deck A and Deck B status for the DJ mixer.</string>
+    <string name="widget_time_weather_description">Current local time and weather with location refresh.</string>
 </resources>
