@@ -46,14 +46,15 @@ class MusicService : Service() {
         mediaSession = MediaSessionCompat(this, "DJMusicSession").apply {
             setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
             setCallback(object : MediaSessionCompat.Callback() {
-                override fun onPlay() { playerController?.togglePlayPause() }
-                override fun onPause() { playerController?.pause() }
-                override fun onSkipToNext() { playerController?.playNext() }
-                override fun onSkipToPrevious() { playerController?.playPrevious() }
-                override fun onStop() { playerController?.pause(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+                override fun onPlay() { if (!PlaybackNotificationRouter.dispatchPlayPause()) playerController?.togglePlayPause() }
+                override fun onPause() { if (!PlaybackNotificationRouter.dispatchPlayPause()) playerController?.pause() }
+                override fun onSkipToNext() { if (!PlaybackNotificationRouter.dispatchNext()) playerController?.playNext() }
+                override fun onSkipToPrevious() { if (!PlaybackNotificationRouter.dispatchPrevious()) playerController?.playPrevious() }
+                override fun onStop() { if (!PlaybackNotificationRouter.dispatchStop()) { playerController?.pause(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() } }
             })
             setActive(true)
         }
+        PlaybackNotificationRouter.attachService(this)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -62,53 +63,37 @@ class MusicService : Service() {
             ACTION_EQ_BASS -> { EqualizerController.adjustQuickBand(this, 0); refreshWidgetFromStoredState() }
             ACTION_EQ_MID -> { EqualizerController.adjustQuickBand(this, 1); refreshWidgetFromStoredState() }
             ACTION_EQ_TREBLE -> { EqualizerController.adjustQuickBand(this, 2); refreshWidgetFromStoredState() }
-            ACTION_TOGGLE_PLAY -> { ensureController(); playerController?.togglePlayPause(); syncFromController() }
-            ACTION_NEXT -> { ensureController(); playerController?.playNext(); syncFromController() }
-            ACTION_PREV -> { ensureController(); playerController?.playPrevious(); syncFromController() }
-            ACTION_STOP -> { playerController?.pause(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() }
+            ACTION_TOGGLE_PLAY -> { if (!PlaybackNotificationRouter.dispatchPlayPause()) { ensureController(); playerController?.togglePlayPause(); syncFromController() } }
+            ACTION_NEXT -> { if (!PlaybackNotificationRouter.dispatchNext()) { ensureController(); playerController?.playNext(); syncFromController() } }
+            ACTION_PREV -> { if (!PlaybackNotificationRouter.dispatchPrevious()) { ensureController(); playerController?.playPrevious(); syncFromController() } }
+            ACTION_STOP -> { if (!PlaybackNotificationRouter.dispatchStop()) { playerController?.pause(); stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() } }
             ACTION_MIC_START -> { micActive = true; updateMicNotification() }
             ACTION_MIC_STOP -> { micActive = false; if (playerController?.isPlaying != true) { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf() } else syncFromController() }
-            else -> syncFromController()
+            else -> if (!PlaybackNotificationRouter.hasActiveSource()) syncFromController() else PlaybackNotificationRouter.attachService(this)
         }
         return START_STICKY
     }
 
-    private fun ensureController() {
-        if (playerController == null) playerController = AudioPlayerController.obtain(applicationContext)
-    }
+    private fun ensureController() { if (playerController == null) playerController = AudioPlayerController.obtain(applicationContext) }
 
     private fun syncFromController() {
         val controller = playerController ?: return
-        updateNotification(controller.currentSong?.title ?: "مشغل الموسيقى", controller.currentSong?.artist ?: "موسيقى", controller.isPlaying)
+        PlaybackNotificationRouter.activate(this, "player", controller.currentSong?.title ?: "مشغل الموسيقى", controller.currentSong?.artist ?: "موسيقى", controller.isPlaying,
+            playPause = { controller.togglePlayPause() }, next = { controller.playNext() }, previous = { controller.playPrevious() }, stop = { controller.pause() })
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     private fun startForegroundTyped(id: Int, notification: Notification, type: Int) {
         try {
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                ServiceCompat.startForeground(this, id, notification, type)
-            } else {
-                startForeground(id, notification)
-            }
-        } catch (_: Throwable) {
-            try {
-                startForeground(id, notification)
-            } catch (_: Throwable) { }
-        }
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) ServiceCompat.startForeground(this, id, notification, type) else startForeground(id, notification)
+        } catch (_: Throwable) { try { startForeground(id, notification) } catch (_: Throwable) { } }
     }
 
     private fun updateMicNotification() {
         val intent = Intent(this, MainActivity::class.java)
         val pending = PendingIntent.getActivity(this, 99, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("DJ Microphone")
-            .setContentText("Live microphone monitor is running")
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentIntent(pending)
-            .setOngoing(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .build()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle("DJ Microphone").setContentText("Live microphone monitor is running").setSmallIcon(android.R.drawable.ic_btn_speak_now).setContentIntent(pending).setOngoing(true).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).build()
         startForegroundTyped(MIC_NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
@@ -118,17 +103,11 @@ class MusicService : Service() {
         val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         mediaSession.isActive = true
         mediaSession.setMetadata(MediaMetadataCompat.Builder().putString(MediaMetadataCompat.METADATA_KEY_TITLE, title).putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist).build())
-        mediaSession.setPlaybackState(PlaybackStateCompat.Builder()
-            .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP)
-            .setState(if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, playerController?.currentPositionMs ?: 0L, if (isPlaying) 1f else 0f).build())
+        mediaSession.setPlaybackState(PlaybackStateCompat.Builder().setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP).setState(if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, playerController?.currentPositionMs ?: 0L, if (isPlaying) 1f else 0f).build())
         val playPauseAction = NotificationCompat.Action(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, if (isPlaying) "Pause" else "Play", PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE_PLAY), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         val prevAction = NotificationCompat.Action(android.R.drawable.ic_media_previous, "Previous", PendingIntent.getService(this, 2, Intent(this, MusicService::class.java).setAction(ACTION_PREV), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
         val nextAction = NotificationCompat.Action(android.R.drawable.ic_media_next, "Next", PendingIntent.getService(this, 3, Intent(this, MusicService::class.java).setAction(ACTION_NEXT), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
-        val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title).setContentText(artist).setSmallIcon(android.R.drawable.ic_media_play)
-            .setContentIntent(pendingIntent).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(isPlaying)
-            .addAction(prevAction).addAction(playPauseAction).addAction(nextAction)
-            .setStyle(MediaStyle().setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)).build()
+        val notification = NotificationCompat.Builder(this, CHANNEL_ID).setContentTitle(title).setContentText(artist).setSmallIcon(android.R.drawable.ic_media_play).setContentIntent(pendingIntent).setVisibility(NotificationCompat.VISIBILITY_PUBLIC).setOngoing(isPlaying).addAction(prevAction).addAction(playPauseAction).addAction(nextAction).setStyle(MediaStyle().setMediaSession(mediaSession.sessionToken).setShowActionsInCompactView(0, 1, 2)).build()
         startForegroundTyped(NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
         updateWidget(title, artist, isPlaying)
     }
@@ -145,16 +124,8 @@ class MusicService : Service() {
     }
 
     private fun createNotificationChannel() {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val serviceChannel = NotificationChannel(CHANNEL_ID, "Music Playback Channel", NotificationManager.IMPORTANCE_LOW)
-            getSystemService(NotificationManager::class.java)?.createNotificationChannel(serviceChannel)
-        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Music Playback Channel", NotificationManager.IMPORTANCE_LOW))
     }
 
-    override fun onDestroy() {
-        mediaSession.isActive = false
-        mediaSession.release()
-        super.onDestroy()
-        instance = null
-    }
+    override fun onDestroy() { mediaSession.isActive = false; mediaSession.release(); super.onDestroy(); instance = null }
 }
