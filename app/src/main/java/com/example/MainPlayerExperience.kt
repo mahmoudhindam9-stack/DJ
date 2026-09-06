@@ -5,6 +5,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -294,7 +295,53 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit, onSelect: (AudioItem) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss) { Column(Modifier.fillMaxWidth().padding(16.dp)) { Text("Queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("${controller.playlist.size} song(s)", style = MaterialTheme.typography.bodySmall); Spacer(Modifier.height(8.dp)); LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) { items(controller.playlist, key = { it.id + it.uri }) { song -> Row(Modifier.fillMaxWidth().clickable { onSelect(song) }.padding(9.dp), verticalAlignment = Alignment.CenterVertically) { Icon(if (controller.currentSong?.id == song.id) Icons.Filled.PlayArrow else Icons.Filled.MusicNote, null); Spacer(Modifier.width(8.dp)); Column(Modifier.weight(1f)) { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) } } } } } }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var showFolderPicker by remember { mutableStateOf(false) }
+    var downloading by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+
+    val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        showFolderPicker = false
+        if (uri == null) return@rememberLauncherForActivityResult
+        downloading = true
+        message = "Downloading queue..."
+        scope.launch {
+            val result = OnlineQueueDownloader.download(context, uri, controller.playlist.toList())
+            downloading = false
+            message = "Downloaded ${result.downloaded}; skipped ${result.skipped}; failed ${result.failed}"
+        }
+    }
+
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("${controller.playlist.size} song(s)", style = MaterialTheme.typography.bodySmall)
+                }
+                Button(onClick = { if (!downloading && controller.playlist.isNotEmpty()) folderPicker.launch(null) }, enabled = !downloading && controller.playlist.isNotEmpty()) {
+                    Icon(Icons.Filled.Download, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (downloading) "Downloading..." else "Download List")
+                }
+            }
+            message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }
+            Spacer(Modifier.height(8.dp))
+            LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                items(controller.playlist, key = { it.id + it.uri }) { song ->
+                    Row(Modifier.fillMaxWidth().clickable { onSelect(song) }.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (controller.currentSong?.id == song.id) Icons.Filled.PlayArrow else Icons.Filled.MusicNote, null)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
