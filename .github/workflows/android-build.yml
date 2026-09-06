@@ -26,6 +26,10 @@ jobs:
           java-version: '17'
           cache: gradle
 
+      - name: Apply global app-wide EQ routing
+        shell: bash
+        run: python3 .github/fix_global_equalizer_routing.py
+
       - name: Apply DJ UI-only polish
         shell: bash
         run: python3 .github/dj_ui_polish.py
