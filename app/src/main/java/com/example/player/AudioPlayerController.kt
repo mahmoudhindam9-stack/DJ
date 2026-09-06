@@ -12,9 +12,7 @@ import com.example.model.AudioItem
 import org.json.JSONArray
 import org.json.JSONObject
 
-enum class RepeatOption {
-    OFF, ALL, ONE
-}
+enum class RepeatOption { OFF, ALL, ONE }
 
 class AudioPlayerController(private val context: Context) {
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
@@ -49,6 +47,7 @@ class AudioPlayerController(private val context: Context) {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
                 persistSession(force = true)
+                syncNotificationSafely()
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -79,17 +78,17 @@ class AudioPlayerController(private val context: Context) {
         try {
             val existingController = MusicService.instance?.playerController
             if (existingController != null && existingController !== this) return
-            val serviceIntent = Intent(context, MusicService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(serviceIntent)
-            } else {
-                context.startService(serviceIntent)
-            }
-            MusicService.instance?.playerController = this
-            MusicService.instance?.updateNotification(
-                currentSong?.title ?: "مشغل الموسيقى",
-                currentSong?.artist ?: "موسيقى",
-                isPlaying
+
+            PlaybackNotificationRouter.activate(
+                context = context,
+                source = "player",
+                title = currentSong?.title ?: "مشغل الموسيقى",
+                artist = currentSong?.artist ?: "موسيقى",
+                isPlaying = isPlaying,
+                playPause = { togglePlayPause() },
+                next = { playNext() },
+                previous = { playPrevious() },
+                stop = { pause() }
             )
         } catch (_: Throwable) {
         }
@@ -354,6 +353,7 @@ class AudioPlayerController(private val context: Context) {
             val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
             exoPlayer.playWhenReady = savedPlaying && canAutoResume
             applyPreferredAudioDevice()
+            syncNotificationSafely()
         } catch (_: Exception) {
             prefs.edit().clear().apply()
             playlist.clear()
@@ -366,6 +366,7 @@ class AudioPlayerController(private val context: Context) {
     @OptIn(UnstableApi::class)
     fun release() {
         persistSession(force = true)
+        PlaybackNotificationRouter.clear("player")
         try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
         if (activeInstance === this) activeInstance = null
         exoPlayer.release()
