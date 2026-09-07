@@ -20,6 +20,7 @@ enum class RepeatOption { OFF, ALL, ONE }
 class AudioPlayerController(private val context: Context) {
     val fxProcessor = DeckFxAudioProcessor()
     val eqController = EqualizerController(context) { syncEq() }
+    var crossfadeDurationMs by mutableLongStateOf(2000L)
 
     private fun syncEq() {
         val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()

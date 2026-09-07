@@ -1,4 +1,9 @@
+import re
 
+with open('app/src/main/java/com/example/DJFxRackScreen.kt', 'r') as f:
+    text = f.read()
+
+replacement = """
 package com.example
 
 import androidx.compose.foundation.layout.*
@@ -186,3 +191,7 @@ fun DJFxRack(deck: DJDeckController) {
         }
     }
 }
+"""
+
+with open('app/src/main/java/com/example/DJFxRackScreen.kt', 'w') as f:
+    f.write(replacement)

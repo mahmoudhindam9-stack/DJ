@@ -53,9 +53,9 @@ class MusicWidgetProvider : AppWidgetProvider() {
             views.setProgressBar(R.id.widget_eq_treble, 12, (treble + 6).coerceIn(0, 12), false)
             val base = id * 10
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            views.setOnClickPendingIntent(R.id.widget_btn_prev, PendingIntent.getService(context, base, Intent(context, MusicService::class.java).setAction(MusicService.ACTION_PREV), flags))
-            views.setOnClickPendingIntent(R.id.widget_btn_play, PendingIntent.getService(context, base + 1, Intent(context, MusicService::class.java).setAction(MusicService.ACTION_TOGGLE_PLAY), flags))
-            views.setOnClickPendingIntent(R.id.widget_btn_next, PendingIntent.getService(context, base + 2, Intent(context, MusicService::class.java).setAction(MusicService.ACTION_NEXT), flags))
+            views.setOnClickPendingIntent(R.id.widget_btn_prev, PendingIntent.getBroadcast(context, base, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_PREV), flags))
+            views.setOnClickPendingIntent(R.id.widget_btn_play, PendingIntent.getBroadcast(context, base + 1, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_TOGGLE_PLAY), flags))
+            views.setOnClickPendingIntent(R.id.widget_btn_next, PendingIntent.getBroadcast(context, base + 2, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_NEXT), flags))
             manager.updateAppWidget(id, views)
         }
     }
