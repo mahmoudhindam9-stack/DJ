@@ -3,6 +3,9 @@ package com.example
 
 import android.content.Context
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -51,7 +54,7 @@ fun EffectTile(
 ) {
     Surface(
         onClick = onClick,
-        modifier = modifier.height(38.dp),
+        modifier = modifier.height(45.dp).width(110.dp),
         shape = RoundedCornerShape(8.dp),
         color = if (isActive) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
         contentColor = if (isActive) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
@@ -120,9 +123,7 @@ fun DJFxRack(deck: DJDeckController) {
                     
                     Spacer(Modifier.height(16.dp))
                     
-                    LazyVerticalGrid(
-                        columns = GridCells.Fixed(2),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    androidx.compose.foundation.lazy.LazyColumn(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.height(300.dp)
                     ) {
@@ -189,13 +190,11 @@ fun DJFxRack(deck: DJDeckController) {
                     Text("No effects added. Tap + to browse library.", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
                 }
             } else {
-                LazyVerticalGrid(
-                    columns = GridCells.Fixed(3),
+                androidx.compose.foundation.lazy.LazyRow(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(80.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        .height(50.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     userScrollEnabled = true
                 ) {
                     val displayPlugins = allPlugins.filter { activePlugins.contains(it.id) }

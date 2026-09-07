@@ -45,10 +45,14 @@ object GitHubUpdater {
                     val json = JSONObject(response)
                     val tagName = json.optString("tag_name", "")
                     
+
                     val latestVersion = tagName.replace("v", "")
                     val currVer = currentVersion.replace("v", "")
-                    // Compare by length or alphabetically since dates will just be bigger
-                    val isNewer = latestVersion != currVer && latestVersion > currVer
+                    val prefs = context.getSharedPreferences("updater_prefs", Context.MODE_PRIVATE)
+                    val lastDownloaded = prefs.getString("last_downloaded_version", "") ?: ""
+                    
+                    val isNewer = latestVersion != currVer && latestVersion > currVer && latestVersion != lastDownloaded
+
                     
                     if (isNewer && latestVersion.isNotEmpty()) {
                         val assets = json.optJSONArray("assets")
@@ -65,7 +69,7 @@ object GitHubUpdater {
                             if (apkUrl.isNotEmpty()) {
                                 withContext(Dispatchers.Main) {
                                     Toast.makeText(context, "تحديث جديد متاح ($tagName)، جاري التحميل...", Toast.LENGTH_LONG).show()
-                                    downloadAndInstallUpdate(context, apkUrl, "app-update-$tagName.apk")
+                                    downloadAndInstallUpdate(context, apkUrl, "app-update-$tagName.apk", tagName)
                                 }
                             }
                         }
@@ -92,7 +96,10 @@ object GitHubUpdater {
         }
     }
 
-    private fun downloadAndInstallUpdate(context: Context, apkUrl: String, fileName: String) {
+        private fun downloadAndInstallUpdate(context: Context, apkUrl: String, fileName: String, tagName: String) {
+        val prefs = context.getSharedPreferences("updater_prefs", Context.MODE_PRIVATE)
+        prefs.edit().putString("last_downloaded_version", tagName.replace("v", "")).apply()
+
         try {
             val request = DownloadManager.Request(Uri.parse(apkUrl))
                 .setTitle("تحديث التطبيق")
