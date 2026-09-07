@@ -91,7 +91,24 @@ class DJDeckController(private val context: Context, val deckName: String) {
 
     fun toggleEffect(fxId: String) {
         val currentlyActive = activeEffects[fxId] ?: false
+        
+        if (!currentlyActive && fxId.startsWith("voice_")) {
+            activeEffects.keys.toList().filter { it.startsWith("voice_") }.forEach {
+                activeEffects[it] = false
+            }
+        }
+        
         activeEffects[fxId] = !currentlyActive
+        
+        var newPitch = 1.0f
+        if (activeEffects["voice_woman"] == true) newPitch = 1.4f
+        else if (activeEffects["voice_kid"] == true) newPitch = 1.6f
+        else if (activeEffects["voice_chipmunk"] == true) newPitch = 2.0f
+        else if (activeEffects["voice_monster"] == true) newPitch = 0.7f
+        else if (activeEffects["voice_demon"] == true) newPitch = 0.5f
+        else if (activeEffects["voice_giant"] == true) newPitch = 0.6f
+        
+        setPlaybackPitch(newPitch)
         updateProcessorEffects()
     }
 

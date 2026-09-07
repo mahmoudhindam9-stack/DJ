@@ -37,6 +37,15 @@ fun loadCustomEffects(context: Context): List<ModularEffect> {
     val prefs = context.getSharedPreferences("modular_fx", Context.MODE_PRIVATE)
     val jsonStr = prefs.getString("plugins", "[]") ?: "[]"
     val list = mutableListOf<ModularEffect>()
+    
+    // Built-in Voice effects
+    list.add(ModularEffect("voice_woman", "👩 Woman Voice", false))
+    list.add(ModularEffect("voice_kid", "👶 Kid Voice", false))
+    list.add(ModularEffect("voice_chipmunk", "🐿️ Chipmunk", false))
+    list.add(ModularEffect("voice_monster", "👹 Monster", false))
+    list.add(ModularEffect("voice_demon", "👻 Dark Demon", false))
+    list.add(ModularEffect("voice_giant", "🏔️ Giant Bass", false))
+
     try {
         val array = JSONArray(jsonStr)
         for (i in 0 until array.length()) {
