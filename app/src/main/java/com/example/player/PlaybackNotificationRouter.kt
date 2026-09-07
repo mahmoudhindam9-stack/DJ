@@ -66,6 +66,7 @@ object PlaybackNotificationRouter {
         MusicWidgetProvider.requestAllUpdates(context)
         QuickPlayerWidgetProvider.requestAllUpdates(context)
         DJMixerWidgetProvider.requestAllUpdates(context)
+        com.example.widget.TimeWeatherWidgetProvider.requestAllUpdates(context)
     }
 
     fun activeSnapshot(context: Context): Triple<String, String, Boolean> {
