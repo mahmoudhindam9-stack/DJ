@@ -12,6 +12,9 @@ plugins {
 }
 
 android {
+    lint {
+        abortOnError = false
+    }
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 

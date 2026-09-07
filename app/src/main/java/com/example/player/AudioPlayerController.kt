@@ -11,6 +11,8 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.example.model.AudioItem
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.*
+
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
@@ -38,6 +40,63 @@ class AudioPlayerController(private val context: Context) {
     }
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
+    val tailPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
+    var isCrossfadeEnabled by mutableStateOf(true)
+    var crossfadeDurationMs by mutableStateOf(5000L)
+    private var crossfadeJob: Job? = null
+    private var isTailPreloaded = false
+
+    private fun cancelCrossfade() {
+        crossfadeJob?.cancel()
+        crossfadeJob = null
+        tailPlayer.stop()
+        tailPlayer.clearMediaItems()
+        isTailPreloaded = false
+        exoPlayer.volume = volume
+    }
+
+    private fun hasNextTrackForCrossfade(): Boolean {
+        if (playlist.isEmpty()) return false
+        if (repeatOption == RepeatOption.ONE) return false
+        return isShuffle || repeatOption == RepeatOption.ALL || currentSongIndex < playlist.size - 1
+    }
+
+    private fun startCrossfadeToNext() {
+        crossfadeJob?.cancel()
+        crossfadeJob = CoroutineScope(Dispatchers.Main).launch {
+            try {
+                if (!isTailPreloaded) {
+                    val uri = currentSong?.uri
+                    if (uri != null) {
+                        tailPlayer.setMediaItem(MediaItem.fromUri(uri))
+                        tailPlayer.volume = volume
+                        tailPlayer.prepare()
+                    }
+                }
+                tailPlayer.seekTo(currentPositionMs)
+                tailPlayer.volume = volume
+                tailPlayer.play()
+                
+                playNext(isAutoCrossfade = true)
+                exoPlayer.volume = 0f
+                
+                val steps = 50
+                val stepDelay = crossfadeDurationMs / steps
+                for (i in 1..steps) {
+                    if (!isActive) break
+                    val progress = i / steps.toFloat()
+                    tailPlayer.volume = volume * (1f - progress)
+                    exoPlayer.volume = volume * progress
+                    delay(stepDelay)
+                }
+            } finally {
+                tailPlayer.stop()
+                tailPlayer.clearMediaItems()
+                exoPlayer.volume = volume
+                isTailPreloaded = false
+            }
+        }
+    }
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -152,6 +211,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun togglePlayPause() {
+        cancelCrossfade()
         if (exoPlayer.isPlaying) {
             exoPlayer.pause()
         } else {
@@ -164,12 +224,14 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun pause() {
+        cancelCrossfade()
         exoPlayer.pause()
         persistSession(force = true)
         syncNotificationSafely()
     }
 
-    fun playNext() {
+    fun playNext(isAutoCrossfade: Boolean = false) {
+        if (!isAutoCrossfade) cancelCrossfade()
         if (playlist.isEmpty()) return
         val nextIndex = if (isShuffle) {
             playlist.indices.filter { it != currentSongIndex }.randomOrNull() ?: currentSongIndex
@@ -189,6 +251,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun playPrevious() {
+        cancelCrossfade()
         if (playlist.isEmpty()) return
         if (currentPositionMs > 3000) {
             exoPlayer.seekTo(0)
@@ -216,6 +279,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun seekTo(positionMs: Long) {
+        cancelCrossfade()
         val safe = positionMs.coerceAtLeast(0L)
         exoPlayer.seekTo(safe)
         currentPositionMs = safe
@@ -286,6 +350,25 @@ class AudioPlayerController(private val context: Context) {
         if (exoPlayer.isPlaying) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             if (durationMs <= 0L) durationMs = exoPlayer.duration.coerceAtLeast(0L)
+            
+            if (isCrossfadeEnabled && durationMs > 0L) {
+                val remaining = durationMs - currentPositionMs
+                if (remaining in (crossfadeDurationMs + 1000)..(crossfadeDurationMs + 5000) && !isTailPreloaded && crossfadeJob?.isActive != true) {
+                    val uri = currentSong?.uri
+                    if (uri != null) {
+                        isTailPreloaded = true
+                        tailPlayer.setMediaItem(MediaItem.fromUri(uri))
+                        tailPlayer.volume = 0f
+                        tailPlayer.prepare()
+                    }
+                }
+                if (remaining <= crossfadeDurationMs && remaining > 0 && crossfadeJob?.isActive != true) {
+                    if (hasNextTrackForCrossfade()) {
+                        startCrossfadeToNext()
+                    }
+                }
+            }
+            
             persistSession()
         }
     }
@@ -391,6 +474,7 @@ class AudioPlayerController(private val context: Context) {
         PlaybackNotificationRouter.clear("player")
         try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
         if (activeInstance === this) activeInstance = null
+        tailPlayer.release()
         exoPlayer.release()
     }
 

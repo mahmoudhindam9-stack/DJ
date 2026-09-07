@@ -3,6 +3,8 @@ package com.example.player
 import androidx.media3.common.C
 import androidx.media3.common.audio.AudioProcessor
 import java.nio.ByteBuffer
+import com.example.player.fx.DspPluginManager
+import com.example.player.fx.AudioPlugin
 import java.nio.ByteOrder
 import kotlin.math.PI
 import kotlin.math.abs
@@ -50,6 +52,7 @@ class DeckFxAudioProcessor : AudioProcessor {
     }
 
     private val activeEffects = mutableSetOf<Effect>()
+    private val pluginChain = DspPluginManager.createChain()
 
     var flangerEnabled: Boolean
         get() = activeEffects.contains(Effect.FLANGER)
@@ -328,158 +331,29 @@ class DeckFxAudioProcessor : AudioProcessor {
                     sample = softLimit(sample)
                 }
 
-                // 1. Roll / Stutter / Beat Repeat
-                if (activeEffects.contains(Effect.ROLL) || activeEffects.contains(Effect.STUTTER) || activeEffects.contains(Effect.BEAT_REPEAT)) {
-                    val rollIdx = (rollWritePos % rollFrames) * channelCount + ch
-                    if (rollIdx in rollBuffer.indices) sample = rollBuffer[rollIdx]
-                } else {
-                    val rollIdx = (rollWritePos % maxDelayFrames) * channelCount + ch
-                    if (rollIdx in rollBuffer.indices) rollBuffer[rollIdx] = sample
-                }
-
-                // 2. Low Pass / Filter
-                if (activeEffects.contains(Effect.FILTER) || activeEffects.contains(Effect.LOW_PASS)) {
-                    val cutoff = 0.03f + 0.65f * (1f - fxAmount)
-                    lpState[ch] += cutoff * (sample - lpState[ch])
-                    sample = lpState[ch] * (1f + 0.2f * fxAmount)
-                }
-
-                // 3. High Pass
-                if (activeEffects.contains(Effect.HIGH_PASS)) {
-                    val cutoff = 0.05f + 0.70f * fxAmount
-                    hpState[ch] += cutoff * (sample - hpState[ch])
-                    sample = (sample - hpState[ch]) * (1f + 0.3f * fxAmount)
-                }
-
-                // 4. Filter Roll
-                if (activeEffects.contains(Effect.FILTER_ROLL)) {
-                    val modCutoff = if (isGateOn) 0.15f + 0.65f * fxAmount else 0.03f
-                    lpState[ch] += modCutoff * (sample - lpState[ch])
-                    sample = lpState[ch]
-                }
-
-                // 5. Flanger
-                if (activeEffects.contains(Effect.FLANGER)) {
-                    val delaySamples = (sampleRate * (0.001 + 0.004 * lfoVal)).toInt().coerceIn(1, maxDelayFrames - 1)
-                    val delayed = readDelay(delaySamples, ch)
-                    sample = sample * (1f - 0.4f * fxAmount) + delayed * 0.7f * fxAmount
-                }
-
-                // 6. Phaser
-                if (activeEffects.contains(Effect.PHASER)) {
-                    val phaserDelay = (sampleRate * (0.0015 + 0.0025 * lfoVal)).toInt().coerceIn(1, maxDelayFrames - 1)
-                    val phaserDelayed = readDelay(phaserDelay, ch)
-                    sample = sample * 0.6f + phaserDelayed * 0.6f * fxAmount
-                }
-
-                // 7. Reverb & Space
-                if (activeEffects.contains(Effect.REVERB) || activeEffects.contains(Effect.SPACE)) {
-                    val r1 = readDelay((sampleRate * 0.032).toInt(), ch)
-                    val r2 = readDelay((sampleRate * 0.065).toInt(), ch)
-                    val r3 = readDelay((sampleRate * 0.095).toInt(), ch)
-                    val rev = (r1 * 0.35f + r2 * 0.25f + r3 * 0.20f) * fxAmount
-                    sample += rev
-                }
-
-                // 8. Echo & Delay
-                if (activeEffects.contains(Effect.ECHO) || activeEffects.contains(Effect.DELAY)) {
-                    val delayTimeSec = if (activeEffects.contains(Effect.DELAY)) (div * 0.5f).coerceIn(0.08f, 0.65f) else 0.24f
-                    val delayFramesCount = (sampleRate * delayTimeSec).toInt().coerceIn(1, maxDelayFrames - 1)
-                    val echo = readDelay(delayFramesCount, ch) * (0.45f + 0.35f * fxAmount)
-                    sample += echo
-                }
-
-                // 9. Pitch Echo
-                if (activeEffects.contains(Effect.PITCH_ECHO)) {
-                    val delay1 = readDelay((sampleRate * 0.14).toInt(), ch)
-                    val delay2 = readDelay((sampleRate * 0.28).toInt(), ch)
-                    sample += (delay1 * 0.4f + delay2 * 0.25f) * fxAmount
-                }
-
-                // 10. Tremolo
-                if (activeEffects.contains(Effect.TREMOLO)) {
-                    sample *= (1f - fxAmount) + fxAmount * tremVal
-                }
-
-                // 11. Choppa & Slice & Transform
-                if (activeEffects.contains(Effect.CHOPPA) || activeEffects.contains(Effect.SLICE) || activeEffects.contains(Effect.TRANSFORM)) {
-                    val mult = if (isGateOn) 1f else (1f - fxAmount)
-                    sample *= mult
-                }
-
-                // 12. Mute
-                if (activeEffects.contains(Effect.MUTE)) sample = 0f
-
-                // 13. Fader Tone
-                if (activeEffects.contains(Effect.FADER_TONE)) {
-                    val tone = abs(cos(2.0 * PI * 1.5 * lfoPhase)).toFloat()
-                    sample *= (0.25f + 0.75f * tone)
-                }
-
-                // 14. Gate
-                if (activeEffects.contains(Effect.GATE)) {
-                    val threshold = 0.05f + 0.15f * fxAmount
-                    if (abs(sample) < threshold) sample *= 0.1f
-                }
-
-                // 15. Bitcrush
-                if (activeEffects.contains(Effect.BITCRUSH)) {
-                    val decimate = max(1, (1 + (12 * fxAmount)).toInt())
-                    if (crushCounter % decimate == 0) {
-                        val steps = max(4f, 48f - 40f * fxAmount)
-                        crushHeldSample[ch] = (sample * steps).roundToInt() / steps
+                
+                // MODULAR FX ENGINE
+                // Processing each active plugin sequentially
+                for (plugin in pluginChain) {
+                    val targetEffect = mapEffectToPlugin(plugin.id)
+                    val targetEnabled = targetEffect != null && activeEffects.contains(targetEffect)
+                    
+                    if (targetEnabled && fxAmount > 0.01f) {
+                        plugin.enabled = true
+                        plugin.amount = fxAmount
+                        sample = plugin.process(sample, ch)
+                    } else {
+                        // Reset plugin states if they were just disabled
+                        if (plugin.enabled) {
+                            plugin.enabled = false
+                            plugin.reset()
+                        }
                     }
-                    sample = crushHeldSample[ch]
                 }
-
-                // 16. Telephone
-                if (activeEffects.contains(Effect.TELEPHONE)) {
-                    bpState[ch] += 0.25f * (sample - bpState[ch])
-                    sample = (bpState[ch] * 2.2f).coerceIn(-0.75f, 0.75f) * 1.3f
-                }
-
-                // 17. Vinyl
-                if (activeEffects.contains(Effect.VINYL)) {
-                    val wow = sin(2.0 * PI * 0.55 * lfoPhase).toFloat() * 0.001f
-                    val d = (sampleRate * (0.01 + wow)).toInt().coerceIn(1, maxDelayFrames - 1)
-                    val vinylWobble = readDelay(d, ch)
-                    val crackle = if (Math.random() < 0.008) (Math.random().toFloat() * 2f - 1f) * 0.15f else 0f
-                    sample = sample * 0.85f + vinylWobble * 0.15f + crackle * fxAmount
-                }
-
-                // 18. Robot
-                if (activeEffects.contains(Effect.ROBOT)) {
-                    val carrier = sin(2.0 * PI * 160.0 * lfoPhase).toFloat()
-                    sample = (sample * carrier * 1.6f).coerceIn(-1f, 1f)
-                }
-
-                // 19. Ring Mod
-                if (activeEffects.contains(Effect.RING_MOD)) {
-                    val ringCarrier = sin(2.0 * PI * (350.0 + 400.0 * fxAmount) * lfoPhase).toFloat()
-                    sample = (sample * ringCarrier * 1.4f).coerceIn(-1f, 1f)
-                }
-
-                // 20. Auto Pan
-                if (activeEffects.contains(Effect.AUTO_PAN) && channelCount > 1) {
-                    sample *= if (ch == 0) (1f - panVal * fxAmount) else (0.3f + panVal * 0.7f * fxAmount)
-                }
-
-                // 21. Noise
-                if (activeEffects.contains(Effect.NOISE)) {
-                    val n = (Math.random().toFloat() * 2f - 1f) * 0.12f * fxAmount
-                    sample += n
-                }
-
-                // 22. Tape Stop
-                if (activeEffects.contains(Effect.TAPE_STOP)) {
-                    tapeStopPhase += 1.0 / sampleRate
-                    val decay = exp(-tapeStopPhase * 3.5).toFloat()
-                    sample *= decay
-                }
-
-                // Final output safety limiter protects FX-generated sums too.
+                
+                // Final safety limit
                 val outSample = softLimit(sample).coerceIn(-1f, 1f)
-
+                
                 val delayIdx = writeFrame * channelCount + ch
                 if (delayIdx in delayLine.indices) delayLine[delayIdx] = outSample
 
@@ -506,11 +380,27 @@ class DeckFxAudioProcessor : AudioProcessor {
                     }
                     eqTransitionActive = false
                     eqTransitionPosition = EQ_TRANSITION_FRAMES
-                }
+        pluginChain.forEach { it.reset() }
+    }
             }
         }
 
         output.flip()
+    }
+
+
+    private fun mapEffectToPlugin(id: String): Effect? {
+        return when (id) {
+            "fx_filter" -> Effect.FILTER
+            "fx_delay" -> Effect.DELAY
+            "fx_reverb" -> Effect.REVERB
+            "fx_flanger" -> Effect.FLANGER
+            "fx_phaser" -> Effect.PHASER
+            "fx_bitcrush" -> Effect.BITCRUSH
+            "fx_distortion" -> Effect.TRANSFORM // Map distortion to something existing in UI, e.g. TRANSFORM
+            "fx_compressor" -> Effect.GATE      // Map compressor to GATE in UI
+            else -> null
+        }
     }
 
     override fun queueEndOfStream() { inputEnded = true }
@@ -545,6 +435,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         }
         eqTransitionActive = false
         eqTransitionPosition = EQ_TRANSITION_FRAMES
+        pluginChain.forEach { it.reset() }
     }
 
     override fun reset() {

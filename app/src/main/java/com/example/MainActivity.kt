@@ -1303,38 +1303,40 @@ fun DJDeckItem(
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
                     text = com.example.utils.MusicScanner.formatMs(deck.currentPositionMs),
-                    style = MaterialTheme.typography.labelSmall
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.widthIn(min = 44.dp),
+                    maxLines = 1
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            val newPos = (deck.currentPositionMs - 5000L).coerceAtLeast(0L)
-                            deck.seekTo(newPos)
-                        },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp)
-                    ) {
-                        Text("-5s", style = MaterialTheme.typography.labelSmall)
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            val newPos = (deck.currentPositionMs + 5000L).coerceAtMost(deck.durationMs)
-                            deck.seekTo(newPos)
-                        },
-                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp)
-                    ) {
-                        Text("+5s", style = MaterialTheme.typography.labelSmall)
-                    }
+                OutlinedButton(
+                    onClick = {
+                        val newPos = (deck.currentPositionMs - 5000L).coerceAtLeast(0L)
+                        deck.seekTo(newPos)
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("-5s", style = MaterialTheme.typography.labelSmall)
+                }
+                OutlinedButton(
+                    onClick = {
+                        val newPos = (deck.currentPositionMs + 5000L).coerceAtMost(deck.durationMs)
+                        deck.seekTo(newPos)
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Text("+5s", style = MaterialTheme.typography.labelSmall)
                 }
                 Text(
-                    text = com.example.utils.MusicScanner.formatMs(deck.durationMs),
-                    style = MaterialTheme.typography.labelSmall
+                    com.example.utils.MusicScanner.formatMs(deck.durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.widthIn(min = 44.dp),
+                    maxLines = 1
                 )
             }
 
