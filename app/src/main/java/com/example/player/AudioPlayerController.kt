@@ -18,7 +18,7 @@ enum class RepeatOption { OFF, ALL, ONE }
 
 @OptIn(UnstableApi::class)
 class AudioPlayerController(private val context: Context) {
-    val fxProcessor = DeckFxAudioProcessor()
+    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
     val eqController = EqualizerController(context) { syncEq() }
     var crossfadeDurationMs by mutableLongStateOf(2000L)
 

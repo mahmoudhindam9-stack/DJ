@@ -1,4 +1,30 @@
+import re
 
+with open('app/src/main/java/com/example/player/DeckFxAudioProcessor.kt', 'r') as f:
+    text = f.read()
+
+text = text.replace('private val pluginManager = DspPluginManager()', 'private var pluginManager: DspPluginManager? = null')
+text = text.replace('init {\n        pluginChain = pluginManager.getAvailablePlugins()\n    }', 'fun initContext(context: android.content.Context) {\n        pluginManager = DspPluginManager(context)\n        pluginChain = pluginManager!!.getAvailablePlugins()\n    }')
+
+with open('app/src/main/java/com/example/player/DeckFxAudioProcessor.kt', 'w') as f:
+    f.write(text)
+
+with open('app/src/main/java/com/example/player/AudioPlayerController.kt', 'r') as f:
+    text = f.read()
+
+text = text.replace('val fxProcessor = DeckFxAudioProcessor()', 'val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }')
+
+with open('app/src/main/java/com/example/player/AudioPlayerController.kt', 'w') as f:
+    f.write(text)
+
+
+with open('app/src/main/java/com/example/DJFxRackScreen.kt', 'r') as f:
+    text = f.read()
+
+text = text.replace('val MASTER_FX_LIBRARY = listOf(', 'var MASTER_FX_LIBRARY = listOf(')
+# we will dynamically fetch it from context in a LaunchedEffect, but for now just inject logic to load from SharedPreferences.
+
+replacement_ui = """
 package com.example
 
 import android.content.Context
@@ -233,3 +259,8 @@ fun DJFxRack(deck: DJDeckController) {
         }
     }
 }
+"""
+
+with open('app/src/main/java/com/example/DJFxRackScreen.kt', 'w') as f:
+    f.write(replacement_ui)
+

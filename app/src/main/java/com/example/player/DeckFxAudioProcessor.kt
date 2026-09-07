@@ -22,7 +22,7 @@ class DeckFxAudioProcessor : AudioProcessor {
     // We store plugin IDs here directly
     val activeEffects = mutableSetOf<String>()
 
-    private val pluginManager = DspPluginManager()
+    private var pluginManager: DspPluginManager? = null
     private var pluginChain = emptyList<AudioPlugin>()
 
     // EQ stuff
@@ -30,8 +30,9 @@ class DeckFxAudioProcessor : AudioProcessor {
     var eqEnabled = false
     private val activeEqFilters = Array(2) { Array(10) { BiquadFilter() } }
     
-    init {
-        pluginChain = pluginManager.getAvailablePlugins()
+    fun initContext(context: android.content.Context) {
+        pluginManager = DspPluginManager(context)
+        pluginChain = pluginManager!!.getAvailablePlugins()
     }
 
     fun setEqLevels(levels: FloatArray, enabled: Boolean) {

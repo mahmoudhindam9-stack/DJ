@@ -50,7 +50,6 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.weather_condition, prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh")
             views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
             val zone = prefs.getString(TIMEZONE, java.util.TimeZone.getDefault().id) ?: java.util.TimeZone.getDefault().id
-            views.setString(R.id.weather_clock, "setTimeZone", zone)
 
             val refresh = PendingIntent.getActivity(
                 context, id * 41, Intent(context, LocationWeatherActivity::class.java),

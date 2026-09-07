@@ -23,7 +23,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".widget.LocationWeatherActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+        <activity android:name=".widget.LocationWeatherActivity" android:exported="true" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service android:name=".player.MusicService" android:exported="false" android:foregroundServiceType="mediaPlayback|microphone">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
@@ -58,6 +58,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <receiver android:name=".widget.WidgetActionReceiver" android:exported="false" />
+        <receiver android:name=".widget.WidgetActionReceiver" android:exported="true" />
     </application>
 </manifest>
