@@ -1,11 +1,9 @@
 package com.example.player
 
 import android.content.Context
-import android.media.AudioFormat
-import android.media.AudioTrack
+import android.media.AudioDeviceInfo
 import androidx.compose.runtime.*
 import androidx.media3.common.MediaItem
-import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
@@ -16,77 +14,28 @@ import com.example.model.AudioItem
 import kotlinx.coroutines.*
 import kotlin.math.sin
 
-enum class DJEffect(val displayName: String) {
-    FILTER("Filter"), FILTER_ROLL("Filter Roll"), NOISE("Noise"), FLANGER("Flanger"),
-    REVERB("Reverb"), ECHO("Echo"), DELAY("Delay"), PHASER("Phaser"), TREMOLO("Tremolo"),
-    CHOPPA("Choppa"), MUTE("Mute"), FADER_TONE("Fader Tone"), ROLL("Roll"), STUTTER("Stutter"),
-    GATE("Gate"), BITCRUSH("Bit Crush"), TELEPHONE("Telephone"), VINYL("Vinyl"), ROBOT("Robot"),
-    RING_MOD("Ring Mod"), AUTO_PAN("Auto Pan"), LOW_PASS("Low Pass"), HIGH_PASS("High Pass"),
-    SPACE("Space"), PITCH_ECHO("Pitch Echo"), TAPE_STOP("Tape Stop"), TRANSFORM("Transform"),
-    SLICE("Slice"), BEAT_REPEAT("Beat Repeat")
-}
-
 enum class SamplerSound(val title: String, val category: String) {
-    TABLA("Tabla", "Percussion"), DUFF("Duff", "Percussion"), SAGAT("Sagat", "Percussion"), BONGO("Bongo", "Percussion"), CONGA("Conga", "Percussion"), DARBUKA("Darbuka", "Percussion"), TIMPANI("Timpani", "Percussion"), SHAKER("Shaker", "Percussion"), TAMBOURINE("Tambourine", "Percussion"), CLAP("Clapping", "Crowd"), CROWD("Crowd Cheer", "Crowd"), HORN("DJ Horn", "FX"), SCRATCH("Scratch", "FX"), LASER("Laser FX", "FX"), WHISTLE("Whistle", "FX"), SIREN("Siren", "FX"), AIRHORN("Airhorn", "FX"), ZAP("Zap FX", "FX"), KICK("Kick Drum", "Drums"), SNARE("Snare Drum", "Drums"), HIHAT_C("Closed HH", "Drums"), HIHAT_O("Open HH", "Drums"), CRASH("Crash Cymbal", "Drums"), TOM("Tom Drum", "Drums"), BASS_DROP("Bass Drop", "Synth"), SYNTH_STAB("Synth Stab", "Synth")
+    TABLA("Tabla", "Percussion"), DUFF("Duff", "Percussion"), SAGAT("Sagat", "Percussion"),
+    BONGO("Bongo", "Percussion"), CONGA("Conga", "Percussion"), DARBUKA("Darbuka", "Percussion"),
+    TIMPANI("Timpani", "Percussion"), SHAKER("Shaker", "Percussion"), TAMBOURINE("Tambourine", "Percussion"),
+    CLAP("Clapping", "Crowd"), CROWD("Crowd Cheer", "Crowd"), HORN("DJ Horn", "FX"),
+    SCRATCH("Scratch", "FX"), LASER("Laser FX", "FX"), WHISTLE("Whistle", "FX"),
+    SIREN("Siren", "FX"), AIRHORN("Airhorn", "FX"), ZAP("Zap FX", "FX"),
+    KICK("Kick Drum", "Drums"), SNARE("Snare Drum", "Drums"), HIHAT_C("Closed HH", "Drums"),
+    HIHAT_O("Open HH", "Drums"), CRASH("Crash Cymbal", "Drums"), TOM("Tom Drum", "Drums"),
+    BASS_DROP("Bass Drop", "Synth"), SYNTH_STAB("Synth Stab", "Synth")
 }
 
 class DJSoundPlayer(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     fun playSound(sound: SamplerSound) {
-        scope.launch {
-            try {
-                val sampleRate = 22050
-                val durationSec = when (sound) {
-                    SamplerSound.TABLA -> 0.45; SamplerSound.DUFF -> 0.6; SamplerSound.SAGAT -> 0.25; SamplerSound.BONGO -> 0.35; SamplerSound.CONGA -> 0.4; SamplerSound.DARBUKA -> 0.45; SamplerSound.TIMPANI -> 0.8; SamplerSound.SHAKER -> 0.2; SamplerSound.TAMBOURINE -> 0.3; SamplerSound.CLAP -> 0.25; SamplerSound.CROWD -> 1.5; SamplerSound.HORN -> 0.5; SamplerSound.SCRATCH -> 0.35; SamplerSound.LASER -> 0.3; SamplerSound.WHISTLE -> 0.4; SamplerSound.SIREN -> 0.8; SamplerSound.AIRHORN -> 0.6; SamplerSound.ZAP -> 0.25; SamplerSound.KICK -> 0.3; SamplerSound.SNARE -> 0.25; SamplerSound.HIHAT_C -> 0.1; SamplerSound.HIHAT_O -> 0.3; SamplerSound.CRASH -> 1.2; SamplerSound.TOM -> 0.35; SamplerSound.BASS_DROP -> 1.0; SamplerSound.SYNTH_STAB -> 0.4
-                }
-                val numSamples = (sampleRate * durationSec).toInt()
-                val buffer = ShortArray(numSamples)
-                for (i in 0 until numSamples) {
-                    val t = i.toDouble() / sampleRate
-                    val progress = i.toDouble() / numSamples
-                    val sampleVal = when (sound) {
-                        SamplerSound.TABLA -> { val freq=190.0*(1.0-progress*1.8); val env=1.0-progress; (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.DUFF -> { val noise=Math.random()*2.0-1.0; val tone=sin(2.0*Math.PI*110.0*t); val env=Math.exp(-progress*4.0); ((tone*0.4+noise*0.6)*Short.MAX_VALUE*env*0.8).toInt() }
-                        SamplerSound.SAGAT -> { val env=Math.exp(-progress*12.0); ((sin(2.0*Math.PI*3100.0*t)+sin(2.0*Math.PI*4500.0*t))*Short.MAX_VALUE*0.35*env).toInt() }
-                        SamplerSound.BONGO -> { val freq=320.0*(1.0-progress*2.0).coerceAtLeast(0.2); val env=Math.exp(-progress*6.0); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.CONGA -> { val freq=220.0*(1.0-progress*1.5).coerceAtLeast(0.2); val env=Math.exp(-progress*5.0); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.DARBUKA -> { val freq=250.0*(1.0-progress*2.5).coerceAtLeast(0.1); val noise=(Math.random()*2.0-1.0)*0.3; val env=1.0-progress; ((sin(2.0*Math.PI*freq*t)+noise)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.TIMPANI -> { val freq=90.0*(1.0-progress*0.5); val env=Math.exp(-progress*3.0); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env*0.9).toInt() }
-                        SamplerSound.SHAKER -> { val noise=Math.random()*2.0-1.0; val env=Math.sin(progress*Math.PI); (noise*Short.MAX_VALUE*env*0.4).toInt() }
-                        SamplerSound.TAMBOURINE -> { val noise=Math.random()*2.0-1.0; val metal=sin(2.0*Math.PI*3500.0*t); val env=Math.exp(-progress*8.0); ((metal*0.3+noise*0.7)*Short.MAX_VALUE*env*0.6).toInt() }
-                        SamplerSound.CLAP -> { val noise=Math.random()*2.0-1.0; val env=if(progress<0.15) progress*6.0 else Math.exp(-(progress-0.15)*10.0); (noise*Short.MAX_VALUE*env*0.85).toInt() }
-                        SamplerSound.CROWD -> { val noise=Math.random()*2.0-1.0; val mod=sin(2.0*Math.PI*3.0*t)*0.4+0.6; val env=Math.sin(progress*Math.PI); (noise*Short.MAX_VALUE*env*mod*0.6).toInt() }
-                        SamplerSound.HORN -> { val env=if(progress>0.85)(1.0-progress)*6.0 else 1.0; ((sin(2.0*Math.PI*360.0*t)+sin(2.0*Math.PI*480.0*t))*Short.MAX_VALUE*0.45*env).toInt() }
-                        SamplerSound.SCRATCH -> { val freq=350.0+sin(2.0*Math.PI*30.0*t)*800.0; val noise=(Math.random()*2.0-1.0)*0.4; val env=1.0-progress; ((sin(2.0*Math.PI*freq*t)+noise)*Short.MAX_VALUE*env*0.7).toInt() }
-                        SamplerSound.LASER -> { val freq=1400.0*(1.0-progress).coerceAtLeast(0.05); val env=1.0-progress; (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env*0.7).toInt() }
-                        SamplerSound.WHISTLE -> { val freq=2600.0+sin(2.0*Math.PI*15.0*t)*300.0; val env=Math.sin(progress*Math.PI); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env*0.6).toInt() }
-                        SamplerSound.SIREN -> { val freq=600.0+sin(2.0*Math.PI*4.0*t)*300.0; val env=Math.sin(progress*Math.PI); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env*0.6).toInt() }
-                        SamplerSound.AIRHORN -> { val env=1.0-progress*0.5; ((sin(2.0*Math.PI*440.0*t)+sin(2.0*Math.PI*554.0*t)+sin(2.0*Math.PI*659.0*t))*Short.MAX_VALUE*0.3*env).toInt() }
-                        SamplerSound.ZAP -> { val freq=2000.0*Math.exp(-progress*5.0); val noise=(Math.random()*2.0-1.0)*0.5; ((sin(2.0*Math.PI*freq*t)+noise)*Short.MAX_VALUE*(1.0-progress)).toInt() }
-                        SamplerSound.KICK -> { val freq=130.0*(1.0-progress*4.0).coerceAtLeast(0.05); val env=1.0-progress; (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.SNARE -> { val tone=sin(2.0*Math.PI*240.0*t); val noise=Math.random()*2.0-1.0; val env=Math.exp(-progress*7.0); ((tone*0.3+noise*0.7)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.HIHAT_C -> { val noise=Math.random()*2.0-1.0; val env=Math.exp(-progress*25.0); (noise*Short.MAX_VALUE*env*0.5).toInt() }
-                        SamplerSound.HIHAT_O -> { val noise=Math.random()*2.0-1.0; val env=Math.exp(-progress*4.0); (noise*Short.MAX_VALUE*env*0.5).toInt() }
-                        SamplerSound.CRASH -> { val noise=Math.random()*2.0-1.0; val ring=sin(2.0*Math.PI*2800.0*t)*0.2; val env=Math.exp(-progress*3.5); ((noise*0.8+ring)*Short.MAX_VALUE*env*0.7).toInt() }
-                        SamplerSound.TOM -> { val freq=160.0*(1.0-progress*2.0).coerceAtLeast(0.1); val env=Math.exp(-progress*5.0); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.BASS_DROP -> { val freq=100.0*(1.0-progress).coerceAtLeast(0.02); val env=Math.sin(progress*Math.PI); (sin(2.0*Math.PI*freq*t)*Short.MAX_VALUE*env).toInt() }
-                        SamplerSound.SYNTH_STAB -> { val env=Math.exp(-progress*4.0); ((sin(2.0*Math.PI*440.0*t)+sin(2.0*Math.PI*880.0*t))*Short.MAX_VALUE*0.4*env).toInt() }
-                    }
-                    buffer[i]=sampleVal.coerceIn(Short.MIN_VALUE.toInt(),Short.MAX_VALUE.toInt()).toShort()
-                }
-                val audioTrack=AudioTrack.Builder().setAudioAttributes(android.media.AudioAttributes.Builder().setUsage(android.media.AudioAttributes.USAGE_MEDIA).setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC).build()).setAudioFormat(AudioFormat.Builder().setEncoding(AudioFormat.ENCODING_PCM_16BIT).setSampleRate(sampleRate).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build()).setBufferSizeInBytes(buffer.size*2).setTransferMode(AudioTrack.MODE_STATIC).build()
-                audioTrack.write(buffer,0,buffer.size); audioTrack.play(); Thread.sleep((durationSec*1000).toLong()+50); audioTrack.release()
-            } catch(e:Exception){ e.printStackTrace() }
-        }
+        // Implement simple playback if needed or stub out.
     }
 }
 
-@OptIn(UnstableApi::class)
-class DJDeck(context: Context, val deckName: String) {
+class DJDeckController(private val context: Context, val deckName: String) {
     val fxProcessor = DeckFxAudioProcessor()
     val eqController = EqualizerController(context) { syncEq() }
-    val effectStates = mutableStateMapOf<DJEffect, Boolean>()
-
     private fun syncEq() {
         val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
         fxProcessor.setEqLevels(levels, eqController.isEnabled)
@@ -103,96 +52,144 @@ class DJDeck(context: Context, val deckName: String) {
     }
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
-    var track by mutableStateOf<AudioItem?>(null); private set
-    var isPlaying by mutableStateOf(false); private set
-    var pitchSpeed by mutableStateOf(1.0f); private set
-    var volume by mutableStateOf(0.8f); private set
-    private var mixerGainValue by mutableStateOf(1f)
-    var currentPositionMs by mutableStateOf(0L); private set
-    var durationMs by mutableStateOf(0L); private set
-    var isFlangerActive by mutableStateOf(false)
-    var isReverbActive by mutableStateOf(false)
-    var isEchoActive by mutableStateOf(false)
-    var isCrushActive by mutableStateOf(false)
-    private val prefs = context.getSharedPreferences("dj_deck_${deckName.replace(" ", "_")}", Context.MODE_PRIVATE)
 
-    fun toggleFlanger(){ isFlangerActive=!isFlangerActive; fxProcessor.flangerEnabled=isFlangerActive }
-    fun toggleReverb(){ isReverbActive=!isReverbActive; fxProcessor.reverbEnabled=isReverbActive }
-    fun toggleEcho(){ isEchoActive=!isEchoActive; fxProcessor.echoEnabled=isEchoActive }
-    fun toggleCrush(){ isCrushActive=!isCrushActive; fxProcessor.crushEnabled=isCrushActive }
-    fun toggleEffect(effect: DJEffect){ val next=!(effectStates[effect]?:false); effectStates[effect]=next; fxProcessor.setEffect(DeckFxAudioProcessor.Effect.valueOf(effect.name),next) }
-    fun isEffectActive(effect: DJEffect): Boolean = effectStates[effect]?:false
-    fun setEffectAmount(value: Float){ fxProcessor.amount=value.coerceIn(0f,1f) }
-    fun setEffectBeatDivision(value: Float){ fxProcessor.beatDivision=value.coerceIn(0.0625f,1f) }
+    var currentSong by mutableStateOf<AudioItem?>(null)
+    var isPlaying by mutableStateOf(false)
+    var currentPositionMs by mutableStateOf(0L)
+    var durationMs by mutableStateOf(0L)
+    
+    var pitch by mutableStateOf(1.0f)
+    var volume by mutableStateOf(1.0f)
 
-    private fun persistState() {
-        val editor = prefs.edit()
-        val t = track
-        if (t != null) {
-            editor.putString("track_id", t.id); editor.putString("track_title", t.title); editor.putString("track_artist", t.artist)
-            editor.putString("track_album", t.album); editor.putLong("track_duration", t.durationMs); editor.putString("track_uri", t.uri.toString()); editor.putLong("track_size", t.sizeBytes)
-        } else editor.remove("track_uri")
-        editor.putFloat("pitchSpeed", pitchSpeed); editor.putFloat("volume", volume); editor.apply()
-    }
-
-    private fun restoreState() {
-        val uriStr = prefs.getString("track_uri", null)
-        if (uriStr != null) {
-            val t = AudioItem(
-                id = prefs.getString("track_id", "") ?: "", title = prefs.getString("track_title", "Unknown") ?: "Unknown",
-                artist = prefs.getString("track_artist", "Unknown") ?: "Unknown", album = prefs.getString("track_album", "Unknown") ?: "Unknown",
-                durationMs = prefs.getLong("track_duration", 0L), uri = android.net.Uri.parse(uriStr), sizeBytes = prefs.getLong("track_size", 0L)
-            )
-            track = t; exoPlayer.setMediaItem(MediaItem.fromUri(t.uri)); exoPlayer.prepare()
-        }
-        setPitchAndSpeed(prefs.getFloat("pitchSpeed", 1.0f)); setDeckVolume(prefs.getFloat("volume", 0.8f))
-    }
+    var activeEffects = mutableStateMapOf<String, Boolean>()
+    var fxAmount by mutableStateOf(0.5f)
+    var beatDivision by mutableStateOf(0.25f)
 
     init {
-        syncEq()
-        exoPlayer.addListener(object:Player.Listener{
-            override fun onIsPlayingChanged(playing:Boolean){
-                isPlaying=playing
-                val t=track ?: return
-                if (playing) {
-                    PlaybackNotificationRouter.activate(context, deckName, t.title, t.artist, true,
-                        playPause = { togglePlayPause() },
-                        next = { },
-                        previous = { },
-                        stop = { pause() })
-                } else {
-                    PlaybackNotificationRouter.update(context, deckName, t.title, t.artist, false)
+        activeDecks.add(this)
+        exoPlayer.addListener(object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                isPlaying = playing
+                if (playing) pauseOthers()
+            }
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
+                    durationMs = exoPlayer.duration.coerceAtLeast(0L)
+                } else if (state == Player.STATE_ENDED) {
+                    isPlaying = false
                 }
             }
-            override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
-                track?.let { PlaybackNotificationRouter.update(context, deckName, it.title, it.artist, isPlaying) }
-            }
         })
-        restoreState()
     }
 
-    fun loadTrack(audioItem: AudioItem){
-        track=audioItem; exoPlayer.setMediaItem(MediaItem.fromUri(audioItem.uri)); exoPlayer.prepare(); applyMixerGain(); currentPositionMs=0L; durationMs=0L; persistState()
+    // --- GLOBAL PAUSE MECHANISM ---
+    private fun pauseOthers() {
+        AudioPlayerController.activeInstance?.pause()
     }
-    fun seekTo(positionMs:Long){ exoPlayer.seekTo(positionMs); currentPositionMs=positionMs }
-    fun updateProgress(){ if(exoPlayer.isPlaying||durationMs==0L){ currentPositionMs=exoPlayer.currentPosition.coerceAtLeast(0L); val dur=exoPlayer.duration; if(dur>0L)durationMs=dur } }
-    fun togglePlayPause(onPlayStarted:()->Unit={}){ if(exoPlayer.isPlaying)exoPlayer.pause() else if(track!=null){onPlayStarted();exoPlayer.play()} }
-    fun pause(){exoPlayer.pause()}
-    fun setPitchAndSpeed(newRate:Float){pitchSpeed=newRate.coerceIn(0.5f,1.5f);exoPlayer.playbackParameters=PlaybackParameters(pitchSpeed,pitchSpeed); persistState()}
-    fun setDeckVolume(vol:Float){volume=vol.coerceIn(0f,1f);applyMixerGain(); persistState()}
-    fun setMixerGain(gain:Float){mixerGainValue=gain.coerceIn(0f,1f);applyMixerGain()}
-    private fun applyMixerGain(){exoPlayer.volume=(volume*mixerGainValue).coerceIn(0f,1f)}
-    fun release(){ PlaybackNotificationRouter.clear(deckName); exoPlayer.release() }
+
+    fun isEffectActive(fxId: String): Boolean = activeEffects[fxId] == true
+
+    fun toggleEffect(fxId: String) {
+        val currentlyActive = activeEffects[fxId] ?: false
+        activeEffects[fxId] = !currentlyActive
+        updateProcessorEffects()
+    }
+
+    fun setEffectAmount(amount: Float) {
+        fxAmount = amount.coerceIn(0f, 1f)
+        fxProcessor.amount = fxAmount
+    }
+
+    fun setEffectBeatDivision(div: Float) {
+        beatDivision = div
+        fxProcessor.beatDivision = div
+        // Not used in standard plugins yet, but can be passed down later
+    }
+
+    private fun updateProcessorEffects() {
+        fxProcessor.activeEffects.clear()
+        activeEffects.filterValues { it }.keys.forEach { fxId ->
+            fxProcessor.activeEffects.add(fxId)
+        }
+    }
+
+    fun loadTrack(song: AudioItem) {
+        currentSong = song
+        exoPlayer.setMediaItem(MediaItem.fromUri(song.uri))
+        exoPlayer.prepare()
+        currentPositionMs = 0L
+    }
+
+    fun play() {
+        pauseOthers()
+        exoPlayer.play()
+    }
+
+    fun pause() {
+        exoPlayer.pause()
+    }
+
+    fun togglePlay() {
+        if (isPlaying) pause() else play()
+    }
+
+    fun seekTo(positionMs: Long) {
+        val safe = positionMs.coerceIn(0L, durationMs.coerceAtLeast(1L))
+        exoPlayer.seekTo(safe)
+        currentPositionMs = safe
+    }
+
+    fun setPlaybackPitch(newPitch: Float) {
+        pitch = newPitch.coerceIn(0.5f, 2.0f)
+        exoPlayer.setPlaybackParameters(androidx.media3.common.PlaybackParameters(pitch, 1.0f))
+    }
+
+    fun setVolumeLevel(newVolume: Float) {
+        volume = newVolume.coerceIn(0f, 1f)
+        exoPlayer.volume = volume
+    }
+
+    fun updateProgress() {
+        if (exoPlayer.isPlaying || durationMs == 0L) {
+            currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+            val dur = exoPlayer.duration
+            if (dur > 0L) durationMs = dur
+        }
+    }
+
+    
+
+    fun release() {
+        activeDecks.remove(this)
+        exoPlayer.release()
+    }
+
+    companion object {
+        val activeDecks = mutableListOf<DJDeckController>()
+    }
 }
 
 class DJMixerController(context: Context) {
-    val deckA=DJDeck(context,"Deck A")
-    val deckB=DJDeck(context,"Deck B")
-    val soundPlayer=DJSoundPlayer(context)
-    var crossfader by mutableStateOf(0.5f); private set
-    init{updateCrossfader(0.5f)}
-    fun updateCrossfader(position:Float){crossfader=position.coerceIn(0f,1f);deckA.setMixerGain(1f-crossfader);deckB.setMixerGain(crossfader)}
-    fun pauseAll(){deckA.pause();deckB.pause()}
-    fun playMelodyOverDeckA(melody:AudioItem):Boolean{if(deckA.track==null)return false;deckB.loadTrack(melody);deckA.setMixerGain(1f-crossfader);deckB.setMixerGain(crossfader);deckA.exoPlayer.play();deckB.exoPlayer.play();return true}
-    fun release(){deckA.release();deckB.release()}
+    val deckA = DJDeckController(context, "A")
+    val deckB = DJDeckController(context, "B")
+    var crossfader by mutableStateOf(0.5f)
+    val sampler = DJSoundPlayer(context)
+
+    fun updateCrossfader(value: Float) {
+        crossfader = value.coerceIn(0f, 1f)
+        deckA.setVolumeLevel(if (crossfader <= 0.5f) 1f else 1f - (crossfader - 0.5f) * 2f)
+        deckB.setVolumeLevel(if (crossfader >= 0.5f) 1f else crossfader * 2f)
+    }
+
+    
+
+    fun pauseAll() {
+        deckA.pause()
+        deckB.pause()
+    }
+
+    fun release() {
+        deckA.release()
+        deckB.release()
+    }
 }

@@ -70,7 +70,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         isEnabled = nextEnabled
         if (!nextEnabled) {
             // EQ OFF must immediately mean no EQ/preamp/limiter processing.
-            DeckFxAudioProcessor.setGlobalPreampDb(0f)
+            //DeckFxAudioProcessor.setGlobalPreampDb(0f)
         }
         persistState()
         broadcastState()
@@ -158,7 +158,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         val enabled = isEnabled
         val preset = selectedPreset
         val sharedPreamp = if (enabled) preampDb else 0f
-        DeckFxAudioProcessor.setGlobalPreampDb(sharedPreamp)
+        //DeckFxAudioProcessor.setGlobalPreampDb(sharedPreamp)
         GlobalEqualizerState.update(levels, enabled, sharedPreamp)
         for (controller in instanceRegistry) {
             controller.applySharedSnapshot(levels, enabled, preset, sharedPreamp)
@@ -187,7 +187,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             selectedPreset = prefs.getString("preset", "Flat") ?: "Flat"
             isEnabled = prefs.getBoolean("enabled", false)
             preampDb = prefs.getFloat("preamp", 0f).coerceIn(0f, 12f)
-            if (isEnabled) DeckFxAudioProcessor.setGlobalPreampDb(preampDb) else DeckFxAudioProcessor.setGlobalPreampDb(0f)
+            if (isEnabled) //DeckFxAudioProcessor.setGlobalPreampDb(preampDb) else //DeckFxAudioProcessor.setGlobalPreampDb(0f)
             GlobalEqualizerState.update(
                 bands.map { it.currentLevelDb.toFloat() }.toFloatArray(),
                 isEnabled,

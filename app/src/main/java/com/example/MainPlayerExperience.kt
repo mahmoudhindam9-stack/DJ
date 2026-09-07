@@ -172,8 +172,8 @@ fun PlayerScreenV2(
                                         Text(playlist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text("${songs.size} song(s)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
-                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); playerController.playSong(songs.first(), songs); showNowPlaying = true } }) { Icon(Icons.Filled.PlayArrow, "Play") }
-                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); val q = songs.shuffled(); playerController.playSong(q.first(), q); showNowPlaying = true } }) { Icon(Icons.Filled.Shuffle, "Shuffle") }
+                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); playerController.play(songs.first(), songs); showNowPlaying = true } }) { Icon(Icons.Filled.PlayArrow, "Play") }
+                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); val q = songs.shuffled(); playerController.play(q.first(), q); showNowPlaying = true } }) { Icon(Icons.Filled.Shuffle, "Shuffle") }
                                     IconButton(onClick = { scope.launch { repo.delete(playlist.id) } }) { Icon(Icons.Filled.Delete, "Delete") }
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
@@ -211,7 +211,7 @@ fun PlayerScreenV2(
                                         playerController.togglePlayPause()
                                     } else {
                                         onPauseDJ()
-                                        playerController.playSong(song, audioLibrary)
+                                        playerController.play(song, audioLibrary)
                                     }
                                     showNowPlaying = true
                                 }) {
@@ -247,9 +247,9 @@ fun PlayerScreenV2(
             }
         }
     }
-    if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.playSong(song, playerController.playlist); showQueue = false }
+    if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.play(song, playerController.playlist); showQueue = false }
     if (showMixPlaylists) MixPlaylistsDialog(playlists, audioLibrary, { showMixPlaylists = false }) { songs, shuffle ->
-        if (songs.isNotEmpty()) { val queue = if (shuffle) songs.shuffled() else songs; onPauseDJ(); playerController.playSong(queue.first(), queue); showNowPlaying = true }
+        if (songs.isNotEmpty()) { val queue = if (shuffle) songs.shuffled() else songs; onPauseDJ(); playerController.play(queue.first(), queue); showNowPlaying = true }
         showMixPlaylists = false
     }
 }

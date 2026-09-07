@@ -1,21 +1,18 @@
 package com.example.player
 
 import android.content.Context
-import android.content.Intent
 import android.media.AudioDeviceInfo
 import androidx.compose.runtime.*
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import com.example.model.AudioItem
-import org.json.JSONArray
-import org.json.JSONObject
-import kotlinx.coroutines.*
-
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
+import com.example.model.AudioItem
+import org.json.JSONArray
+import org.json.JSONObject
 
 enum class RepeatOption { OFF, ALL, ONE }
 
@@ -40,63 +37,6 @@ class AudioPlayerController(private val context: Context) {
     }
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
-    val tailPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
-    var isCrossfadeEnabled by mutableStateOf(true)
-    var crossfadeDurationMs by mutableStateOf(5000L)
-    private var crossfadeJob: Job? = null
-    private var isTailPreloaded = false
-
-    private fun cancelCrossfade() {
-        crossfadeJob?.cancel()
-        crossfadeJob = null
-        tailPlayer.stop()
-        tailPlayer.clearMediaItems()
-        isTailPreloaded = false
-        exoPlayer.volume = volume
-    }
-
-    private fun hasNextTrackForCrossfade(): Boolean {
-        if (playlist.isEmpty()) return false
-        if (repeatOption == RepeatOption.ONE) return false
-        return isShuffle || repeatOption == RepeatOption.ALL || currentSongIndex < playlist.size - 1
-    }
-
-    private fun startCrossfadeToNext() {
-        crossfadeJob?.cancel()
-        crossfadeJob = CoroutineScope(Dispatchers.Main).launch {
-            try {
-                if (!isTailPreloaded) {
-                    val uri = currentSong?.uri
-                    if (uri != null) {
-                        tailPlayer.setMediaItem(MediaItem.fromUri(uri))
-                        tailPlayer.volume = volume
-                        tailPlayer.prepare()
-                    }
-                }
-                tailPlayer.seekTo(currentPositionMs)
-                tailPlayer.volume = volume
-                tailPlayer.play()
-                
-                playNext(isAutoCrossfade = true)
-                exoPlayer.volume = 0f
-                
-                val steps = 50
-                val stepDelay = crossfadeDurationMs / steps
-                for (i in 1..steps) {
-                    if (!isActive) break
-                    val progress = i / steps.toFloat()
-                    tailPlayer.volume = volume * (1f - progress)
-                    exoPlayer.volume = volume * progress
-                    delay(stepDelay)
-                }
-            } finally {
-                tailPlayer.stop()
-                tailPlayer.clearMediaItems()
-                exoPlayer.volume = volume
-                isTailPreloaded = false
-            }
-        }
-    }
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -151,7 +91,6 @@ class AudioPlayerController(private val context: Context) {
                 }
             }
         })
-
         restoreSession()
     }
 
@@ -171,51 +110,38 @@ class AudioPlayerController(private val context: Context) {
                 previous = { playPrevious() },
                 stop = { pause() }
             )
-        } catch (_: Throwable) {
-        }
+        } catch (_: Throwable) {}
     }
 
     fun setQueue(songs: List<AudioItem>, startIndex: Int = 0) {
         playlist.clear()
         playlist.addAll(songs)
-        if (playlist.isNotEmpty() && startIndex in playlist.indices) {
-            currentSongIndex = startIndex
-            currentSong = playlist[startIndex]
-            currentPositionMs = 0L
-            exoPlayer.setMediaItems(playlist.map { MediaItem.fromUri(it.uri) }, startIndex, 0L)
-            exoPlayer.prepare()
-            exoPlayer.playWhenReady = false
-            applyPreferredAudioDevice()
-            persistSession(force = true)
-            syncNotificationSafely()
-        }
+        val items = songs.map { MediaItem.fromUri(it.uri) }
+        exoPlayer.setMediaItems(items, startIndex, 0L)
+        exoPlayer.prepare()
+        currentSongIndex = startIndex
+        currentSong = songs.getOrNull(startIndex)
+        persistSession(force = true)
     }
 
-    fun playSong(song: AudioItem, fullQueue: List<AudioItem> = playlist) {
-        if (fullQueue != playlist) {
-            playlist.clear()
-            playlist.addAll(fullQueue)
-        }
-        val targetIndex = playlist.indexOfFirst { it.id == song.id }
-        if (targetIndex != -1) {
-            currentSongIndex = targetIndex
-            currentSong = song
+    // --- GLOBAL PAUSE MECHANISM ---
+    private fun pauseOthers() {
+        // إذا تم تشغيل هذا المشغل، يجب إيقاف الـ DJ Decks
+        DJDeckController.activeDecks.forEach { it.pause() }
+    }
+
+    fun play(song: AudioItem, newQueue: List<AudioItem>? = null) {
+        pauseOthers()
+        val idx = playlist.indexOfFirst { it.uri == song.uri }
+        if (idx >= 0) {
+            currentSongIndex = idx
+            currentSong = playlist[idx]
+            exoPlayer.seekTo(idx, 0L)
             currentPositionMs = 0L
-            exoPlayer.setMediaItems(playlist.map { MediaItem.fromUri(it.uri) }, targetIndex, 0L)
-            exoPlayer.prepare()
             applyPreferredAudioDevice()
             exoPlayer.play()
-            persistSession(force = true)
-            syncNotificationSafely()
-        }
-    }
-
-    fun togglePlayPause() {
-        cancelCrossfade()
-        if (exoPlayer.isPlaying) {
-            exoPlayer.pause()
         } else {
-            if (exoPlayer.playbackState == Player.STATE_ENDED) exoPlayer.seekTo(0)
+            setQueue(newQueue ?: listOf(song), newQueue?.indexOfFirst { it.uri == song.uri }?.takeIf { it >= 0 } ?: 0)
             applyPreferredAudioDevice()
             exoPlayer.play()
         }
@@ -224,23 +150,32 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun pause() {
-        cancelCrossfade()
         exoPlayer.pause()
         persistSession(force = true)
         syncNotificationSafely()
     }
 
-    fun playNext(isAutoCrossfade: Boolean = false) {
-        if (!isAutoCrossfade) cancelCrossfade()
-        if (playlist.isEmpty()) return
-        val nextIndex = if (isShuffle) {
-            playlist.indices.filter { it != currentSongIndex }.randomOrNull() ?: currentSongIndex
+    fun togglePlayPause() {
+        if (isPlaying) {
+            pause()
         } else {
-            (currentSongIndex + 1) % playlist.size
+            pauseOthers()
+            applyPreferredAudioDevice()
+            exoPlayer.play()
         }
-        currentSongIndex = nextIndex
+    }
+
+    fun playNext() {
+        if (playlist.isEmpty()) return
+        if (isShuffle) {
+            currentSongIndex = playlist.indices.random()
+        } else {
+            currentSongIndex = if (currentSongIndex < playlist.size - 1) currentSongIndex + 1 else 0
+        }
+        
         currentSong = playlist.getOrNull(currentSongIndex)
         currentSong?.let {
+            pauseOthers()
             exoPlayer.seekTo(currentSongIndex, 0L)
             currentPositionMs = 0L
             applyPreferredAudioDevice()
@@ -251,24 +186,15 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun playPrevious() {
-        cancelCrossfade()
         if (playlist.isEmpty()) return
-        if (currentPositionMs > 3000) {
-            exoPlayer.seekTo(0)
-            currentPositionMs = 0L
-            persistSession(force = true)
-            syncNotificationSafely()
+        if (currentPositionMs > 3000L) {
+            seekTo(0L)
             return
         }
-        currentSongIndex = if (isShuffle) {
-            playlist.indices.filter { it != currentSongIndex }.randomOrNull() ?: currentSongIndex
-        } else if (currentSongIndex - 1 < 0) {
-            playlist.size - 1
-        } else {
-            currentSongIndex - 1
-        }
+        currentSongIndex = if (currentSongIndex > 0) currentSongIndex - 1 else 0
         currentSong = playlist.getOrNull(currentSongIndex)
         currentSong?.let {
+            pauseOthers()
             exoPlayer.seekTo(currentSongIndex, 0L)
             currentPositionMs = 0L
             applyPreferredAudioDevice()
@@ -279,7 +205,6 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun seekTo(positionMs: Long) {
-        cancelCrossfade()
         val safe = positionMs.coerceAtLeast(0L)
         exoPlayer.seekTo(safe)
         currentPositionMs = safe
@@ -317,8 +242,7 @@ class AudioPlayerController(private val context: Context) {
         activePreferredAudioDevice = device
         try {
             exoPlayer.setPreferredAudioDevice(device)
-        } catch (_: Throwable) {
-        }
+        } catch (_: Throwable) {}
     }
 
     private fun applyPreferredAudioDevice() {
@@ -350,25 +274,6 @@ class AudioPlayerController(private val context: Context) {
         if (exoPlayer.isPlaying) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             if (durationMs <= 0L) durationMs = exoPlayer.duration.coerceAtLeast(0L)
-            
-            if (isCrossfadeEnabled && durationMs > 0L) {
-                val remaining = durationMs - currentPositionMs
-                if (remaining in (crossfadeDurationMs + 1000)..(crossfadeDurationMs + 5000) && !isTailPreloaded && crossfadeJob?.isActive != true) {
-                    val uri = currentSong?.uri
-                    if (uri != null) {
-                        isTailPreloaded = true
-                        tailPlayer.setMediaItem(MediaItem.fromUri(uri))
-                        tailPlayer.volume = 0f
-                        tailPlayer.prepare()
-                    }
-                }
-                if (remaining <= crossfadeDurationMs && remaining > 0 && crossfadeJob?.isActive != true) {
-                    if (hasNextTrackForCrossfade()) {
-                        startCrossfadeToNext()
-                    }
-                }
-            }
-            
             persistSession()
         }
     }
@@ -393,7 +298,6 @@ class AudioPlayerController(private val context: Context) {
                     }
                 )
             }
-
             prefs.edit()
                 .putString(KEY_QUEUE, queueJson.toString())
                 .putInt(KEY_INDEX, currentSongIndex)
@@ -405,8 +309,7 @@ class AudioPlayerController(private val context: Context) {
                 .putString(KEY_TITLE, currentSong?.title ?: "مشغل الموسيقى")
                 .putString(KEY_ARTIST, currentSong?.artist ?: "موسيقى")
                 .apply()
-        } catch (_: Exception) {
-        }
+        } catch (_: Exception) {}
     }
 
     private fun restoreSession() {
@@ -435,6 +338,7 @@ class AudioPlayerController(private val context: Context) {
             val savedIndex = prefs.getInt(KEY_INDEX, 0).coerceIn(0, restored.lastIndex)
             val savedPosition = prefs.getLong(KEY_POSITION, 0L).coerceAtLeast(0L)
             val savedPlaying = prefs.getBoolean(KEY_PLAYING, false)
+            
             isShuffle = prefs.getBoolean(KEY_SHUFFLE, false)
             repeatOption = prefs.getString(KEY_REPEAT, RepeatOption.OFF.name)
                 ?.let { runCatching { RepeatOption.valueOf(it) }.getOrDefault(RepeatOption.OFF) }
@@ -455,8 +359,13 @@ class AudioPlayerController(private val context: Context) {
             }
             exoPlayer.volume = volume
             exoPlayer.prepare()
+
             val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
-            exoPlayer.playWhenReady = savedPlaying && canAutoResume
+            if (savedPlaying && canAutoResume) {
+                pauseOthers()
+                exoPlayer.playWhenReady = true
+            }
+
             applyPreferredAudioDevice()
             syncNotificationSafely()
         } catch (_: Exception) {
@@ -468,13 +377,11 @@ class AudioPlayerController(private val context: Context) {
         }
     }
 
-    @OptIn(UnstableApi::class)
     fun release() {
         persistSession(force = true)
         PlaybackNotificationRouter.clear("player")
         try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
         if (activeInstance === this) activeInstance = null
-        tailPlayer.release()
         exoPlayer.release()
     }
 
@@ -500,7 +407,7 @@ class AudioPlayerController(private val context: Context) {
         @JvmStatic
         var activeInstance: AudioPlayerController? = null
             private set
-
+            
         @JvmStatic
         var activePreferredAudioDevice: AudioDeviceInfo? = null
             private set

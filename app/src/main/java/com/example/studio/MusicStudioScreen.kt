@@ -193,7 +193,7 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
             )
 
             try {
-                playerController.playSong(audio, listOf(audio))
+                playerController.play(audio, listOf(audio))
                 playerController.exoPlayer.setMediaItem(
                     MediaItem.Builder()
                         .setUri(resolvedUrl)

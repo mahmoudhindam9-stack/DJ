@@ -1,59 +1,33 @@
 package com.example
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.player.DJDeck
-import com.example.player.DJEffect
+import com.example.player.DJDeckController
+
+data class ModularEffect(val id: String, val displayName: String)
+
+val AVAILABLE_FX = listOf(
+    ModularEffect("fx_filter", "Filter"),
+    ModularEffect("fx_delay", "Delay"),
+    ModularEffect("fx_reverb", "Reverb"),
+    ModularEffect("fx_flanger", "Flanger"),
+    ModularEffect("fx_phaser", "Phaser"),
+    ModularEffect("fx_bitcrush", "Bitcrusher"),
+    ModularEffect("fx_distortion", "Distortion"),
+    ModularEffect("fx_compressor", "Compressor")
+)
 
 @Composable
 fun EffectTile(
@@ -78,7 +52,7 @@ fun EffectTile(
         ) {
             Text(
                 text = name,
-                fontSize = 10.sp,
+                fontSize = 11.sp,
                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Medium,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -89,9 +63,8 @@ fun EffectTile(
 }
 
 @Composable
-fun DJFxRack(deck: DJDeck) {
-    var amount by remember { mutableStateOf(deck.fxProcessor.amount) }
-    var beatDivision by remember { mutableStateOf(deck.fxProcessor.beatDivision) }
+fun DJFxRack(deck: DJDeckController) {
+    var amount by remember { mutableStateOf(deck.fxAmount) }
 
     Card(
         modifier = Modifier
@@ -110,18 +83,18 @@ fun DJFxRack(deck: DJDeck) {
             ) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "MIXXX FX RACK",
+                        "MODULAR FX RACK",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        "29 live DSP effects • tap to activate • per-deck control",
+                        "Open Source Plugins • Tap to toggle",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 Text(
-                    "${DJEffect.values().size} FX",
+                    "${AVAILABLE_FX.size} Plugins",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary
@@ -134,16 +107,16 @@ fun DJFxRack(deck: DJDeck) {
                 columns = GridCells.Fixed(3),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(240.dp),
+                    .height(130.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 userScrollEnabled = true
             ) {
-                items(DJEffect.values().toList()) { effect ->
+                items(AVAILABLE_FX) { effect ->
                     EffectTile(
                         name = effect.displayName,
-                        isActive = deck.isEffectActive(effect),
-                        onClick = { deck.toggleEffect(effect) },
+                        isActive = deck.isEffectActive(effect.id),
+                        onClick = { deck.toggleEffect(effect.id) },
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -157,12 +130,11 @@ fun DJFxRack(deck: DJDeck) {
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    "FX Amount: ${(amount * 100).toInt()}%",
+                    "FX Amount (Dry/Wet): ${(amount * 100).toInt()}%",
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Bold
                 )
             }
-
             Slider(
                 value = amount,
                 onValueChange = {
@@ -171,50 +143,6 @@ fun DJFxRack(deck: DJDeck) {
                 },
                 valueRange = 0f..1f
             )
-
-            Spacer(Modifier.height(4.dp))
-
-            Text(
-                "Beat Division",
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                listOf(
-                    0.0625f to "1/16",
-                    0.125f to "1/8",
-                    0.25f to "1/4",
-                    0.5f to "1/2",
-                    1f to "1"
-                ).forEach { item ->
-                    val selected = kotlin.math.abs(beatDivision - item.first) < 0.001f
-                    Surface(
-                        onClick = {
-                            beatDivision = item.first
-                            deck.setEffectBeatDivision(item.first)
-                        },
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(32.dp),
-                        shape = RoundedCornerShape(6.dp),
-                        color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surface,
-                        contentColor = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                item.second,
-                                fontSize = 10.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium
-                            )
-                        }
-                    }
-                }
-            }
         }
     }
 }
-

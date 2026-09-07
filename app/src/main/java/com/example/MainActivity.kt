@@ -5,6 +5,10 @@ import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
+import com.example.updater.GitHubUpdater
+
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -62,6 +66,16 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        lifecycleScope.launch {
+            try {
+                val pInfo = packageManager.getPackageInfo(packageName, 0)
+                val version = pInfo.versionName ?: "1.0"
+                GitHubUpdater.checkForUpdates(this@MainActivity, version, showToast = false)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
         setContent {
             MyApplicationTheme {
                 MainApp()
@@ -801,7 +815,7 @@ fun PlayerScreen(
                             .fillMaxWidth()
                             .clickable {
                                 onPauseDJ()
-                                playerController.playSong(song, displayedSongs)
+                                playerController.play(song, displayedSongs)
                             }
                     ) {
                         Row(
@@ -1215,7 +1229,7 @@ fun DJMixerScreen(
 @Composable
 fun DJDeckItem(
     modifier: Modifier = Modifier,
-    deck: DJDeck,
+    deck: DJDeckController,
     audioLibrary: List<AudioItem>,
     onImportClicked: () -> Unit,
     onPlayStarted: () -> Unit
@@ -1248,7 +1262,7 @@ fun DJDeckItem(
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
             ) {
                 Text(
-                    text = deck.track?.title ?: "Select Track",
+                    text = deck.currentSong?.title ?: "Select Track",
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1261,7 +1275,7 @@ fun DJDeckItem(
             // Play / Cue Button
             FilledIconButton(
                 onClick = {
-                    deck.togglePlayPause(onPlayStarted)
+                    deck.togglePlay(); if (deck.isPlaying) onPlayStarted()
                 },
                 modifier = Modifier.size(48.dp)
             ) {
@@ -1344,12 +1358,12 @@ fun DJDeckItem(
 
             // Pitch / Speed Slider (+/- 50%)
             Text(
-                text = "Speed: ${String.format("%.2fx", deck.pitchSpeed)}",
+                text = "Speed: ${String.format("%.2fx", deck.pitch)}",
                 style = MaterialTheme.typography.labelSmall
             )
             Slider(
-                value = deck.pitchSpeed,
-                onValueChange = { deck.setPitchAndSpeed(it) },
+                value = deck.pitch,
+                onValueChange = { deck.setPlaybackPitch(it) },
                 valueRange = 0.5f..1.5f,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -1363,7 +1377,7 @@ fun DJDeckItem(
             )
             Slider(
                 value = deck.volume,
-                onValueChange = { deck.setDeckVolume(it) },
+                onValueChange = { deck.setVolumeLevel(it) },
                 valueRange = 0f..1f,
                 modifier = Modifier.fillMaxWidth()
             )

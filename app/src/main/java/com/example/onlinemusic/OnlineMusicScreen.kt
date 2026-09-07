@@ -67,7 +67,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
                 val audio = track.streamUrl ?: error("لا يوجد رابط صوت")
                 val item = AudioItem(link.url, track.title, track.artist.ifBlank { "ألبوماتي" }, track.album ?: "Online Music", 0L, Uri.parse(audio))
-                playerController.playSong(item, listOf(item)); message = "يتم تشغيل: ${track.title}"
+                playerController.play(item, listOf(item)); message = "يتم تشغيل: ${track.title}"
             }.onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
         }
     }
@@ -128,7 +128,7 @@ private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController
             runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->
                 val audio = resolved.streamUrl ?: error("الأغنية غير قابلة للتشغيل")
                 val item = AudioItem("audius:${track.id}", resolved.title, resolved.artist, resolved.album ?: "Audius", 0L, Uri.parse(audio))
-                playerController.playSong(item, listOf(item)); message = "يتم تشغيل: ${resolved.title}"
+                playerController.play(item, listOf(item)); message = "يتم تشغيل: ${resolved.title}"
             }.onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
         }
     }
