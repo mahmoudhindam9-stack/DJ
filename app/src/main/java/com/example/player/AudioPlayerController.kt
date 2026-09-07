@@ -274,21 +274,26 @@ class AudioPlayerController(private val context: Context) {
     fun updateProgress() {
         if (exoPlayer.isPlaying || durationMs == 0L) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            if (durationMs <= 0L) durationMs = exoPlayer.duration.coerceAtLeast(0L)
+            val realDuration = exoPlayer.duration
+            if (realDuration > 0L) durationMs = realDuration
             
             if (crossfadeDurationMs > 0L && exoPlayer.isPlaying) {
                 val remaining = durationMs - currentPositionMs
                 if (remaining > 0 && remaining < crossfadeDurationMs) {
-                    val targetVol = (remaining.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
-                    exoPlayer.volume = targetVol * volume
+                    // Fade out
+                    val fraction = (remaining.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
+                    val targetVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
+                    try { exoPlayer.volume = targetVol * volume } catch(e:Exception){}
                 } else if (currentPositionMs < crossfadeDurationMs) {
-                    val targetVol = (currentPositionMs.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
-                    exoPlayer.volume = targetVol * volume
+                    // Fade in
+                    val fraction = (currentPositionMs.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
+                    val targetVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
+                    try { exoPlayer.volume = targetVol * volume } catch(e:Exception){}
                 } else {
-                    exoPlayer.volume = volume
+                    try { exoPlayer.volume = volume } catch(e:Exception){}
                 }
             } else if (exoPlayer.isPlaying) {
-                exoPlayer.volume = volume
+                try { exoPlayer.volume = volume } catch(e:Exception){}
             }
             
             persistSession()
@@ -323,6 +328,7 @@ class AudioPlayerController(private val context: Context) {
                 .putBoolean(KEY_SHUFFLE, isShuffle)
                 .putString(KEY_REPEAT, repeatOption.name)
                 .putFloat(KEY_VOLUME, volume)
+                .putLong("crossfade", crossfadeDurationMs)
                 .putString(KEY_TITLE, currentSong?.title ?: "مشغل الموسيقى")
                 .putString(KEY_ARTIST, currentSong?.artist ?: "موسيقى")
                 .apply()
@@ -361,6 +367,7 @@ class AudioPlayerController(private val context: Context) {
                 ?.let { runCatching { RepeatOption.valueOf(it) }.getOrDefault(RepeatOption.OFF) }
                 ?: RepeatOption.OFF
             volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 1f)
+            crossfadeDurationMs = prefs.getLong("crossfade", 2000L).coerceIn(0L, 10000L)
 
             currentSongIndex = savedIndex
             currentSong = restored[savedIndex]
