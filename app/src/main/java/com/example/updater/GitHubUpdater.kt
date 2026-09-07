@@ -47,8 +47,10 @@ object GitHubUpdater {
                     
                     val latestVersion = tagName.replace("v", "")
                     val currVer = currentVersion.replace("v", "")
+                    // Compare by length or alphabetically since dates will just be bigger
+                    val isNewer = latestVersion != currVer && latestVersion > currVer
                     
-                    if (latestVersion != currVer && latestVersion.isNotEmpty()) {
+                    if (isNewer && latestVersion.isNotEmpty()) {
                         val assets = json.optJSONArray("assets")
                         if (assets != null && assets.length() > 0) {
                             var apkUrl = ""
