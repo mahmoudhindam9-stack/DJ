@@ -19,16 +19,17 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
         private const val CONDITION = "condition"
         private const val TIMEZONE = "timezone"
         private const val STATUS = "status"
+        private const val WARNING = "warning"
 
         fun setStatus(context: Context, status: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STATUS, status).apply()
             updateAll(context)
         }
 
-        fun updateWeather(context: Context, city: String, temperature: String, condition: String, timezone: String) {
+        fun updateWeather(context: Context, city: String, temperature: String, condition: String, timezone: String, warning: String = "") {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(CITY, city).putString(TEMP, temperature).putString(CONDITION, condition)
-                .putString(TIMEZONE, timezone).putString(STATUS, "Updated now").apply()
+                .putString(TIMEZONE, timezone).putString(STATUS, "Updated now").putString(WARNING, warning).apply()
             updateAll(context)
         }
 
@@ -48,7 +49,15 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.weather_city, prefs.getString(CITY, "Current location") ?: "Current location")
             views.setTextViewText(R.id.weather_temp, prefs.getString(TEMP, "--°C") ?: "--°C")
             views.setTextViewText(R.id.weather_condition, prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh")
-            views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
+                        views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
+            
+            val warningTxt = prefs.getString(WARNING, "") ?: ""
+            if (warningTxt.isNotEmpty()) {
+                views.setViewVisibility(R.id.weather_warning, android.view.View.VISIBLE)
+                views.setTextViewText(R.id.weather_warning, warningTxt)
+            } else {
+                views.setViewVisibility(R.id.weather_warning, android.view.View.GONE)
+            }
             val zone = prefs.getString(TIMEZONE, java.util.TimeZone.getDefault().id) ?: java.util.TimeZone.getDefault().id
 
             val refresh = PendingIntent.getActivity(

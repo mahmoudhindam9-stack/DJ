@@ -8,7 +8,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -19,6 +18,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -94,6 +97,31 @@ fun DJFxRack(deck: DJDeckController) {
         activePlugins = allPlugins.take(4).map { it.id }
     }
 
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri?.let {
+            var fileName = "Custom FX"
+            context.contentResolver.query(it, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIdx >= 0) fileName = cursor.getString(nameIdx)
+                }
+            }
+            fileName = fileName.substringBeforeLast(".")
+            
+            val prefs = context.getSharedPreferences("modular_fx", Context.MODE_PRIVATE)
+            val array = JSONArray(prefs.getString("plugins", "[]") ?: "[]")
+            val newObj = JSONObject()
+            val newId = "custom_${System.currentTimeMillis()}"
+            newObj.put("id", newId)
+            newObj.put("name", fileName)
+            newObj.put("type", "imported")
+            array.put(newObj)
+            prefs.edit().putString("plugins", array.toString()).apply()
+            allPlugins = loadCustomEffects(context)
+        }
+    }
+
     if (showLibraryDialog) {
         AlertDialog(
             onDismissRequest = { showLibraryDialog = false },
@@ -104,18 +132,8 @@ fun DJFxRack(deck: DJDeckController) {
                     Spacer(Modifier.height(8.dp))
                     
                     Button(onClick = {
-                        // Dummy Add logic for now (would be file picker)
-                        val prefs = context.getSharedPreferences("modular_fx", Context.MODE_PRIVATE)
-                        val array = JSONArray(prefs.getString("plugins", "[]") ?: "[]")
-                        val newObj = JSONObject()
-                        val newId = "custom_${System.currentTimeMillis()}"
-                        newObj.put("id", newId)
-                        newObj.put("name", "Downloaded FX ${array.length() + 1}")
-                        newObj.put("type", "delay") // random
-                        array.put(newObj)
-                        prefs.edit().putString("plugins", array.toString()).apply()
-                        allPlugins = loadCustomEffects(context)
-                    }, modifier = Modifier.fillMaxWidth()) {
+                        launcher.launch("*/*")
+                    }, ) {
                         Icon(Icons.Filled.Download, null)
                         Spacer(Modifier.width(8.dp))
                         Text("Import New Plugin File (.json)")
@@ -202,8 +220,7 @@ fun DJFxRack(deck: DJDeckController) {
                         EffectTile(
                             name = effect.displayName,
                             isActive = deck.isEffectActive(effect.id),
-                            onClick = { deck.toggleEffect(effect.id) },
-                            modifier = Modifier.fillMaxWidth()
+                            onClick = { deck.toggleEffect(effect.id) }
                         )
                     }
                 }

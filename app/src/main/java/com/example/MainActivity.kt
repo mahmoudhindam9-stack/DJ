@@ -173,7 +173,7 @@ fun MainApp() {
         eqController.attachToSession(playerController.exoPlayer.audioSessionId)
         while (true) {
             playerController.updateProgress()
-            delay(250)
+            delay(50)
         }
     }
 
