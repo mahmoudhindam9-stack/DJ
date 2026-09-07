@@ -35,6 +35,15 @@ class MusicWidgetProvider : AppWidgetProvider() {
 
         private fun updateOne(context: Context, manager: AppWidgetManager, id: Int, title: String, artist: String, isPlaying: Boolean, bass: Int, mid: Int, treble: Int) {
             val views = RemoteViews(context.packageName, R.layout.music_widget)
+            
+            val weatherPrefs = context.getSharedPreferences("time_weather_widget", Context.MODE_PRIVATE)
+            views.setTextViewText(R.id.weather_city, weatherPrefs.getString("city", "Current location") ?: "Current location")
+            views.setTextViewText(R.id.weather_temp, weatherPrefs.getString("temp", "--°C") ?: "--°C")
+            val zone = weatherPrefs.getString("timezone", java.util.TimeZone.getDefault().id) ?: java.util.TimeZone.getDefault().id
+            views.setString(R.id.weather_clock, "setTimeZone", zone)
+            val refresh = PendingIntent.getActivity(context, id * 41, Intent(context, LocationWeatherActivity::class.java), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            views.setOnClickPendingIntent(R.id.weather_refresh, refresh)
+
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_artist, artist)
             views.setTextViewText(R.id.widget_status, if (isPlaying) "▶ Playing" else "⏸ Paused")

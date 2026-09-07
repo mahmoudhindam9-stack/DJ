@@ -39,7 +39,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         private const val EQ_TRANSITION_FRAMES = 256
         private const val DEFAULT_PREAMP_DB = 0.0f
         private const val MAX_PREAMP_DB = 12.0f
-        private const val LIMITER_THRESHOLD = 0.82f
+        private const val LIMITER_THRESHOLD = 0.98f
 
         @Volatile
         private var globalPreampDb = DEFAULT_PREAMP_DB

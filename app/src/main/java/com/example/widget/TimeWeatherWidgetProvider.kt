@@ -34,6 +34,7 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             val manager = AppWidgetManager.getInstance(context)
             val component = android.content.ComponentName(context, TimeWeatherWidgetProvider::class.java)
             manager.getAppWidgetIds(component).forEach { updateOne(context, manager, it) }
+            MusicWidgetProvider.requestAllUpdates(context)
         }
 
         private fun updateOne(context: Context, manager: AppWidgetManager, id: Int) {

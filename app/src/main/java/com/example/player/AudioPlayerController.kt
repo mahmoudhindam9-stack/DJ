@@ -11,11 +11,33 @@ import androidx.media3.exoplayer.ExoPlayer
 import com.example.model.AudioItem
 import org.json.JSONArray
 import org.json.JSONObject
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 
 enum class RepeatOption { OFF, ALL, ONE }
 
+@OptIn(UnstableApi::class)
 class AudioPlayerController(private val context: Context) {
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context).build()
+    val fxProcessor = DeckFxAudioProcessor()
+    val eqController = EqualizerController(context) { syncEq() }
+
+    private fun syncEq() {
+        val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
+        fxProcessor.setEqLevels(levels, eqController.isEnabled)
+    }
+
+    private val renderersFactory = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
+            return DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(fxProcessor))
+                .build()
+        }
+    }
+
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
 
     var playlist = mutableStateListOf<AudioItem>()
         private set

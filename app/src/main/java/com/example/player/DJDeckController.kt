@@ -84,19 +84,21 @@ class DJSoundPlayer(private val context: Context) {
 @OptIn(UnstableApi::class)
 class DJDeck(context: Context, val deckName: String) {
     val fxProcessor = DeckFxAudioProcessor()
-    val eqAmplifier = EqualizerAmplifierAudioProcessor()
     val eqController = EqualizerController(context) { syncEq() }
     val effectStates = mutableStateMapOf<DJEffect, Boolean>()
 
     private fun syncEq() {
         val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
         fxProcessor.setEqLevels(levels, eqController.isEnabled)
-        eqAmplifier.setEnabled(eqController.isEnabled)
     }
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
-            return DefaultAudioSink.Builder(context).setAudioProcessors(arrayOf(fxProcessor, eqAmplifier)).build()
+            return DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(fxProcessor))
+                .build()
         }
     }
 
