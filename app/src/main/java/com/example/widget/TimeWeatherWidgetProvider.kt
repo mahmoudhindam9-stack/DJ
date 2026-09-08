@@ -82,6 +82,13 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_title, snapshot.first)
             views.setTextViewText(R.id.widget_artist, snapshot.second)
             views.setImageViewResource(R.id.widget_btn_play, if (snapshot.third) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            
+            // Setup Chronometer
+            if (snapshot.third) { // If playing
+                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, true)
+            } else {
+                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, false)
+            }
 
             val base = id * 10
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
