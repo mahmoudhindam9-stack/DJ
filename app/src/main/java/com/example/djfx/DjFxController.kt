@@ -20,14 +20,13 @@ class DjFxController(private val context: Context) {
     var currentBank by mutableStateOf("A")
         private set
 
-    val banks = listOf("A", "B", "C", "D", "E")
+    val banks = listOf("A", "B", "C", "D")
 
     val bankLabels = mapOf(
         "A" to "DJ FX",
         "B" to "شرقي",
         "C" to "كوميدي",
-        "D" to "تريندات",
-        "E" to "روبوت ريز"
+        "D" to "تريندات"
     )
 
     init {
@@ -44,7 +43,7 @@ class DjFxController(private val context: Context) {
                 repository.purgeFactorySounds()
                 prefs.edit().putBoolean("factory_sounds_purged", true).apply()
             }
-            // Always ensure newly added factory sounds (e.g. Rizz Robot) are injected
+            // Always ensure newly added factory sounds are injected
             repository.injectMissingFactorySounds()
             
             allFx = repository.getAllFx()

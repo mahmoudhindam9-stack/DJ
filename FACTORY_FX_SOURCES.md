@@ -13,7 +13,7 @@ CC0 1.0 public-domain sound effects used by the DJ FX and Party banks.
 https://github.com/code4fukui/sound-cc0
 
 ### Kenney Sci-Fi Sounds via danvanderboom/Aetherium
-The repository includes a committed Kenney Sci-Fi Sounds license file and documents the included Kenney sound effects as CC0 1.0. Selected real OGG files are used by the DJ FX, Electronic and Party banks.
+The repository includes a committed Kenney Sci-Fi Sounds license file and documents the included Kenney sound effects as CC0 1.0. The entire "DJ FX" bank (lasers, force fields, engine, door swooshes, impacts, sub boom) is streamed remotely from these real OGG files.
 https://github.com/danvanderboom/Aetherium/tree/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds
 
 ### Kenney SFX subset via euuuuuan/voidclad-public
