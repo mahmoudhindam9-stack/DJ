@@ -85,9 +85,9 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             
             // Setup Chronometer
             if (snapshot.third) { // If playing
-                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, true)
+                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), "%s", true)
             } else {
-                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, false)
+                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), "%s", false)
             }
 
             val base = id * 10
