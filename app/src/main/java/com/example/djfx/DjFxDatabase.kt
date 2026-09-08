@@ -37,6 +37,12 @@ interface DjFxDao {
 
     @Query("DELETE FROM dj_fx_pad WHERE padKey = :padKey")
     suspend fun deletePad(padKey: String)
+
+    @Query("DELETE FROM dj_fx WHERE id IN (:ids)")
+    suspend fun deleteFxByIds(ids: List<String>)
+
+    @Query("DELETE FROM dj_fx_pad WHERE fxId IN (:ids)")
+    suspend fun deletePadsByFxIds(ids: List<String>)
 }
 
 @Database(entities = [DjFxEntity::class, DjFxPadEntity::class], version = 1, exportSchema = false)

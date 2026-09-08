@@ -20,13 +20,14 @@ class DjFxController(private val context: Context) {
     var currentBank by mutableStateOf("A")
         private set
 
-    val banks = listOf("A", "B", "C", "D")
+    val banks = listOf("A", "B", "C", "D", "E")
 
     val bankLabels = mapOf(
         "A" to "DJ FX",
         "B" to "شرقي",
         "C" to "كوميدي",
-        "D" to "تريندات"
+        "D" to "تريندات",
+        "E" to "روبوت ريز"
     )
 
     init {
@@ -35,8 +36,18 @@ class DjFxController(private val context: Context) {
 
     private fun loadData() {
         scope.launch {
+            // One-time cleanup: the factory sound bank used to be re-injected
+            // into the library and onto pads on every launch. Remove it for
+            // good so the DJ FX page only ever shows sounds the user added.
+            val prefs = context.getSharedPreferences("dj_fx_prefs", Context.MODE_PRIVATE)
+            if (!prefs.getBoolean("factory_sounds_purged", false)) {
+                repository.purgeFactorySounds()
+                prefs.edit().putBoolean("factory_sounds_purged", true).apply()
+            }
+            // Always ensure newly added factory sounds (e.g. Rizz Robot) are injected
+            repository.injectMissingFactorySounds()
+            
             allFx = repository.getAllFx()
-            repository.ensureFactoryPadAssignments()
             padAssignments = repository.getPadAssignments()
         }
     }

@@ -25,6 +25,7 @@ class AudioPlayerController(private val context: Context) {
     private fun syncEq() {
         val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
         fxProcessor.setEqLevels(levels, eqController.isEnabled)
+        previewFxProcessor.setEqLevels(levels, eqController.isEnabled)
     }
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
@@ -38,6 +39,28 @@ class AudioPlayerController(private val context: Context) {
     }
 
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
+
+    // --- Auto crossfade support -------------------------------------------------
+    // A second, hidden player used only to pre-roll the upcoming track underneath
+    // the tail of the current one so the transition between songs overlaps
+    // instead of just fading the current track to silence.
+    private val previewFxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
+    private val previewRenderersFactory = object : DefaultRenderersFactory(context) {
+        override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
+            return DefaultAudioSink.Builder(context)
+                .setEnableFloatOutput(enableFloatOutput)
+                .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                .setAudioProcessors(arrayOf(previewFxProcessor))
+                .build()
+        }
+    }
+    private var previewPlayerInstance: ExoPlayer? = null
+    private fun ensurePreviewPlayer(): ExoPlayer {
+        return previewPlayerInstance ?: ExoPlayer.Builder(context, previewRenderersFactory).build()
+            .apply { volume = 0f }
+            .also { previewPlayerInstance = it }
+    }
+    private var crossfadePreviewIndex: Int = -1
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -57,6 +80,7 @@ class AudioPlayerController(private val context: Context) {
         private set
     var volume by mutableStateOf(1f)
         private set
+    private var skipNextFadeIn = false
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var lastPersistAt = 0L
@@ -87,6 +111,18 @@ class AudioPlayerController(private val context: Context) {
                     currentSongIndex = index
                     currentSong = playlist[index]
                     currentPositionMs = 0L
+                    // The hidden preview player's job ends the moment the main player
+                    // itself arrives at that same track (whether it got there via our
+                    // auto crossfade or a manual skip/seek).
+                    stopCrossfadePreview()
+                    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO) {
+                        // We just completed (or are completing) an automatic
+                        // end-of-track crossfade: the volume ramp already handled
+                        // the transition, so snap straight to full volume instead
+                        // of re-running the manual-skip fade-in below.
+                        try { exoPlayer.volume = volume } catch (_: Exception) {}
+                        skipNextFadeIn = true
+                    }
                     persistSession(force = true)
                     syncNotificationSafely()
                 }
@@ -115,6 +151,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun setQueue(songs: List<AudioItem>, startIndex: Int = 0) {
+        stopCrossfadePreview()
         playlist.clear()
         playlist.addAll(songs)
         val items = songs.map { MediaItem.fromUri(it.uri) }
@@ -152,6 +189,7 @@ class AudioPlayerController(private val context: Context) {
 
     fun pause() {
         exoPlayer.pause()
+        try { previewPlayerInstance?.pause() } catch (_: Exception) {}
         persistSession(force = true)
         syncNotificationSafely()
     }
@@ -244,6 +282,9 @@ class AudioPlayerController(private val context: Context) {
         try {
             exoPlayer.setPreferredAudioDevice(device)
         } catch (_: Throwable) {}
+        try {
+            previewPlayerInstance?.setPreferredAudioDevice(device)
+        } catch (_: Throwable) {}
     }
 
     private fun applyPreferredAudioDevice() {
@@ -276,28 +317,69 @@ class AudioPlayerController(private val context: Context) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             val realDuration = exoPlayer.duration
             if (realDuration > 0L) durationMs = realDuration
-            
+
             if (crossfadeDurationMs > 0L && exoPlayer.isPlaying) {
                 val remaining = durationMs - currentPositionMs
-                if (remaining > 0 && remaining < crossfadeDurationMs) {
-                    // Fade out
+                if (remaining in 1 until crossfadeDurationMs && exoPlayer.hasNextMediaItem()) {
+                    // Automatic end-of-track crossfade: overlap the tail of the current
+                    // song with the start of the next one instead of just fading to silence.
+                    val nextIndex = exoPlayer.nextMediaItemIndex
+                    if (crossfadePreviewIndex != nextIndex) {
+                        startCrossfadePreview(nextIndex)
+                    } else {
+                        previewPlayerInstance?.let { if (!it.isPlaying) it.play() }
+                    }
+                    // Equal-power crossfade curve: fraction goes 1 -> 0 as the window elapses.
                     val fraction = (remaining.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
-                    val targetVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
-                    try { exoPlayer.volume = targetVol * volume } catch(e:Exception){}
-                } else if (currentPositionMs < crossfadeDurationMs) {
-                    // Fade in
+                    val outVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
+                    val inVol = kotlin.math.cos(fraction * (kotlin.math.PI / 2)).toFloat()
+                    try { exoPlayer.volume = outVol * volume } catch (e: Exception) {}
+                    try { previewPlayerInstance?.volume = inVol * volume } catch (e: Exception) {}
+                } else if (!skipNextFadeIn && currentPositionMs < crossfadeDurationMs) {
+                    // Manual skip/seek landed near the start of a track: fade it in
+                    // smoothly instead of jumping straight to full volume.
+                    if (crossfadePreviewIndex != -1) stopCrossfadePreview()
                     val fraction = (currentPositionMs.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
                     val targetVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
-                    try { exoPlayer.volume = targetVol * volume } catch(e:Exception){}
+                    try { exoPlayer.volume = targetVol * volume } catch (e: Exception) {}
                 } else {
-                    try { exoPlayer.volume = volume } catch(e:Exception){}
+                    if (crossfadePreviewIndex != -1) stopCrossfadePreview()
+                    skipNextFadeIn = false
+                    try { exoPlayer.volume = volume } catch (e: Exception) {}
                 }
             } else if (exoPlayer.isPlaying) {
-                try { exoPlayer.volume = volume } catch(e:Exception){}
+                if (crossfadePreviewIndex != -1) stopCrossfadePreview()
+                try { exoPlayer.volume = volume } catch (e: Exception) {}
             }
-            
+
             persistSession()
         }
+    }
+
+    /** Starts playing `nextIndex` from the playlist underneath the current track, muted,
+     * ready to be faded in as part of an automatic crossfade. */
+    private fun startCrossfadePreview(nextIndex: Int) {
+        val nextSong = playlist.getOrNull(nextIndex) ?: return
+        crossfadePreviewIndex = nextIndex
+        try {
+            val preview = ensurePreviewPlayer()
+            preview.setMediaItem(MediaItem.fromUri(nextSong.uri))
+            preview.volume = 0f
+            applyPreferredAudioDevice()
+            preview.prepare()
+            preview.play()
+        } catch (_: Exception) {
+            crossfadePreviewIndex = -1
+        }
+    }
+
+    private fun stopCrossfadePreview() {
+        if (crossfadePreviewIndex == -1) return
+        crossfadePreviewIndex = -1
+        try {
+            previewPlayerInstance?.stop()
+            previewPlayerInstance?.clearMediaItems()
+        } catch (_: Exception) {}
     }
 
     private fun persistSession(force: Boolean = false) {
@@ -407,6 +489,8 @@ class AudioPlayerController(private val context: Context) {
         try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
         if (activeInstance === this) activeInstance = null
         exoPlayer.release()
+        try { previewPlayerInstance?.release() } catch (_: Throwable) {}
+        previewPlayerInstance = null
     }
 
     companion object {

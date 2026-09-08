@@ -89,7 +89,9 @@ fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
     val prefs = remember { context.getSharedPreferences("app_session", Context.MODE_PRIVATE) }
-    val initialRoute = remember { prefs.getString("last_route", "player") ?: "player" }
+    val activity = context as? android.app.Activity
+    val intentRoute = activity?.intent?.getStringExtra("open_route")
+    val initialRoute = remember { intentRoute ?: prefs.getString("last_route", "player") ?: "player" }
 
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController.obtain(context) }

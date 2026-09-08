@@ -30,8 +30,22 @@ import java.io.FileInputStream
 import java.io.FileOutputStream
 
 
-enum class MicFilter(val displayName: String) {
-    NORMAL("Clean"), STUDIO_REVERB("Studio Reverb"), CHIPMUNK("Chipmunk"), MONSTER("Monster"), ROBOT("Robot"),
+/**
+ * pitchRatio drives the real-time [PitchShifter]: 1f = untouched, >1f raises
+ * pitch, <1f lowers it. This is what makes each character voice actually
+ * sound different, instead of the old "just play it louder/quieter" trick.
+ */
+enum class MicFilter(val displayName: String, val pitchRatio: Float = 1f) {
+    NORMAL("Clean"),
+    STUDIO_REVERB("Studio Reverb"),
+    KID("Kid Voice", 1.55f),
+    CHIPMUNK("Chipmunk", 1.9f),
+    SMALL_WOMAN("Young Woman", 1.3f),
+    OLD_WOMAN("Old Woman", 1.15f),
+    OLD_MAN("Old Man", 0.75f),
+    GIANT("Giant", 0.6f),
+    MONSTER("Monster", 0.52f),
+    ROBOT("Robot"),
     TELEPHONE("Telephone"), RADIO("Radio"), MEGAPHONE("Megaphone"), CHORUS("Chorus"), TREMOLO("Tremolo"), BASS_BOOST("Bass Boost")
 }
 
@@ -270,6 +284,7 @@ class MicController(private val context: Context) {
             recordingJob = coroutineScope.launch(Dispatchers.IO) {
                 val buffer = ShortArray(bufferSize / 2)
                 val delayBuffer = ShortArray(sampleRate)
+                val pitchShifter = PitchShifter()
                 var writeIdx = 0
                 var lowPass = 0f
                 while (isActive && isMicEnabled) {
@@ -280,10 +295,15 @@ class MicController(private val context: Context) {
                     val beatDelay = ((sampleRate * 60f / currentBpm) * beatFxDivision.beats).toInt().coerceIn(1, delayBuffer.size - 1)
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
+                        // Real pitch shift for the character voices (kid/old man/old
+                        // woman/giant/etc). Left untouched at ratio 1f so "Clean" and
+                        // the tone-coloring filters below stay artifact-free.
+                        val pitchRatio = activeFilter.pitchRatio
+                        if (pitchRatio != 1f) sample = pitchShifter.process(sample, pitchRatio)
                         val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
-                            MicFilter.CHIPMUNK -> sample *= 1.12f
-                            MicFilter.MONSTER -> sample *= 0.72f
+                            MicFilter.OLD_MAN -> { lowPass += 0.1f * (sample - lowPass); sample = (sample * 0.85f + lowPass * 0.35f) * (0.92f + 0.08f * sin(2.0 * PI * writeIdx.toDouble() / sampleRate * 5.0).toFloat()) }
+                            MicFilter.OLD_WOMAN -> sample *= 0.9f + 0.1f * sin(2.0 * PI * writeIdx.toDouble() / sampleRate * 6.0).toFloat()
                             MicFilter.ROBOT -> sample *= if ((i / 24) % 2 == 0) 1f else 0.55f
                             MicFilter.TELEPHONE -> { lowPass += 0.16f * (sample - lowPass); sample = ((sample - lowPass) * 1.8f).coerceIn(-1f, 1f) }
                             MicFilter.RADIO -> { lowPass += 0.2f * (sample - lowPass); sample = (lowPass * 3.2f).coerceIn(-1f, 1f) }
@@ -475,8 +495,6 @@ class MicController(private val context: Context) {
         isMicEnabled = false
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
-        if (isOutputRecording) stopOutputRecording()
-        stopMicForegroundService()
         recordingJob?.cancel()
         recordingJob = null
         try {
@@ -510,19 +528,7 @@ class MicController(private val context: Context) {
         routingStatus = "تم إيقاف الميكروفون"
     }
 
-    private fun AudioDeviceInfo.isBluetoothAudio(): Boolean = when (type) {
-        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
-        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
-        AudioDeviceInfo.TYPE_BLE_HEADSET,
-        AudioDeviceInfo.TYPE_BLE_SPEAKER,
-        AudioDeviceInfo.TYPE_BLE_BROADCAST -> true
-        else -> false
-    }
-
     private fun AudioDeviceInfo.isBluetoothSco(): Boolean = type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
-
-    private fun AudioDeviceInfo.displayName(): String =
-        productName?.toString()?.takeIf { it.isNotBlank() } ?: "Audio Device $id"
 
     companion object {
         private const val BLUETOOTH_PERMISSION_REQUEST_CODE = 4301

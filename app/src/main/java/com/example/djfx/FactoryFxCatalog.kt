@@ -141,6 +141,13 @@ object FactoryFxCatalog {
         cc0Remote("tr_yeah2", "Yeah Song", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/yeah%20song.mp3"),
         cc0Remote("tr_yeet", "Yeet", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/yeet.mp3"),
         cc0Remote("tr_wow", "Wow", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/wow.mp3"),
-        cc0Remote("tr_fail", "Fail / Wah Wah", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fail%20game%20over%20wah%20wah%20sad%20trombone.mp3")
+        cc0Remote("tr_fail", "Fail / Wah Wah", "تريندات", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fail%20game%20over%20wah%20wah%20sad%20trombone.mp3"),
+        // NEW BANK — RIZZ ROBOT
+        cc0Remote("rz_robot1", "Rizz Robot Pulse", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/computerNoise_000.ogg"),
+        cc0Remote("rz_robot2", "Rizz Robot Scan", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/forceField_000.ogg"),
+        cc0Remote("rz_robot3", "Rizz Robot Laser", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/laserLarge_000.ogg"),
+        cc0Remote("rz_robot4", "Rizz Robot Engine", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/engineCircular_000.ogg"),
+        cc0Remote("rz_robot5", "Rizz Robot Engage", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/doorOpen_001.ogg"),
+        cc0Remote("rz_robot6", "Rizz Robot Crunch", "روبوت ريز", "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/explosionCrunch_000.ogg")
     )
 }

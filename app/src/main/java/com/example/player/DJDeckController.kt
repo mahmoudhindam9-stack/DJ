@@ -12,29 +12,12 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.common.util.UnstableApi
 import com.example.model.AudioItem
 import kotlinx.coroutines.*
-import kotlin.math.sin
-
-enum class SamplerSound(val title: String, val category: String) {
-    TABLA("Tabla", "Percussion"), DUFF("Duff", "Percussion"), SAGAT("Sagat", "Percussion"),
-    BONGO("Bongo", "Percussion"), CONGA("Conga", "Percussion"), DARBUKA("Darbuka", "Percussion"),
-    TIMPANI("Timpani", "Percussion"), SHAKER("Shaker", "Percussion"), TAMBOURINE("Tambourine", "Percussion"),
-    CLAP("Clapping", "Crowd"), CROWD("Crowd Cheer", "Crowd"), HORN("DJ Horn", "FX"),
-    SCRATCH("Scratch", "FX"), LASER("Laser FX", "FX"), WHISTLE("Whistle", "FX"),
-    SIREN("Siren", "FX"), AIRHORN("Airhorn", "FX"), ZAP("Zap FX", "FX"),
-    KICK("Kick Drum", "Drums"), SNARE("Snare Drum", "Drums"), HIHAT_C("Closed HH", "Drums"),
-    HIHAT_O("Open HH", "Drums"), CRASH("Crash Cymbal", "Drums"), TOM("Tom Drum", "Drums"),
-    BASS_DROP("Bass Drop", "Synth"), SYNTH_STAB("Synth Stab", "Synth")
-}
-
-class DJSoundPlayer(private val context: Context) {
-    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    fun playSound(sound: SamplerSound) {
-        // Implement simple playback if needed or stub out.
-    }
-}
 
 class DJDeckController(private val context: Context, val deckName: String) {
-    val fxProcessor = DeckFxAudioProcessor()
+    // Wires the DSP plugin library into this deck's audio path. Without this,
+    // the plugin chain stays empty and every effect toggle is a no-op even
+    // though the UI shows it as "on".
+    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
     val eqController = EqualizerController(context) { syncEq() }
     private fun syncEq() {
         val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
@@ -195,7 +178,6 @@ class DJMixerController(context: Context) {
     val deckA = DJDeckController(context, "A")
     val deckB = DJDeckController(context, "B")
     var crossfader by mutableStateOf(0.5f)
-    val sampler = DJSoundPlayer(context)
 
     fun updateCrossfader(value: Float) {
         crossfader = value.coerceIn(0f, 1f)

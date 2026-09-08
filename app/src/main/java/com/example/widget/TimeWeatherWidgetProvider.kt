@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
+import com.example.MainActivity
 import com.example.R
 import com.example.player.MusicService
 import com.example.player.PlaybackNotificationRouter
@@ -48,7 +49,16 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             val views = RemoteViews(context.packageName, R.layout.time_weather_widget)
             views.setTextViewText(R.id.weather_city, prefs.getString(CITY, "Current location") ?: "Current location")
             views.setTextViewText(R.id.weather_temp, prefs.getString(TEMP, "--°C") ?: "--°C")
-            views.setTextViewText(R.id.weather_condition, prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh")
+            val condString = prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh"
+            // Split emoji from text if present
+            val spaceIndex = condString.indexOf(' ')
+            if (spaceIndex > 0 && condString.length > 2 && condString.codePointAt(0) > 0x2000) {
+                views.setTextViewText(R.id.weather_icon, condString.substring(0, spaceIndex))
+                views.setTextViewText(R.id.weather_condition, condString.substring(spaceIndex + 1))
+            } else {
+                views.setTextViewText(R.id.weather_icon, "🌍")
+                views.setTextViewText(R.id.weather_condition, condString)
+            }
                         views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
             
             val warningTxt = prefs.getString(WARNING, "") ?: ""
@@ -78,6 +88,15 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_btn_prev, PendingIntent.getBroadcast(context, base, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_PREV), flags))
             views.setOnClickPendingIntent(R.id.widget_btn_play, PendingIntent.getBroadcast(context, base + 1, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_TOGGLE_PLAY), flags))
             views.setOnClickPendingIntent(R.id.widget_btn_next, PendingIntent.getBroadcast(context, base + 2, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_NEXT), flags))
+            
+            // Open player on click
+            val openPlayerIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra("open_route", "player")
+            }
+            val openPlayerPending = PendingIntent.getActivity(context, id * 42, openPlayerIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            views.setOnClickPendingIntent(R.id.widget_title, openPlayerPending)
+            views.setOnClickPendingIntent(R.id.widget_artist, openPlayerPending)
+            views.setOnClickPendingIntent(R.id.widget_music_container, openPlayerPending)
 
             manager.updateAppWidget(id, views)
         }

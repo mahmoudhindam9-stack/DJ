@@ -7,35 +7,8 @@ import kotlinx.coroutines.withContext
 class DjFxRepository(private val context: Context) {
     private val dao = DjFxDatabase.getDatabase(context).djFxDao()
 
+    /** Returns the user's own DJ FX library — no factory bank is auto-injected. */
     suspend fun getAllFx(): List<DjFxItem> = withContext(Dispatchers.IO) {
-        val existing = dao.getAllFx().map { it.toItem() }
-        val missing = mutableListOf<DjFxItem>()
-        val updates = mutableListOf<DjFxItem>()
-
-        FactoryFxCatalog.entries.forEach { entry ->
-            val existingItem = existing.find { it.id == entry.id }
-            val targetSourceUrl = entry.sourceUrl ?: "asset:///${entry.assetPath}"
-            val targetLicense = entry.source
-            
-            if (existingItem == null) {
-                missing.add(
-                    DjFxItem(
-                        id = entry.id,
-                        name = entry.name,
-                        category = entry.category,
-                        source = "CC0 Open Source",
-                        license = targetLicense,
-                        sourceUrl = targetSourceUrl
-                    )
-                )
-            } else if (existingItem.sourceUrl != targetSourceUrl || existingItem.name != entry.name) {
-                updates.add(existingItem.copy(sourceUrl = targetSourceUrl, name = entry.name))
-            }
-        }
-        
-        missing.forEach { insertFx(it) }
-        updates.forEach { insertFx(it) }
-        
         dao.getAllFx().map { it.toItem() }
     }
 
@@ -69,35 +42,42 @@ class DjFxRepository(private val context: Context) {
         dao.getAllPads().associate { it.padKey to it.fxId }
     }
 
-    suspend fun ensureFactoryPadAssignments() = withContext(Dispatchers.IO) {
-        val existing = dao.getAllPads().associate { it.padKey to it.fxId }
-        val factoryIds = FactoryFxCatalog.entries.mapTo(mutableSetOf()) { it.id }
-        val bankByCategory = mapOf(
-            "DJ FX" to "A",
-            "شرقي" to "B",
-            "كوميدي" to "C",
-            "تريندات" to "D",
-            "Drums" to "B",
-            "Electronic" to "C",
-            "Party" to "D"
-        )
-        FactoryFxCatalog.entries.groupBy { it.category }.forEach { (category, entries) ->
-            val bank = bankByCategory[category] ?: return@forEach
-            entries.take(16).forEachIndexed { index, entry ->
-                val key = "${bank}_$index"
-                val current = existing[key]
-                if (current == null || current in factoryIds) {
-                    dao.insertPad(DjFxPadEntity(key, entry.id))
-                }
-            }
-        }
-    }
-
     suspend fun assignPad(bank: String, index: Int, fxId: String) = withContext(Dispatchers.IO) {
         dao.insertPad(DjFxPadEntity("${bank}_$index", fxId))
     }
 
     suspend fun clearPad(bank: String, index: Int) = withContext(Dispatchers.IO) {
         dao.deletePad("${bank}_$index")
+    }
+
+    suspend fun injectMissingFactorySounds() = withContext(Dispatchers.IO) {
+        val existingIds = dao.getAllFx().map { it.id }.toSet()
+        val missing = FactoryFxCatalog.entries.filter { it.id !in existingIds }
+        missing.forEach { entry ->
+            dao.insertFx(
+                DjFxEntity(
+                    id = entry.id,
+                    name = entry.name,
+                    category = entry.category,
+                    source = entry.source,
+                    license = "CC0-1.0",
+                    sourceUrl = entry.sourceUrl ?: entry.assetPath,
+                    localUri = entry.assetPath.takeIf { !it.startsWith("http") && it.isNotBlank() },
+                    isFavorite = false
+                )
+            )
+        }
+    }
+
+    /**
+     * Permanently removes the bundled factory sound bank (and any pad that
+     * was still pointing at one of those sounds) from this user's library,
+     * so the DJ FX page starts clean and stays that way.
+     */
+    suspend fun purgeFactorySounds() = withContext(Dispatchers.IO) {
+        val factoryIds = FactoryFxCatalog.entries.map { it.id }
+        if (factoryIds.isEmpty()) return@withContext
+        dao.deletePadsByFxIds(factoryIds)
+        dao.deleteFxByIds(factoryIds)
     }
 }
