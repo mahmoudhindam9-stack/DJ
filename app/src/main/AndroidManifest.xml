@@ -63,6 +63,6 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
-        <receiver android:name=".widget.WidgetActionReceiver" android:exported="true" android:permission="com.example.permission.WIDGET_ACTION" />
+        <receiver android:name=".widget.WidgetActionReceiver" android:exported="false" />
     </application>
 </manifest>

@@ -30,9 +30,9 @@ class QuickPlayerWidgetProvider : AppWidgetProvider() {
             views.setImageViewResource(R.id.quick_play, if (snapshot.third) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             val base = id * 20
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            views.setOnClickPendingIntent(R.id.quick_prev, PendingIntent.getService(context, base, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_PREV), flags))
-            views.setOnClickPendingIntent(R.id.quick_play, PendingIntent.getService(context, base + 1, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_TOGGLE_PLAY), flags))
-            views.setOnClickPendingIntent(R.id.quick_next, PendingIntent.getService(context, base + 2, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_NEXT), flags))
+            views.setOnClickPendingIntent(R.id.quick_prev, PendingIntent.getBroadcast(context, base, Intent(context, WidgetActionReceiver::class.java).setAction(com.example.player.MusicService.ACTION_PREV), flags))
+            views.setOnClickPendingIntent(R.id.quick_play, PendingIntent.getBroadcast(context, base + 1, Intent(context, WidgetActionReceiver::class.java).setAction(com.example.player.MusicService.ACTION_TOGGLE_PLAY), flags))
+            views.setOnClickPendingIntent(R.id.quick_next, PendingIntent.getBroadcast(context, base + 2, Intent(context, WidgetActionReceiver::class.java).setAction(com.example.player.MusicService.ACTION_NEXT), flags))
             val open = PendingIntent.getActivity(context, base + 3, Intent(context, MainActivity::class.java), flags)
             views.setOnClickPendingIntent(R.id.quick_title, open)
             manager.updateAppWidget(id, views)

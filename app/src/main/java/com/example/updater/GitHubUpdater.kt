@@ -8,6 +8,7 @@ import android.content.IntentFilter
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.provider.Settings
 import android.widget.Toast
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.Dispatchers
@@ -21,6 +22,20 @@ object GitHubUpdater {
     // ⚠️ قم بتغيير هذه القيم إلى بيانات حسابك على جيت هب
     var githubOwner = "mahmoudhindam9-stack" // اسم الحساب
     var githubRepo = "DJ"   // اسم المستودع
+
+    // Helper to compare version strings (e.g. "1.0" vs "1.2026...")
+    private fun isVersionGreater(v1: String, v2: String): Boolean {
+        val parts1 = v1.split(".").mapNotNull { it.toLongOrNull() }
+        val parts2 = v2.split(".").mapNotNull { it.toLongOrNull() }
+        val length = maxOf(parts1.size, parts2.size)
+        for (i in 0 until length) {
+            val p1 = parts1.getOrElse(i) { 0L }
+            val p2 = parts2.getOrElse(i) { 0L }
+            if (p1 > p2) return true
+            if (p1 < p2) return false
+        }
+        return false // equal
+    }
 
     suspend fun checkForUpdates(context: Context, currentVersion: String = "1.0", showToast: Boolean = false) {
         if (githubOwner == "YOUR_GITHUB_USERNAME" || githubOwner.isEmpty()) {
@@ -45,18 +60,13 @@ object GitHubUpdater {
                     val json = JSONObject(response)
                     val tagName = json.optString("tag_name", "")
                     
-
-                    val latestVersion = tagName.replace("v", "").trim()
+                    val latestVersion = tagName.replace("v", "", ignoreCase = true).trim()
                     val currVer = currentVersion.replace("v", "").trim()
-                    val prefs = context.getSharedPreferences("updater_prefs", Context.MODE_PRIVATE)
-                    val lastDownloaded = prefs.getString("last_downloaded_version", "") ?: ""
                     
-                    // We only download if the remote tag is different from what we last downloaded,
-                    // AND it's not the exact same as our hardcoded version.
-                    val isNewer = latestVersion.isNotEmpty() && latestVersion != currVer && latestVersion != lastDownloaded
-
+                    // Only prompt/download if latest is strictly greater than current
+                    val isNewer = latestVersion.isNotEmpty() && isVersionGreater(latestVersion, currVer)
                     
-                    if (isNewer && latestVersion.isNotEmpty()) {
+                    if (isNewer) {
                         val assets = json.optJSONArray("assets")
                         if (assets != null && assets.length() > 0) {
                             var apkUrl = ""
@@ -70,8 +80,8 @@ object GitHubUpdater {
                             
                             if (apkUrl.isNotEmpty()) {
                                 withContext(Dispatchers.Main) {
-                                    Toast.makeText(context, "تحديث جديد متاح ($tagName)، جاري التحميل...", Toast.LENGTH_LONG).show()
-                                    downloadAndInstallUpdate(context, apkUrl, "app-update-$tagName.apk", tagName)
+                                    Toast.makeText(context, "تحديث جديد متاح ($latestVersion)، جاري التحميل...", Toast.LENGTH_LONG).show()
+                                    downloadAndInstallUpdate(context, apkUrl, "app-update-$latestVersion.apk", latestVersion)
                                 }
                             }
                         }
@@ -97,12 +107,18 @@ object GitHubUpdater {
             }
         }
     }
-
-        private fun downloadAndInstallUpdate(context: Context, apkUrl: String, fileName: String, tagName: String) {
+    
+    private fun downloadAndInstallUpdate(context: Context, apkUrl: String, fileName: String, version: String) {
         val prefs = context.getSharedPreferences("updater_prefs", Context.MODE_PRIVATE)
-        prefs.edit().putString("last_downloaded_version", tagName.replace("v", "")).apply()
-
+        prefs.edit().putString("last_downloaded_version", version).apply()
         try {
+            val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
+            // If already downloaded this exact version, just install it
+            if (file.exists() && file.length() > 0) {
+                installApk(context, fileName)
+                return
+            }
+
             val request = DownloadManager.Request(Uri.parse(apkUrl))
                 .setTitle("تحديث التطبيق")
                 .setDescription("جاري تحميل التحديث الجديد")
@@ -125,6 +141,7 @@ object GitHubUpdater {
                     }
                 }
             }
+
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.registerReceiver(onComplete, IntentFilter(DownloadManager.ACTION_DOWNLOAD_COMPLETE), Context.RECEIVER_EXPORTED)
             } else {
@@ -138,6 +155,17 @@ object GitHubUpdater {
 
     private fun installApk(context: Context, fileName: String) {
         try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                if (!context.packageManager.canRequestPackageInstalls()) {
+                    Toast.makeText(context, "الرجاء السماح بتثبيت التطبيقات المجهولة لإكمال التحديث", Toast.LENGTH_LONG).show()
+                    val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                    intent.data = Uri.parse("package:${context.packageName}")
+                    intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                    context.startActivity(intent)
+                    return
+                }
+            }
+
             val file = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), fileName)
             if (file.exists()) {
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
@@ -146,6 +174,8 @@ object GitHubUpdater {
                     flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_GRANT_READ_URI_PERMISSION
                 }
                 context.startActivity(intent)
+            } else {
+                Toast.makeText(context, "ملف التحديث غير موجود", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             e.printStackTrace()
