@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -332,7 +333,7 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
                             Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(if (status == RadioStatus.LIVE) Icons.Filled.VolumeUp else Icons.Filled.Radio, null)
+                            Icon(if (status == RadioStatus.LIVE) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.Radio, null)
                         }
                         Spacer(Modifier.width(10.dp))
                         Column(Modifier.weight(1f)) {

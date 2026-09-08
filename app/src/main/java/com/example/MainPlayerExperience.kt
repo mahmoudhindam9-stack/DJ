@@ -17,6 +17,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
@@ -167,7 +168,7 @@ fun PlayerScreenV2(
                         Card(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(9.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Filled.PlaylistPlay, null, Modifier.size(28.dp)); Spacer(Modifier.width(8.dp))
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, Modifier.size(28.dp)); Spacer(Modifier.width(8.dp))
                                     Column(Modifier.weight(1f)) {
                                         Text(playlist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                         Text("${songs.size} song(s)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -279,7 +280,7 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
     val maxPos = playerController.durationMs.coerceAtLeast(1L).toFloat()
     val current = playerController.currentPositionMs.coerceIn(0L, maxPos.toLong()).toFloat()
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.Filled.ArrowBack, "Back") }; Text("Now Playing", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); IconButton(onClick = onQueue) { Icon(Icons.Filled.QueueMusic, "Queue") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }; Text("Now Playing", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); IconButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue") } }
         Spacer(Modifier.height(20.dp))
         Box(Modifier.fillMaxWidth().weight(0.85f).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Album, null, Modifier.size(180.dp), tint = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.height(18.dp))
@@ -288,7 +289,7 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
         Slider(current, { playerController.seekTo(it.toLong()) }, valueRange = 0f..maxPos)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(MusicScanner.formatMs(playerController.currentPositionMs), style = MaterialTheme.typography.labelSmall); Text(MusicScanner.formatMs(playerController.durationMs), style = MaterialTheme.typography.labelSmall) }
         Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.playPrevious() }) { Icon(Icons.Filled.SkipPrevious, "Previous") }; FilledIconButton(onClick = { onPauseDJ(); playerController.togglePlayPause() }, Modifier.size(66.dp)) { Icon(if (playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause", Modifier.size(36.dp)) }; IconButton(onClick = { playerController.playNext() }) { Icon(Icons.Filled.SkipNext, "Next") } }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; OutlinedButton(onClick = onQueue) { Icon(Icons.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text("Queue") } }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; OutlinedButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text("Queue") } }
 
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
