@@ -1,6 +1,6 @@
 from pathlib import Path
 
-TARGET = Path("app/src/main/java/com/example/MainActivity.kt")
+TARGET = Path("app/src/main/java/com/example/DJMixerScreen.kt")
 
 HORIZONTAL_TIMER = '''            Row(
                 modifier = Modifier.fillMaxWidth(),
