@@ -3,7 +3,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIC = ROOT / "app/src/main/java/com/example/player/MicController.kt"
-MAIN = ROOT / "app/src/main/java/com/example/MainActivity.kt"
+MAIN = ROOT / "app/src/main/java/com/example/MicScreen.kt"
 
 
 def remove_duplicate_toggle_functions(text: str) -> str:
@@ -38,6 +38,8 @@ def normalize_main(text: str) -> str:
 
     old = '''        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {\n            Column(Modifier.padding(14.dp)) {\n                Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)\n                Spacer(Modifier.height(6.dp))\n                Text("BPM: ${micController.bpm.toInt()}")\n                Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)\n                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {\n                    items(BeatFxDivision.values().toList()) { div -> FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) }) }\n                }\n            }\n        }'''
     new = '''        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {\n            Column(Modifier.padding(14.dp)) {\n                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {\n                    Column(Modifier.weight(1f)) {\n                        Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)\n                        Text(if (micController.beatFxEnabled) "ACTIVE • synced to BPM" else "BYPASSED", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)\n                    }\n                    Switch(checked = micController.beatFxEnabled, onCheckedChange = { micController.beatFxEnabled = it })\n                }\n                Spacer(Modifier.height(6.dp))\n                Text("BPM: ${micController.bpm.toInt()}")\n                Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)\n                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {\n                    items(BeatFxDivision.values().toList()) { div -> FilterChip(div == micController.beatFxDivision, { micController.beatFxDivision = div }, label = { Text(div.displayName) }) }\n                }\n            }\n        }'''
+    if new in text:
+        return text
     if old not in text:
         raise SystemExit("Beat FX UI block not found")
     return text.replace(old, new, 1)

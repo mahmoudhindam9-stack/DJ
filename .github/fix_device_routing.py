@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MIC = ROOT / "app/src/main/java/com/example/player/MicController.kt"
-MAIN = ROOT / "app/src/main/java/com/example/MainActivity.kt"
+MAIN = ROOT / "app/src/main/java/com/example/MicScreen.kt"
 
 NEW_REFRESH = r'''    @SuppressLint("MissingPermission")
     fun refreshDevices() {

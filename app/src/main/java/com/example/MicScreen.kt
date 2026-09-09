@@ -39,21 +39,21 @@ import com.example.model.*
 import com.example.player.*
 import kotlinx.coroutines.*
 
+// KARAOKE_MIC_PAGE_V5
 @Composable
 fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
-    var recordingFormat by remember { mutableStateOf("WAV") }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) micController.toggleMic(true, scope)
         else Toast.makeText(context, "Microphone permission is required", Toast.LENGTH_SHORT).show()
     }
-    val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/*")) { uri ->
+    val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { uri ->
         if (uri == null) micController.discardPendingRecording()
         else scope.launch {
-            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri, recordingFormat) }
+            val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri) }
             Toast.makeText(context, if (ok) "Recording saved" else "Unable to save recording", Toast.LENGTH_SHORT).show()
         }
     }
@@ -152,13 +152,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) {
-                    Column(Modifier.weight(1f)) {
-                        Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text(if (micController.beatFxEnabled) "ACTIVE • synced to BPM" else "BYPASSED", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Switch(checked = micController.beatFxEnabled, onCheckedChange = { micController.beatFxEnabled = it })
-                }
+                Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text("BPM: ${micController.bpm.toInt()}")
                 Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)
@@ -190,18 +184,12 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     }
                     Text(micController.recordingDurationText, style = MaterialTheme.typography.labelSmall)
                 }
-                Text("Format", style = MaterialTheme.typography.labelSmall)
-                Spacer(Modifier.height(4.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(selected = recordingFormat == "WAV", onClick = { recordingFormat = "WAV" }, label = { Text("WAV") })
-                    FilterChip(selected = recordingFormat == "MP3", onClick = { recordingFormat = "MP3" }, label = { Text("MP3") })
-                }
                 Spacer(Modifier.height(10.dp))
                 Button(
                     enabled = micController.isMicEnabled || micController.isOutputRecording,
                     onClick = {
                         if (micController.isOutputRecording) {
-                            if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName(recordingFormat))
+                            if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName())
                         } else if (micController.startOutputRecording()) Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
                     },
                     modifier = Modifier.fillMaxWidth()

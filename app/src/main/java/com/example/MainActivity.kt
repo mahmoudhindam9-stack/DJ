@@ -301,6 +301,7 @@ fun MainApp() {
                     djMixerController = djMixerController,
                     djFxController = djFxController,
                     audioLibrary = audioLibrary,
+                    micController = micController,
                     onPauseMainPlayer = { playerController.pause() }
                 )
             }

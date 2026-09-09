@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = ROOT / 'app/src/main/java/com/example/MainActivity.kt'
+MAIN = ROOT / 'app/src/main/java/com/example/MicScreen.kt'
 MIC = ROOT / 'app/src/main/java/com/example/player/MicController.kt'
 MARKER = '// MIC_RECORDING_FORMAT_V1'
 

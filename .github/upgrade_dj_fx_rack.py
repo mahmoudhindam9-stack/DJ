@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = ROOT / 'app/src/main/java/com/example/MainActivity.kt'
+MAIN = ROOT / 'app/src/main/java/com/example/DJMixerScreen.kt'
 MARKER = '// DJ_FX_RACK_V2'
 
 

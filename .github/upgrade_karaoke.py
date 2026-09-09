@@ -2,7 +2,7 @@ from pathlib import Path
 import re
 
 ROOT = Path(__file__).resolve().parents[1]
-MAIN = ROOT / 'app/src/main/java/com/example/MainActivity.kt'
+MAIN = ROOT / 'app/src/main/java/com/example/MicScreen.kt'
 MIC = ROOT / 'app/src/main/java/com/example/player/MicController.kt'
 SERVICE = ROOT / 'app/src/main/java/com/example/player/MusicService.kt'
 MANIFEST = ROOT / 'app/src/main/AndroidManifest.xml'
@@ -183,8 +183,8 @@ def patch_main():
     if MARKER in text: return
     if 'import kotlinx.coroutines.withContext' not in text:
         text = text.replace('import kotlinx.coroutines.launch\n', 'import kotlinx.coroutines.launch\nimport kotlinx.coroutines.withContext\n', 1)
-    pattern = r'@Composable\s*(?://[^\n]*\n)?fun MicScreen\([^)]*CoroutineScope\)\s*\{.*?\n\}\n\n@Composable\nfun FullPlayerScreen'
-    new_text, n = re.subn(pattern, MARKER + '\n' + NEW_MIC_SCREEN.rstrip() + '\n\n@Composable\nfun FullPlayerScreen', text, count=1, flags=re.S)
+    pattern = r'@Composable\s*(?://[^\n]*\n)?fun MicScreen\([^)]*CoroutineScope\)\s*\{.*'
+    new_text, n = re.subn(pattern, MARKER + '\n' + NEW_MIC_SCREEN.rstrip(), text, count=1, flags=re.S)
     if n != 1: raise SystemExit('Could not patch MicScreen')
     MAIN.write_text(new_text, encoding='utf-8')
 
