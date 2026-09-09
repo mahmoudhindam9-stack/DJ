@@ -21,9 +21,7 @@ import kotlin.math.PI
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.max
-import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -187,8 +185,8 @@ class MusicStudioController(private val context: Context) {
                 }
 
                 synchronized(this@MusicStudioController) {
-                    try { previewTrack?.stop() } catch (_: Throwable) {}
-                    try { previewTrack?.release() } catch (_: Throwable) {}
+                    try { previewTrack?.stop() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
+                    try { previewTrack?.release() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
 
                     val minBuf = AudioTrack.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_OUT_STEREO, AudioFormat.ENCODING_PCM_16BIT).coerceAtLeast(pcm.size * 2)
                     previewTrack = AudioTrack.Builder()
@@ -200,7 +198,7 @@ class MusicStudioController(private val context: Context) {
                     previewTrack?.write(pcm, 0, pcm.size)
                     previewTrack?.play()
                 }
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
         }
     }
 
@@ -345,7 +343,7 @@ class MusicStudioController(private val context: Context) {
                 try {
                     track.stop()
                     track.release()
-                } catch (_: Throwable) {}
+                } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
                 withContext(Dispatchers.Main) {
                     isPlaying = false
                     playheadBeat = 0f
@@ -571,7 +569,7 @@ class MusicStudioController(private val context: Context) {
                 track.play()
                 delay(320)
                 track.release()
-            } catch (_: Throwable) {}
+            } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
         }
     }
 
@@ -622,7 +620,7 @@ class MusicStudioController(private val context: Context) {
                 tracks += t
             }
             selectedTrackId = tracks.firstOrNull()?.id ?: 0
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
     }
 
     private fun keyBaseMidi(): Int = 60 + keys.indexOf(selectedKey).coerceAtLeast(0)

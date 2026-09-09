@@ -69,6 +69,22 @@ object PlaybackNotificationRouter {
         com.example.widget.TimeWeatherWidgetProvider.requestAllUpdates(context)
     }
 
+    
+    @Synchronized
+    fun updateProgress(context: Context, source: String, positionMs: Long, durationMs: Long) {
+        if (active?.source != source) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs.edit().putLong("position", positionMs).putLong("duration", durationMs).apply()
+        com.example.widget.TimeWeatherWidgetProvider.requestAllUpdates(context)
+        MusicWidgetProvider.requestAllUpdates(context)
+        QuickPlayerWidgetProvider.requestAllUpdates(context)
+    }
+
+    fun activeProgress(context: Context): Pair<Long, Long> {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return Pair(prefs.getLong("position", 0L), prefs.getLong("duration", 0L))
+    }
+
     fun activeSnapshot(context: Context): Triple<String, String, Boolean> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         return Triple(prefs.getString(KEY_TITLE, "مشغل الموسيقى") ?: "مشغل الموسيقى", prefs.getString(KEY_ARTIST, "موسيقى") ?: "موسيقى", prefs.getBoolean(KEY_PLAYING, false))
@@ -80,6 +96,6 @@ object PlaybackNotificationRouter {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) context.applicationContext.startForegroundService(intent)
             else context.applicationContext.startService(intent)
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("PlaybackNotificationRouter", "Caught throwable", e) }
     }
 }

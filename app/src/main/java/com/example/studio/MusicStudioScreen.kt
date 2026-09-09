@@ -205,10 +205,8 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
                 playerController.exoPlayer.play()
                 statuses[station.id] = RadioStatus.LOADING
                 return
-            } catch (_: Throwable) {
-                index += 1
-                attempts[station.id] = index
-            }
+            } catch (e: Throwable) { android.util.Log.w("MusicStudioScreen", "Caught throwable", e); index += 1
+                attempts[station.id] = index }
         }
 
         statuses[station.id] = RadioStatus.FAILED

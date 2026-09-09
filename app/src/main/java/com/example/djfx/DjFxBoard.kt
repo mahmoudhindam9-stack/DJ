@@ -1,6 +1,5 @@
 package com.example.djfx
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
@@ -17,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -291,7 +289,9 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
             },
             confirmButton = {
                 Button(onClick = {
-                    controller.assignFxToPad(selectedPadBank, selectedPadIndex, showPadSelector!!.id)
+                    showPadSelector?.id?.let { fxId ->
+                        controller.assignFxToPad(selectedPadBank, selectedPadIndex, fxId)
+                    }
                     showPadSelector = null
                     onDismiss()
                 }) {

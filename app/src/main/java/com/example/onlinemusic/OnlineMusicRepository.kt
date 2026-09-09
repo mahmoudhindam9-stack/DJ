@@ -174,9 +174,9 @@ class OnlineMusicRepository {
         }
     }
 
-    private fun isAlbumatyUrl(url: String): Boolean = try { java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com" } catch (_: Exception) { false }
+    private fun isAlbumatyUrl(url: String): Boolean = try { java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com" } catch (e: Exception) { android.util.Log.w("OnlineMusicRepository", "Caught exception", e); false }
 
-    private fun path(url: String): String = try { java.net.URI(url).path.orEmpty().trim('/').lowercase() } catch (_: Exception) { "" }
+    private fun path(url: String): String = try { java.net.URI(url).path.orEmpty().trim('/').lowercase() } catch (e: Exception) { android.util.Log.w("OnlineMusicRepository", "Caught exception", e); "" }
     private fun pageType(url: String): String = path(url).split('/').firstOrNull().orEmpty()
     private fun AlbumatyLink.isSong(): Boolean = pageType(url) == "song"
     private fun AlbumatyLink.isAlbum(): Boolean = pageType(url) == "album"

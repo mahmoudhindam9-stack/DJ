@@ -2,7 +2,6 @@ package com.example.player
 
 import android.app.*
 import android.content.ComponentName
-import android.content.Context
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -15,6 +14,8 @@ import android.support.v4.media.session.PlaybackStateCompat
 import com.example.MainActivity
 import com.example.widget.MusicWidgetProvider
 import android.appwidget.AppWidgetManager
+import kotlinx.coroutines.*
+
 
 class MusicService : Service() {
     companion object {
@@ -37,6 +38,10 @@ class MusicService : Service() {
     var playerController: AudioPlayerController? = null
     private lateinit var mediaSession: MediaSessionCompat
     private var micActive = false
+
+    private val serviceJob = SupervisorJob()
+    private val serviceScope = CoroutineScope(Dispatchers.Main + serviceJob)
+    private var progressJob: Job? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -87,7 +92,7 @@ class MusicService : Service() {
     private fun startForegroundTyped(id: Int, notification: Notification, type: Int) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) ServiceCompat.startForeground(this, id, notification, type) else startForeground(id, notification)
-        } catch (_: Throwable) { try { startForeground(id, notification) } catch (_: Throwable) { } }
+        } catch (e: Throwable) { android.util.Log.w("MusicService", "Caught throwable", e); try { startForeground(id, notification) } catch (e: Throwable) { android.util.Log.w("MusicService", "Caught throwable", e) } }
     }
 
     private fun updateMicNotification() {
@@ -97,11 +102,52 @@ class MusicService : Service() {
         startForegroundTyped(MIC_NOTIFICATION_ID, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
     }
 
+    
+    private fun startProgressTick() {
+        progressJob?.cancel()
+        progressJob = serviceScope.launch {
+            while (isActive) {
+                if (playerController?.isPlaying == true) {
+                    refreshPlaybackPosition()
+                    playerController?.let {
+                        PlaybackNotificationRouter.updateProgress(
+                            applicationContext, "player", it.currentPositionMs, it.durationMs
+                        )
+                    }
+                } else {
+                    progressJob?.cancel()
+                    break
+                }
+                delay(1000)
+            }
+        }
+    }
+
+    private fun stopProgressTick() {
+        progressJob?.cancel()
+        progressJob = null
+    }
+
+    fun refreshPlaybackPosition() {
+        val playing = playerController?.isPlaying ?: false
+        mediaSession.setPlaybackState(
+            PlaybackStateCompat.Builder()
+                .setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackStateCompat.ACTION_STOP)
+                .setState(
+                    if (playing) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED,
+                    playerController?.currentPositionMs ?: 0L,
+                    if (playing) 1f else 0f
+                ).build()
+        )
+    }
+
     fun updateNotification(title: String, artist: String, isPlaying: Boolean) {
         if (micActive && !isPlaying) { updateMicNotification(); return }
         val notificationIntent = Intent(this, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        mediaSession.isActive = true
+        if (isPlaying) startProgressTick() else stopProgressTick(); mediaSession.isActive = true
         mediaSession.setMetadata(MediaMetadataCompat.Builder().putString(MediaMetadataCompat.METADATA_KEY_TITLE, title).putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist).build())
         mediaSession.setPlaybackState(PlaybackStateCompat.Builder().setActions(PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP).setState(if (isPlaying) PlaybackStateCompat.STATE_PLAYING else PlaybackStateCompat.STATE_PAUSED, playerController?.currentPositionMs ?: 0L, if (isPlaying) 1f else 0f).build())
         val playPauseAction = NotificationCompat.Action(if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play, if (isPlaying) "Pause" else "Play", PendingIntent.getService(this, 1, Intent(this, MusicService::class.java).setAction(ACTION_TOGGLE_PLAY), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
@@ -127,5 +173,6 @@ class MusicService : Service() {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) getSystemService(NotificationManager::class.java)?.createNotificationChannel(NotificationChannel(CHANNEL_ID, "Music Playback Channel", NotificationManager.IMPORTANCE_LOW))
     }
 
-    override fun onDestroy() { mediaSession.isActive = false; mediaSession.release(); super.onDestroy(); instance = null }
+    override fun onDestroy() {
+        serviceJob.cancel(); mediaSession.isActive = false; mediaSession.release(); super.onDestroy(); instance = null }
 }

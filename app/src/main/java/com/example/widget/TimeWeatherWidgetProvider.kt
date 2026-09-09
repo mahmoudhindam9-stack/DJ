@@ -90,11 +90,13 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, false)
             }
 
-            val base = id * 10
-            val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-            views.setOnClickPendingIntent(R.id.widget_btn_prev, PendingIntent.getBroadcast(context, base, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_PREV), flags))
-            views.setOnClickPendingIntent(R.id.widget_btn_play, PendingIntent.getBroadcast(context, base + 1, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_TOGGLE_PLAY), flags))
-            views.setOnClickPendingIntent(R.id.widget_btn_next, PendingIntent.getBroadcast(context, base + 2, Intent(context, WidgetActionReceiver::class.java).setAction(MusicService.ACTION_NEXT), flags))
+            
+            val progress = PlaybackNotificationRouter.activeProgress(context)
+            val positionMs = progress.first
+            val durationMs = progress.second
+            
+            WidgetPlaybackIntents.wireButtons(context, views, id, R.id.widget_btn_prev, R.id.widget_btn_play, R.id.widget_btn_next)
+
             
             // Open player on click
             val openPlayerIntent = Intent(context, MainActivity::class.java).apply {

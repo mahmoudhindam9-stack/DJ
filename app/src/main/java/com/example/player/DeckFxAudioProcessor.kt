@@ -32,7 +32,7 @@ class DeckFxAudioProcessor : AudioProcessor {
     
     fun initContext(context: android.content.Context) {
         pluginManager = DspPluginManager(context)
-        pluginChain = pluginManager!!.getAvailablePlugins()
+        pluginChain = pluginManager?.getAvailablePlugins() ?: emptyList()
     }
 
     /**

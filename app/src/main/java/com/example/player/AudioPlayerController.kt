@@ -133,11 +133,11 @@ class AudioPlayerController(private val context: Context) {
                         // end-of-track crossfade: the volume ramp already handled
                         // the transition, so snap straight to full volume instead
                         // of re-running the manual-skip fade-in below.
-                        try { exoPlayer.volume = volume } catch (_: Exception) {}
+                        try { exoPlayer.volume = volume } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
                         if (wasAutoCrossfade && resumePositionMs > 0L) {
                             // Jump the main player to where the preview left off so
                             // the track continues seamlessly instead of restarting.
-                            try { exoPlayer.seekTo(index, resumePositionMs) } catch (_: Exception) {}
+                            try { exoPlayer.seekTo(index, resumePositionMs) } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
                             currentPositionMs = resumePositionMs
                         }
                         skipNextFadeIn = true
@@ -166,7 +166,7 @@ class AudioPlayerController(private val context: Context) {
                 previous = { playPrevious() },
                 stop = { pause() }
             )
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
     }
 
     fun setQueue(songs: List<AudioItem>, startIndex: Int = 0) {
@@ -208,7 +208,7 @@ class AudioPlayerController(private val context: Context) {
 
     fun pause() {
         exoPlayer.pause()
-        try { previewPlayerInstance?.pause() } catch (_: Exception) {}
+        try { previewPlayerInstance?.pause() } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
         persistSession(force = true)
         syncNotificationSafely()
     }
@@ -300,10 +300,10 @@ class AudioPlayerController(private val context: Context) {
         activePreferredAudioDevice = device
         try {
             exoPlayer.setPreferredAudioDevice(device)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         try {
             previewPlayerInstance?.setPreferredAudioDevice(device)
-        } catch (_: Throwable) {}
+        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
     }
 
     private fun applyPreferredAudioDevice() {
@@ -387,9 +387,7 @@ class AudioPlayerController(private val context: Context) {
             applyPreferredAudioDevice()
             preview.prepare()
             preview.play()
-        } catch (_: Exception) {
-            crossfadePreviewIndex = -1
-        }
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e); crossfadePreviewIndex = -1 }
     }
 
     private fun stopCrossfadePreview() {
@@ -398,7 +396,7 @@ class AudioPlayerController(private val context: Context) {
         try {
             previewPlayerInstance?.stop()
             previewPlayerInstance?.clearMediaItems()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
     }
 
     private fun persistSession(force: Boolean = false) {
@@ -433,7 +431,7 @@ class AudioPlayerController(private val context: Context) {
                 .putString(KEY_TITLE, currentSong?.title ?: "مشغل الموسيقى")
                 .putString(KEY_ARTIST, currentSong?.artist ?: "موسيقى")
                 .apply()
-        } catch (_: Exception) {}
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
     }
 
     private fun restoreSession() {
@@ -493,22 +491,20 @@ class AudioPlayerController(private val context: Context) {
 
             applyPreferredAudioDevice()
             syncNotificationSafely()
-        } catch (_: Exception) {
-            prefs.edit().clear().apply()
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e); prefs.edit().clear().apply()
             playlist.clear()
             currentSongIndex = -1
             currentSong = null
-            currentPositionMs = 0L
-        }
+            currentPositionMs = 0L }
     }
 
     fun release() {
         persistSession(force = true)
         PlaybackNotificationRouter.clear("player")
-        try { exoPlayer.setPreferredAudioDevice(null) } catch (_: Throwable) {}
+        try { exoPlayer.setPreferredAudioDevice(null) } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         if (activeInstance === this) activeInstance = null
         exoPlayer.release()
-        try { previewPlayerInstance?.release() } catch (_: Throwable) {}
+        try { previewPlayerInstance?.release() } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         previewPlayerInstance = null
     }
 

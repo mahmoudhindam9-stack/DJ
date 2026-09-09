@@ -175,7 +175,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 .putBoolean("enabled", isEnabled)
                 .putFloat("preamp", preampDb)
                 .apply()
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     private fun loadState() {
@@ -194,7 +194,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 if (isEnabled) preampDb else 0f
             )
             syncQuickFromBands()
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     fun release() {

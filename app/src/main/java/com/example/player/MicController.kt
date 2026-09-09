@@ -11,8 +11,6 @@ import android.media.AudioFormat
 import android.media.AudioManager
 import android.media.AudioRecord
 import android.media.AudioTrack
-import android.media.MediaCodec
-import android.media.MediaFormat
 import android.media.MediaRecorder
 import android.media.audiofx.AcousticEchoCanceler
 import android.media.audiofx.NoiseSuppressor
@@ -26,8 +24,6 @@ import kotlin.math.PI
 import kotlin.math.sin
 import java.io.File
 import java.io.RandomAccessFile
-import java.io.FileInputStream
-import java.io.FileOutputStream
 
 
 /**
@@ -335,8 +331,8 @@ class MicController(private val context: Context) {
 
     fun toggleVoiceProcessing(enabled: Boolean) {
         voiceProcessingEnabled = enabled
-        try { echoCanceler?.enabled = enabled } catch (_: Throwable) { }
-        try { noiseSuppressor?.enabled = enabled } catch (_: Throwable) { }
+        try { echoCanceler?.enabled = enabled } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
+        try { noiseSuppressor?.enabled = enabled } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
         recordingStatus = if (enabled) "AEC + noise suppression enabled" else "Voice cleanup disabled"
     }
 
@@ -347,7 +343,7 @@ class MicController(private val context: Context) {
         } catch (t: Throwable) { routingStatus = "Microphone service start failed: ${t.message ?: "Unknown error"}" }
     }
 
-    private fun stopMicForegroundService() { try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (_: Throwable) { } }
+    private fun stopMicForegroundService() { try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) } }
 
     private fun writeWavHeader(file: RandomAccessFile, dataLength: Long) {
         val byteRate = sampleRate * 2; val totalLength = 36L + dataLength
@@ -501,21 +497,21 @@ class MicController(private val context: Context) {
             echoCanceler?.enabled = false
             echoCanceler?.release()
             echoCanceler = null
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
         try {
             noiseSuppressor?.enabled = false
             noiseSuppressor?.release()
             noiseSuppressor = null
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
         try {
             audioRecord?.stop()
             audioRecord?.release()
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
         audioRecord = null
         try {
             audioTrack?.stop()
             audioTrack?.release()
-        } catch (_: Throwable) { }
+        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
         audioTrack = null
 
         // We do not own a global communication-device selection anymore; only reset the

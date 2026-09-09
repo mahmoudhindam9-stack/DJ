@@ -1,7 +1,6 @@
 package com.example.player
 
 import android.content.Context
-import android.media.AudioDeviceInfo
 import androidx.compose.runtime.*
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -9,7 +8,6 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.exoplayer.audio.DefaultAudioSink
-import androidx.media3.common.util.UnstableApi
 import com.example.model.AudioItem
 import kotlinx.coroutines.*
 
