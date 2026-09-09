@@ -13,6 +13,20 @@ import com.example.player.PlaybackNotificationRouter
 
 class TimeWeatherWidgetProvider : AppWidgetProvider() {
     companion object {
+        private fun mapConditionToDrawable(condition: String): Int {
+            return when {
+                condition.contains("☀️") || condition.contains("Sunny") || condition.contains("Clear") -> R.drawable.ic_weather_sunny
+                condition.contains("⛅") || condition.contains("Partly") -> R.drawable.ic_weather_partly_cloudy
+                condition.contains("☁") || condition.contains("Cloudy") -> R.drawable.ic_weather_cloudy
+                condition.contains("🌧") || condition.contains("Rain") -> R.drawable.ic_weather_rain
+                condition.contains("⛈") || condition.contains("Thunder") -> R.drawable.ic_weather_thunderstorm
+                condition.contains("❄") || condition.contains("Snow") -> R.drawable.ic_weather_snow
+                condition.contains("🌫") || condition.contains("Fog") -> R.drawable.ic_weather_fog
+                condition.contains("🌙") || condition.contains("Night") -> R.drawable.ic_weather_clear_night
+                else -> R.drawable.ic_weather_unknown
+            }
+        }
+        
         const val ACTION_REFRESH = "com.example.widget.ACTION_REFRESH_WEATHER"
         private const val PREFS = "time_weather_widget"
         private const val CITY = "city"
@@ -50,15 +64,16 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.weather_city, prefs.getString(CITY, "Current location") ?: "Current location")
             views.setTextViewText(R.id.weather_temp, prefs.getString(TEMP, "--°C") ?: "--°C")
             val condString = prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh"
-            // Split emoji from text if present
+            val emojiOrCondition: String
             val spaceIndex = condString.indexOf(' ')
             if (spaceIndex > 0 && condString.length > 2 && condString.codePointAt(0) > 0x2000) {
-                views.setTextViewText(R.id.weather_icon, condString.substring(0, spaceIndex))
+                emojiOrCondition = condString.substring(0, spaceIndex)
                 views.setTextViewText(R.id.weather_condition, condString.substring(spaceIndex + 1))
             } else {
-                views.setTextViewText(R.id.weather_icon, "🌍")
+                emojiOrCondition = condString
                 views.setTextViewText(R.id.weather_condition, condString)
             }
+            views.setImageViewResource(R.id.weather_icon, mapConditionToDrawable(emojiOrCondition))
                         views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
             
             val warningTxt = prefs.getString(WARNING, "") ?: ""
@@ -83,17 +98,13 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_artist, snapshot.second)
             views.setImageViewResource(R.id.widget_btn_play, if (snapshot.third) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
             
-            // Setup Chronometer
-            if (snapshot.third) { // If playing
-                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, true)
-            } else {
-                views.setChronometer(R.id.widget_timer, android.os.SystemClock.elapsedRealtime(), null, false)
-            }
-
-            
             val progress = PlaybackNotificationRouter.activeProgress(context)
             val positionMs = progress.first
             val durationMs = progress.second
+            views.setTextViewText(R.id.widget_time_current, com.example.utils.MusicScanner.formatMs(positionMs))
+            views.setTextViewText(R.id.widget_time_total, com.example.utils.MusicScanner.formatMs(durationMs))
+            val pct = if (durationMs > 0) ((positionMs * 1000) / durationMs).toInt().coerceIn(0, 1000) else 0
+            views.setProgressBar(R.id.widget_progress, 1000, pct, false)
             
             WidgetPlaybackIntents.wireButtons(context, views, id, R.id.widget_btn_prev, R.id.widget_btn_play, R.id.widget_btn_next)
 
