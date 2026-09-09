@@ -45,7 +45,17 @@ class DjFxController(private val context: Context) {
             }
             // Always ensure newly added factory sounds are injected
             repository.injectMissingFactorySounds()
-            
+
+            // One-time: pre-fill each bank's pad grid with the factory sounds
+            // that belong to it, so the pads aren't empty on first use even
+            // though the sounds already exist in the library. Guarded by its
+            // own flag (separate from the purge above) so it only ever runs
+            // once and never re-fills a pad the user has cleared since.
+            if (!prefs.getBoolean("default_pads_seeded", false)) {
+                repository.seedDefaultPads(bankLabels)
+                prefs.edit().putBoolean("default_pads_seeded", true).apply()
+            }
+
             allFx = repository.getAllFx()
             padAssignments = repository.getPadAssignments()
         }

@@ -108,10 +108,18 @@ fun DJFxRack(deck: DJDeckController) {
     var amount by remember { mutableStateOf(deck.fxAmount) }
     var showLibraryDialog by remember { mutableStateOf(false) }
     var allPlugins by remember { mutableStateOf(loadCustomEffects(context)) }
-    var activePlugins by remember { mutableStateOf(allPlugins.take(4).map { it.id }) }
+    // Default the rack to the real per-sample DSP engines (they're all wired up
+    // and actually process audio) rather than the first 4 items in the combined
+    // list, which used to be the voice pitch-shift novelties.
+    var activePlugins by remember {
+        mutableStateOf(allPlugins.filter { it.id in BUILT_IN_ENGINE_LABELS.keys }.map { it.id })
+    }
 
     fun refreshLibrary() {
         allPlugins = loadCustomEffects(context)
+        // A custom effect was just created or deleted: rebuild the deck's real
+        // audio-processing chain too, or the change never reaches the audio.
+        deck.fxProcessor.refreshPlugins()
     }
 
     if (showLibraryDialog) {

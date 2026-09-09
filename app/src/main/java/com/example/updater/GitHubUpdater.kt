@@ -65,8 +65,16 @@ object GitHubUpdater {
                     
                     // Only prompt/download if latest is strictly greater than current
                     val isNewer = latestVersion.isNotEmpty() && isVersionGreater(latestVersion, currVer)
-                    
-                    if (isNewer) {
+
+                    // Track which release we've already downloaded/prompted for so a
+                    // silent background check (showToast = false, e.g. on every app
+                    // launch) doesn't re-trigger the same download over and over when
+                    // nothing new has actually been published since last time.
+                    val updaterPrefs = context.getSharedPreferences("updater_prefs", Context.MODE_PRIVATE)
+                    val alreadyHandledVersion = updaterPrefs.getString("last_downloaded_version", null)
+                    val alreadyHandledThisRelease = alreadyHandledVersion == latestVersion
+
+                    if (isNewer && !(alreadyHandledThisRelease && !showToast)) {
                         val assets = json.optJSONArray("assets")
                         if (assets != null && assets.length() > 0) {
                             var apkUrl = ""
@@ -85,7 +93,7 @@ object GitHubUpdater {
                                 }
                             }
                         }
-                    } else {
+                    } else if (!isNewer) {
                         if (showToast) {
                             withContext(Dispatchers.Main) {
                                 Toast.makeText(context, "التطبيق محدث لأخر إصدار ($currVer)", Toast.LENGTH_SHORT).show()

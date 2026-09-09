@@ -80,4 +80,23 @@ class DjFxRepository(private val context: Context) {
         dao.deletePadsByFxIds(factoryIds)
         dao.deleteFxByIds(factoryIds)
     }
+
+    /**
+     * Fills each bank's pad grid with the factory sounds that belong to it
+     * (matched by category), so the pads show ready-to-play sounds instead of
+     * an empty grid even though the sounds already exist in the library.
+     * Only touches a bank that has zero pads assigned, so it never overwrites
+     * a pad the user has since customized or cleared themselves.
+     */
+    suspend fun seedDefaultPads(bankCategories: Map<String, String>) = withContext(Dispatchers.IO) {
+        val existingPadBanks = dao.getAllPads().map { it.padKey.substringBefore('_') }.toSet()
+        val fxByCategory = dao.getAllFx().map { it.toItem() }.groupBy { it.category }
+        bankCategories.forEach { (bank, category) ->
+            if (bank in existingPadBanks) return@forEach
+            val sounds = fxByCategory[category].orEmpty()
+            sounds.take(16).forEachIndexed { index, fx ->
+                dao.insertPad(DjFxPadEntity("${bank}_$index", fx.id))
+            }
+        }
+    }
 }

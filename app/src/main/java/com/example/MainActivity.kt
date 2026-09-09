@@ -120,6 +120,17 @@ fun MainApp() {
 
     // Master Library and Playlists State & Room DB Repository
     val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }
+
+    // Persist the library the moment it changes (song imported, removed, etc.)
+    // so it survives closing and reopening the app instead of only ever living
+    // in memory. Without this, every import was lost as soon as the process died.
+    LaunchedEffect(audioLibrary) {
+        snapshotFlow { audioLibrary.toList() }
+            .collect { snapshot ->
+                PlayerLibraryStore.save(context, snapshot)
+            }
+    }
+
     val playlists = remember { mutableStateListOf<Playlist>() }
     var selectedPlaylistId by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
@@ -752,6 +763,15 @@ fun DJMixerScreen(
         contract = ActivityResultContracts.OpenMultipleDocuments()
     ) { uris ->
         uris.forEach { uri ->
+            // Without this, the read grant for this file only lasts for the
+            // current process — the song would vanish (fail to load) the next
+            // time the app is opened even though it's still listed.
+            runCatching {
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+            }
             val audio = MusicScanner.parsePickedUri(context, uri)
             if (audioLibrary.none { it.uri == uri }) {
                 audioLibrary.add(audio)

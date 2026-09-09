@@ -35,6 +35,17 @@ class DeckFxAudioProcessor : AudioProcessor {
         pluginChain = pluginManager!!.getAvailablePlugins()
     }
 
+    /**
+     * Rebuilds the plugin chain from the library. Must be called whenever the
+     * user creates, imports, or deletes a custom effect from the Effects
+     * Library — otherwise `pluginChain` stays frozen at whatever existed when
+     * the deck first started, so brand-new effects show as "active" in the UI
+     * but never actually touch the audio.
+     */
+    fun refreshPlugins() {
+        pluginManager?.let { pluginChain = it.getAvailablePlugins() }
+    }
+
     fun setEqLevels(levels: FloatArray, enabled: Boolean) {
         if (levels.size == 10) {
             System.arraycopy(levels, 0, eqLevels, 0, 10)

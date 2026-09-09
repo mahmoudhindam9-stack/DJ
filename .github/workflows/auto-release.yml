@@ -30,10 +30,18 @@ jobs:
         run: |
           if [ -f gradlew ]; then chmod +x gradlew; fi
 
-      - name: Generate Version Name
+      - name: Read Version Name
         id: version
         run: |
-          VERSION="v1.$(date +'%Y%m%d%H%M%S')"
+          # Use the app's own versionName (from app/build.gradle.kts) as the
+          # release tag instead of a raw timestamp. A timestamp is always
+          # numerically "greater" than the installed app's static version,
+          # so the in-app update checker would think a new release is always
+          # available and keep re-downloading the same build forever.
+          # Bump versionName in app/build.gradle.kts before pushing a release
+          # you actually want users to be prompted to install.
+          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          VERSION="v$VERSION_NAME"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
 

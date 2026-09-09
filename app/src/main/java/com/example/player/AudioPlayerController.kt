@@ -111,6 +111,19 @@ class AudioPlayerController(private val context: Context) {
                     currentSongIndex = index
                     currentSong = playlist[index]
                     currentPositionMs = 0L
+
+                    // If this transition is the tail end of an automatic crossfade,
+                    // the hidden preview player has already been playing this same
+                    // track (from position 0) for roughly `crossfadeDurationMs`.
+                    // Capture how far it got *before* we tear it down, so the main
+                    // player can pick up from there instead of restarting the song
+                    // from 0 and undoing the crossfade the user just heard.
+                    val wasAutoCrossfade = reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
+                        crossfadePreviewIndex == index
+                    val resumePositionMs = if (wasAutoCrossfade) {
+                        (previewPlayerInstance?.currentPosition ?: 0L).coerceAtLeast(0L)
+                    } else 0L
+
                     // The hidden preview player's job ends the moment the main player
                     // itself arrives at that same track (whether it got there via our
                     // auto crossfade or a manual skip/seek).
@@ -121,6 +134,12 @@ class AudioPlayerController(private val context: Context) {
                         // the transition, so snap straight to full volume instead
                         // of re-running the manual-skip fade-in below.
                         try { exoPlayer.volume = volume } catch (_: Exception) {}
+                        if (wasAutoCrossfade && resumePositionMs > 0L) {
+                            // Jump the main player to where the preview left off so
+                            // the track continues seamlessly instead of restarting.
+                            try { exoPlayer.seekTo(index, resumePositionMs) } catch (_: Exception) {}
+                            currentPositionMs = resumePositionMs
+                        }
                         skipNextFadeIn = true
                     }
                     persistSession(force = true)
