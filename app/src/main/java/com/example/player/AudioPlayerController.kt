@@ -189,18 +189,34 @@ class AudioPlayerController(private val context: Context) {
 
     fun play(song: AudioItem, newQueue: List<AudioItem>? = null) {
         pauseOthers()
-        val idx = playlist.indexOfFirst { it.uri == song.uri }
-        if (idx >= 0) {
-            currentSongIndex = idx
-            currentSong = playlist[idx]
-            exoPlayer.seekTo(idx, 0L)
-            currentPositionMs = 0L
+        
+        val isDifferentQueue = newQueue != null && (
+            newQueue.size != playlist.size ||
+            newQueue.withIndex().any { (i, item) -> item.uri != playlist[i].uri }
+        )
+
+        if (isDifferentQueue) {
+            val q = newQueue!!
+            val startIndex = q.indexOfFirst { it.uri == song.uri }.takeIf { it >= 0 } ?: 0
+            setQueue(q, startIndex)
             applyPreferredAudioDevice()
             exoPlayer.play()
         } else {
-            setQueue(newQueue ?: listOf(song), newQueue?.indexOfFirst { it.uri == song.uri }?.takeIf { it >= 0 } ?: 0)
-            applyPreferredAudioDevice()
-            exoPlayer.play()
+            val idx = playlist.indexOfFirst { it.uri == song.uri }
+            if (idx >= 0) {
+                currentSongIndex = idx
+                currentSong = playlist[idx]
+                exoPlayer.seekTo(idx, 0L)
+                currentPositionMs = 0L
+                applyPreferredAudioDevice()
+                exoPlayer.play()
+            } else {
+                val q = newQueue ?: listOf(song)
+                val startIndex = q.indexOfFirst { it.uri == song.uri }.takeIf { it >= 0 } ?: 0
+                setQueue(q, startIndex)
+                applyPreferredAudioDevice()
+                exoPlayer.play()
+            }
         }
         persistSession(force = true)
         syncNotificationSafely()
