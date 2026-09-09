@@ -57,6 +57,12 @@ jobs:
             exit 1
           fi
 
+      - name: Delete existing release
+        run: |
+          gh release delete ${{ steps.version.outputs.version }} --cleanup-tag -y || true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:

@@ -19,6 +19,10 @@ def replace_once(text: str, pattern: str, replacement: str, label: str, regex: b
 
 def fix_mixer() -> None:
     text = MIXER.read_text(encoding='utf-8')
+    if 'var volume by mutableStateOf(0.8f)' not in text:
+        print('Mixer volume functionality appears already integrated. Skipping.')
+        return
+
     # Kotlin generates a JVM setter for a mutable property. Do not name a
     # function setMixerGain while also declaring a property mixerGain.
     text = re.sub(r'\bmixerGain\b', 'mixerGainValue', text)

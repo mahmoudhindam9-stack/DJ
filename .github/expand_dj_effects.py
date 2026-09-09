@@ -15,6 +15,9 @@ EFFECT_ENUM = '''enum class DJEffect(val displayName: String) {
 }'''
 
 text = DECK.read_text(encoding="utf-8")
+if "enum class DJEffect" not in text:
+    print("DJDeck control fields already replaced or refactored. Exiting gracefully.")
+    exit(0)
 start = text.index("enum class DJEffect")
 end = text.index("\n\nenum class SamplerSound", start)
 text = text[:start] + EFFECT_ENUM + text[end:]

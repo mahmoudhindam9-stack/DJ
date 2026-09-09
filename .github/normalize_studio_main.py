@@ -12,21 +12,7 @@ def replace_once(text, old, new, label):
     return text.replace(old, new, 1)
 
 
-def normalize_screen(text):
-    if 'import androidx.compose.foundation.verticalScroll' not in text:
-        text = replace_once(
-            text,
-            'import androidx.compose.foundation.rememberScrollState\n',
-            'import androidx.compose.foundation.rememberScrollState\nimport androidx.compose.foundation.verticalScroll\n',
-            'studio verticalScroll import'
-        )
-    return text
-
-
 def main():
-    screen = SCREEN.read_text(encoding='utf-8')
-    SCREEN.write_text(normalize_screen(screen), encoding='utf-8')
-
     text = MAIN.read_text(encoding='utf-8')
     if MARKER in text:
         print('Studio navigation already normalized')

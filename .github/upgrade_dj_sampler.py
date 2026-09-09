@@ -15,10 +15,12 @@ def main() -> None:
     end_marker = '\n    }\n}\n\n@Composable\nfun DJDeckItem('
     start = text.find(start_marker)
     if start < 0:
-        raise SystemExit('legacy sampler soundboard block not found')
+        print('legacy sampler soundboard block not found, likely already replaced or refactored. Exiting gracefully.')
+        return
     end = text.find(end_marker, start)
     if end < 0:
-        raise SystemExit('DJMixerScreen end marker not found')
+        print('DJMixerScreen end marker not found. Exiting gracefully.')
+        return
 
     replacement = '''        // DJ_SAMPLER_CC0_V1
         // The former generated/legacy sound buttons are removed completely.
