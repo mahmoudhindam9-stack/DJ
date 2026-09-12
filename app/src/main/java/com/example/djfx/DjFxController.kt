@@ -4,12 +4,14 @@ import android.content.Context
 import androidx.compose.runtime.*
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class DjFxController(private val context: Context) {
     private val repository = DjFxRepository(context)
     val audioEngine = DjFxAudioEngine(context)
-    private val scope = CoroutineScope(Dispatchers.Main)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
     var allFx by mutableStateOf<List<DjFxItem>>(emptyList())
         private set
@@ -134,6 +136,7 @@ class DjFxController(private val context: Context) {
     }
 
     fun release() {
+        scope.cancel()
         audioEngine.release()
     }
 }

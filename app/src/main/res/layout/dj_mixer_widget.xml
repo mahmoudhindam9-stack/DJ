@@ -1,9 +1,121 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:padding="10dp" android:background="@drawable/widget_bg">
-    <TextView android:layout_width="match_parent" android:layout_height="wrap_content" android:text="PRO DJ MIXER" android:textColor="@android:color/white" android:textStyle="bold" android:textSize="12sp" />
-    <TextView android:id="@+id/deck_a_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Deck A — Empty" android:textColor="@android:color/white" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" android:layout_marginTop="6dp" />
-    <TextView android:id="@+id/deck_a_artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Load a track" android:textColor="#AAAAAA" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/deck_b_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Deck B — Empty" android:textColor="@android:color/white" android:textSize="12sp" android:maxLines="1" android:ellipsize="end" android:layout_marginTop="6dp" />
-    <TextView android:id="@+id/deck_b_artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="Load a track" android:textColor="#AAAAAA" android:textSize="10sp" android:maxLines="1" android:ellipsize="end" />
-    <Button android:id="@+id/dj_widget_open" android:layout_width="match_parent" android:layout_height="36dp" android:text="Open DJ Mixer" android:textSize="11sp" android:layout_marginTop="6dp" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@drawable/widget_dj_bg">
+
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="DJ MIXER"
+        android:textColor="#2962FF"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:letterSpacing="0.1"
+        android:layout_marginBottom="12dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:baselineAligned="false">
+
+        <!-- DECK A -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_panel_bg"
+            android:padding="12dp"
+            android:orientation="vertical">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DECK A"
+                android:textColor="#00B0FF"
+                android:textStyle="bold"
+                android:textSize="10sp"
+                android:layout_marginBottom="4dp" />
+                
+            <TextView
+                android:id="@+id/deck_a_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Empty"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+                
+            <TextView
+                android:id="@+id/deck_a_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Load a track"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+
+        <FrameLayout
+            android:layout_width="12dp"
+            android:layout_height="wrap_content" />
+
+        <!-- DECK B -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:background="@drawable/widget_panel_bg"
+            android:padding="12dp"
+            android:orientation="vertical">
+            
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="DECK B"
+                android:textColor="#E040FB"
+                android:textStyle="bold"
+                android:textSize="10sp"
+                android:layout_marginBottom="4dp" />
+                
+            <TextView
+                android:id="@+id/deck_b_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Empty"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:maxLines="1"
+                android:ellipsize="end" />
+                
+            <TextView
+                android:id="@+id/deck_b_artist"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Load a track"
+                android:textColor="#AAAAAA"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <Button
+        android:id="@+id/dj_widget_open"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:backgroundTint="#2962FF"
+        android:textColor="#FFFFFF"
+        android:textStyle="bold"
+        android:text="OPEN MIXER"
+        android:textSize="12sp" />
+
 </LinearLayout>

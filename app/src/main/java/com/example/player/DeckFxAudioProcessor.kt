@@ -8,6 +8,7 @@ import kotlin.math.*
 import com.example.fx.DspPluginManager
 import com.example.fx.AudioPlugin
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class DeckFxAudioProcessor : AudioProcessor {
     private var sampleRate = 44_100
     private var channelCount = 2
@@ -16,19 +17,19 @@ class DeckFxAudioProcessor : AudioProcessor {
     private var outputBuffer = AudioProcessor.EMPTY_BUFFER
     private var inputEnded = false
 
-    var amount: Float = 0.5f
-    var beatDivision: Float = 0.25f
+    @Volatile var amount: Float = 0.5f
+    @Volatile var beatDivision: Float = 0.25f
 
-    // We store plugin IDs here directly
-    val activeEffects = mutableSetOf<String>()
+    // We store plugin IDs here directly, using an immutable set swapped atomically
+    @Volatile var activeEffects: Set<String> = emptySet()
 
     private var pluginManager: DspPluginManager? = null
-    private var pluginChain = emptyList<AudioPlugin>()
+    @Volatile private var pluginChain = emptyList<AudioPlugin>()
 
     // EQ stuff
-    private val eqLevels = FloatArray(10)
-    var eqEnabled = false
+    private var eqEnabled = false
     private val activeEqFilters = Array(2) { Array(10) { BiquadFilter() } }
+    private var appliedEqVersion = -1L
     
     fun initContext(context: android.content.Context) {
         pluginManager = DspPluginManager(context)
@@ -46,16 +47,17 @@ class DeckFxAudioProcessor : AudioProcessor {
         pluginManager?.let { pluginChain = it.getAvailablePlugins() }
     }
 
-    fun setEqLevels(levels: FloatArray, enabled: Boolean) {
-        if (levels.size == 10) {
-            System.arraycopy(levels, 0, eqLevels, 0, 10)
-            for (ch in 0 until 2) {
-                for (i in 0 until 10) {
-                    activeEqFilters[ch][i].setPeakingEQ(EQ_FREQUENCIES[i], eqLevels[i], 1.2f, sampleRate.toFloat())
-                }
+    private fun syncGlobalState() {
+        val version = GlobalEqualizerState.version
+        if (version == appliedEqVersion) return
+        val levels = GlobalEqualizerState.levelsDb
+        eqEnabled = GlobalEqualizerState.enabled
+        for (ch in 0 until channelCount) {
+            for (i in 0 until 10) {
+                activeEqFilters[ch][i].setPeakingEQ(EQ_FREQUENCIES[i], levels.getOrElse(i) { 0f }, 1.2f, sampleRate.toFloat())
             }
         }
-        eqEnabled = enabled
+        appliedEqVersion = version
     }
 
     private fun replaceOutputBuffer(size: Int): ByteBuffer {
@@ -84,9 +86,9 @@ class DeckFxAudioProcessor : AudioProcessor {
         sampleRate = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
         
+        appliedEqVersion = -1L
         for (ch in 0 until 2) {
             for (i in 0 until 10) {
-                activeEqFilters[ch][i].setPeakingEQ(EQ_FREQUENCIES[i], eqLevels[i], 1.2f, sampleRate.toFloat())
                 activeEqFilters[ch][i].resetState()
             }
         }
@@ -102,6 +104,8 @@ class DeckFxAudioProcessor : AudioProcessor {
         }
         val bytes = inputBuffer.remaining()
         if (bytes <= 0) return
+
+        syncGlobalState()
 
         // EQUALIZER_FUNCTIONALITY_V1
         // EQ is itself an audio effect. Never bypass the PCM processing path
@@ -134,6 +138,7 @@ class DeckFxAudioProcessor : AudioProcessor {
                     if (targetEnabled && fxAmount > 0.01f) {
                         plugin.enabled = true
                         plugin.amount = fxAmount
+                        plugin.sampleRate = sampleRate
                         sample = plugin.process(sample, ch)
                     } else {
                         if (plugin.enabled) {
@@ -170,9 +175,9 @@ class DeckFxAudioProcessor : AudioProcessor {
         inputFormat = AudioProcessor.AudioFormat.NOT_SET
         sampleRate = 44_100
         channelCount = 2
-        activeEffects.clear()
-        eqLevels.fill(0f)
+        activeEffects = emptySet()
         eqEnabled = false
+        appliedEqVersion = -1L
     }
 
     companion object {

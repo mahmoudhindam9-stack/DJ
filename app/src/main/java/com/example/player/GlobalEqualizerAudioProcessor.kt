@@ -12,6 +12,7 @@ import kotlin.math.tanh
  * App-wide 10-band PCM EQ for every Media3/ExoPlayer audio path outside the
  * DJ decks. It follows the same band frequencies and safe gain range as the DJ EQ.
  */
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class GlobalEqualizerAudioProcessor : AudioProcessor {
     companion object {
         private val FREQUENCIES = floatArrayOf(

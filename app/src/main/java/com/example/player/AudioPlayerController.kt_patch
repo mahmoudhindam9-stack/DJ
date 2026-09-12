@@ -1,0 +1,88 @@
+--- app/src/main/java/com/example/player/AudioPlayerController.kt
++++ app/src/main/java/com/example/player/AudioPlayerController.kt
+@@ -241,18 +241,16 @@
+ 
+     fun playNext() {
+         if (playlist.isEmpty()) return
+-        if (isShuffle) {
+-            currentSongIndex = playlist.indices.random()
++        if (exoPlayer.hasNextMediaItem()) {
++            exoPlayer.seekToNext()
+         } else {
+-            currentSongIndex = if (currentSongIndex < playlist.size - 1) currentSongIndex + 1 else 0
++            exoPlayer.seekToDefaultPosition(0)
+         }
+         
+-        currentSong = playlist.getOrNull(currentSongIndex)
+-        currentSong?.let {
+-            pauseOthers()
+-            exoPlayer.seekTo(currentSongIndex, 0L)
+-            currentPositionMs = 0L
+-            applyPreferredAudioDevice()
+-            exoPlayer.play()
+-            persistSession(force = true)
+-            syncNotificationSafely()
+-        }
++        pauseOthers()
++        currentPositionMs = 0L
++        applyPreferredAudioDevice()
++        exoPlayer.play()
++        persistSession(force = true)
++        syncNotificationSafely()
+     }
+ 
+     fun playPrevious() {
+@@ -262,15 +260,16 @@
+             return
+         }
+-        currentSongIndex = if (currentSongIndex > 0) currentSongIndex - 1 else 0
+-        currentSong = playlist.getOrNull(currentSongIndex)
+-        currentSong?.let {
+-            pauseOthers()
+-            exoPlayer.seekTo(currentSongIndex, 0L)
+-            currentPositionMs = 0L
+-            applyPreferredAudioDevice()
+-            exoPlayer.play()
+-            persistSession(force = true)
+-            syncNotificationSafely()
++        if (exoPlayer.hasPreviousMediaItem()) {
++            exoPlayer.seekToPrevious()
++        } else {
++            exoPlayer.seekToDefaultPosition(0)
+         }
++        
++        pauseOthers()
++        currentPositionMs = 0L
++        applyPreferredAudioDevice()
++        exoPlayer.play()
++        persistSession(force = true)
++        syncNotificationSafely()
+     }
+@@ -327,20 +326,9 @@
+ 
+     private fun handleTrackEnded() {
+-        when (repeatOption) {
+-            RepeatOption.ONE -> {
+-                exoPlayer.seekTo(0)
+-                currentPositionMs = 0L
+-                applyPreferredAudioDevice()
+-                exoPlayer.play()
+-                persistSession(force = true)
+-                syncNotificationSafely()
+-            }
+-            RepeatOption.ALL -> playNext()
+-            RepeatOption.OFF -> if (currentSongIndex < playlist.size - 1) {
+-                playNext()
+-            } else {
+-                isPlaying = false
+-                persistSession(force = true)
+-                syncNotificationSafely()
+-            }
+-        }
++        // ExoPlayer automatically handles RepeatOption.ONE and RepeatOption.ALL natively.
++        // If we receive STATE_ENDED, it means we reached the true end of the playlist
++        // and RepeatOption is OFF.
++        isPlaying = false
++        persistSession(force = true)
++        syncNotificationSafely()
+     }

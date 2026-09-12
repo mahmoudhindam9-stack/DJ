@@ -510,6 +510,11 @@ class MicController(private val context: Context) {
         routingStatus = "تم إيقاف الميكروفون"
     }
 
+    fun close() {
+        stopMic()
+        recordingTickerJob?.cancel()
+    }
+
     private fun AudioDeviceInfo.isBluetoothSco(): Boolean = type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
 
     companion object {

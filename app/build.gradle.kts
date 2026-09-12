@@ -22,8 +22,8 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 6
-    versionName = "1.5"
+    versionCode = 7
+    versionName = "1.6"
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -36,14 +36,6 @@ android {
         storePassword = System.getenv("STORE_PASSWORD")
         keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD")
-      } else {
-        val debugKsFile = file("${rootDir}/debug.keystore")
-        if (debugKsFile.exists()) {
-          storeFile = debugKsFile
-          storePassword = "android"
-          keyAlias = "androiddebugkey"
-          keyPassword = "android"
-        }
       }
     }
   }
@@ -54,11 +46,7 @@ android {
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       val relConfig = signingConfigs.getByName("release")
-      if (relConfig.storeFile != null) {
-        signingConfig = relConfig
-      } else {
-        signingConfig = signingConfigs.getByName("debug")
-      }
+      signingConfig = relConfig
     }
     debug {
       signingConfig = signingConfigs.getByName("debug")

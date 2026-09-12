@@ -1,11 +1,95 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:orientation="vertical" android:gravity="center_vertical" android:padding="12dp" android:background="@drawable/widget_bg">
-    <TextView android:id="@+id/quick_title" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="مشغل الموسيقى" android:textColor="@android:color/white" android:textSize="15sp" android:textStyle="bold" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/quick_artist" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="موسيقى" android:textColor="#BBBBBB" android:textSize="11sp" android:maxLines="1" android:ellipsize="end" />
-    <TextView android:id="@+id/quick_status" android:layout_width="match_parent" android:layout_height="wrap_content" android:text="⏸ Paused" android:textColor="#BBBBBB" android:textSize="10sp" />
-    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal" android:layout_marginTop="6dp">
-        <ImageButton android:id="@+id/quick_prev" android:layout_width="42dp" android:layout_height="42dp" android:background="@android:color/transparent" android:src="@android:drawable/ic_media_previous" android:contentDescription="Previous" />
-        <ImageButton android:id="@+id/quick_play" android:layout_width="50dp" android:layout_height="50dp" android:layout_marginHorizontal="12dp" android:background="@android:color/transparent" android:src="@android:drawable/ic_media_play" android:contentDescription="Play/Pause" />
-        <ImageButton android:id="@+id/quick_next" android:layout_width="42dp" android:layout_height="42dp" android:background="@android:color/transparent" android:src="@android:drawable/ic_media_next" android:contentDescription="Next" />
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:padding="16dp"
+    android:background="@drawable/widget_dj_bg">
+
+    <!-- Info Section -->
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NOW PLAYING"
+            android:textColor="#2962FF"
+            android:textSize="10sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.1"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:id="@+id/quick_title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="No Track Loaded"
+            android:textColor="#FFFFFF"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end" />
+            
+        <TextView
+            android:id="@+id/quick_artist"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="DJ Engine"
+            android:textColor="#AAAAAA"
+            android:textSize="14sp"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:layout_marginTop="2dp" />
+
+        <TextView
+            android:id="@+id/quick_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Controls -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:layout_marginStart="16dp"
+        android:background="@drawable/widget_panel_bg"
+        android:paddingHorizontal="8dp"
+        android:paddingVertical="4dp">
+
+        <ImageButton
+            android:id="@+id/quick_prev"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_previous"
+            android:tint="#FFFFFF"
+            android:contentDescription="Previous" />
+
+        <ImageButton
+            android:id="@+id/quick_play"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@drawable/widget_play_btn_bg"
+            android:src="@android:drawable/ic_media_play"
+            android:tint="#FFFFFF"
+            android:contentDescription="Play/Pause" />
+
+        <ImageButton
+            android:id="@+id/quick_next"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:src="@android:drawable/ic_media_next"
+            android:tint="#FFFFFF"
+            android:contentDescription="Next" />
     </LinearLayout>
 </LinearLayout>

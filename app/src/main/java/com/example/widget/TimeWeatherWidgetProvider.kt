@@ -15,6 +15,7 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
     companion object {
         private fun mapConditionToDrawable(condition: String): Int {
             return when {
+                condition.contains("🌙") || condition.contains("Night") -> R.drawable.ic_weather_clear_night
                 condition.contains("☀️") || condition.contains("Sunny") || condition.contains("Clear") -> R.drawable.ic_weather_sunny
                 condition.contains("⛅") || condition.contains("Partly") -> R.drawable.ic_weather_partly_cloudy
                 condition.contains("☁") || condition.contains("Cloudy") -> R.drawable.ic_weather_cloudy
@@ -22,7 +23,6 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 condition.contains("⛈") || condition.contains("Thunder") -> R.drawable.ic_weather_thunderstorm
                 condition.contains("❄") || condition.contains("Snow") -> R.drawable.ic_weather_snow
                 condition.contains("🌫") || condition.contains("Fog") -> R.drawable.ic_weather_fog
-                condition.contains("🌙") || condition.contains("Night") -> R.drawable.ic_weather_clear_night
                 else -> R.drawable.ic_weather_unknown
             }
         }
@@ -36,15 +36,19 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
         private const val STATUS = "status"
         private const val WARNING = "warning"
 
+        private const val LAT = "lat"
+        private const val LON = "lon"
+
         fun setStatus(context: Context, status: String) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(STATUS, status).apply()
             updateAll(context)
         }
 
-        fun updateWeather(context: Context, city: String, temperature: String, condition: String, timezone: String, warning: String = "") {
+        fun updateWeather(context: Context, city: String, temperature: String, condition: String, timezone: String, warning: String = "", lat: Double = 0.0, lon: Double = 0.0) {
             context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(CITY, city).putString(TEMP, temperature).putString(CONDITION, condition)
-                .putString(TIMEZONE, timezone).putString(STATUS, "Updated now").putString(WARNING, warning).apply()
+                .putString(TIMEZONE, timezone).putString(STATUS, "Updated now").putString(WARNING, warning)
+                .putFloat(LAT, lat.toFloat()).putFloat(LON, lon.toFloat()).apply()
             updateAll(context)
         }
 
@@ -90,7 +94,17 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
             views.setOnClickPendingIntent(R.id.weather_refresh, refresh)
-            views.setOnClickPendingIntent(R.id.weather_card, refresh)
+            
+            // Open weather on click
+            val openWeatherIntent = Intent(context, MainActivity::class.java).apply {
+                putExtra("open_route", "weather")
+            }
+            val openWeatherPending = PendingIntent.getActivity(context, id * 43, openWeatherIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            views.setOnClickPendingIntent(R.id.weather_card, openWeatherPending)
+            views.setOnClickPendingIntent(R.id.weather_icon, openWeatherPending)
+            views.setOnClickPendingIntent(R.id.weather_temp, openWeatherPending)
+            views.setOnClickPendingIntent(R.id.weather_condition, openWeatherPending)
+            views.setOnClickPendingIntent(R.id.weather_city, openWeatherPending)
 
             // Music binding
             val snapshot = PlaybackNotificationRouter.activeSnapshot(context)

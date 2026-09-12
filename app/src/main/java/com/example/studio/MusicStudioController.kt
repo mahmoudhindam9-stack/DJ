@@ -141,7 +141,7 @@ class MusicStudioController(private val context: Context) {
         sin(2.0 * PI * i / SINE_TABLE_SIZE).toFloat()
     }
 
-    private inline fun fastSin(phase: Double): Float {
+    private fun fastSin(phase: Double): Float {
         val normalized = (phase / (2.0 * PI)) % 1.0
         val p = if (normalized < 0) normalized + 1.0 else normalized
         val idx = (p * SINE_TABLE_SIZE).toInt().coerceIn(0, SINE_TABLE_SIZE - 1)
@@ -565,10 +565,14 @@ class MusicStudioController(private val context: Context) {
                     .setBufferSizeInBytes(minBuf)
                     .setTransferMode(AudioTrack.MODE_STATIC)
                     .build()
-                track.write(pcm, 0, pcm.size)
-                track.play()
-                delay(320)
-                track.release()
+                try {
+                    track.write(pcm, 0, pcm.size)
+                    track.play()
+                    delay(350)
+                } finally {
+                    try { track.stop() } catch (e: Exception) {}
+                    try { track.release() } catch (e: Exception) {}
+                }
             } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
         }
     }
@@ -656,5 +660,10 @@ class MusicStudioController(private val context: Context) {
 
     private fun midiToHz(midi: Int): Double = 440.0 * 2.0.pow((midi - 69) / 12.0)
 
-    fun close() { stopPlayback() }
+    fun close() {
+        stopPlayback()
+        try { previewTrack?.stop() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
+        try { previewTrack?.release() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
+        previewTrack = null
+    }
 }

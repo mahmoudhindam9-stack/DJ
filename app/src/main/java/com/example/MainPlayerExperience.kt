@@ -28,6 +28,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.model.AudioItem
 import com.example.model.Playlist
@@ -142,8 +143,8 @@ fun PlayerScreenV2(
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Music Player", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Text("Library • Playlists • Queue", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("MUSIC LIBRARY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
+                    Text("Local audio and playlists", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 IconButton(onClick = { showLibraryMenu = true }) { Icon(Icons.Filled.MoreVert, "Library menu") }
                 DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
@@ -160,12 +161,12 @@ fun PlayerScreenV2(
             }
             Spacer(Modifier.height(10.dp))
             if (playlists.isNotEmpty()) {
-                Text("Playlists", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                com.example.ui.components.DjSectionHeader("PLAYLISTS")
                 Spacer(Modifier.height(5.dp))
                 LazyColumn(Modifier.weight(0.75f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
                     items(playlists, key = { it.id }) { playlist ->
                         val songs = playlist.songIds.mapNotNull { id -> audioLibrary.firstOrNull { it.id == id } }
-                        Card(Modifier.fillMaxWidth()) {
+                        com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
                             Column(Modifier.padding(9.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, Modifier.size(28.dp)); Spacer(Modifier.width(8.dp))
@@ -187,7 +188,7 @@ fun PlayerScreenV2(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            Text("Library", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+            com.example.ui.components.DjSectionHeader("ALL TRACKS")
             Spacer(Modifier.height(5.dp))
             if (audioLibrary.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -202,7 +203,7 @@ fun PlayerScreenV2(
                     items(audioLibrary, key = { it.id }) { song ->
                         val isCurrentSong = playerController.currentSong?.id == song.id
                         val showPause = isCurrentSong && playerController.isPlaying
-                        Card(Modifier.fillMaxWidth()) {
+                        com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.MusicNote, null); Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
@@ -280,7 +281,7 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
     val maxPos = playerController.durationMs.coerceAtLeast(1L).toFloat()
     val current = playerController.currentPositionMs.coerceIn(0L, maxPos.toLong()).toFloat()
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }; Text("Now Playing", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); IconButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue") } }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }; Text("NOW PLAYING", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary); IconButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue") } }
         Spacer(Modifier.height(20.dp))
         Box(Modifier.fillMaxWidth().weight(0.85f).clip(RoundedCornerShape(28.dp)).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.Album, null, Modifier.size(180.dp), tint = MaterialTheme.colorScheme.primary) }
         Spacer(Modifier.height(18.dp))
@@ -293,7 +294,7 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
 
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Text("Crossfade Duration: ${playerController.crossfadeDurationMs / 1000}s", style = MaterialTheme.typography.labelSmall)
+            Text("CROSSFADE DURATION: ${playerController.crossfadeDurationMs / 1000}s", style = MaterialTheme.typography.labelSmall)
             Slider(value = playerController.crossfadeDurationMs.toFloat(), onValueChange = { playerController.crossfadeDurationMs = it.toLong() }, valueRange = 0f..10000f, steps = 9)
         }
 
@@ -328,7 +329,7 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("Queue", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("UPCOMING QUEUE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
                     Text("${controller.playlist.size} song(s)", style = MaterialTheme.typography.bodySmall)
                 }
                 Button(onClick = { if (!downloading && controller.playlist.isNotEmpty()) folderPicker.launch(null) }, enabled = !downloading && controller.playlist.isNotEmpty()) {

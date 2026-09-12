@@ -49,6 +49,11 @@ class MusicWidgetProvider : AppWidgetProvider() {
             views.setProgressBar(R.id.widget_eq_bass, 12, (bass + 6).coerceIn(0, 12), false)
             views.setProgressBar(R.id.widget_eq_mid, 12, (mid + 6).coerceIn(0, 12), false)
             views.setProgressBar(R.id.widget_eq_treble, 12, (treble + 6).coerceIn(0, 12), false)
+            
+            views.setOnClickPendingIntent(R.id.widget_eq_bass, PendingIntent.getService(context, id * 10 + 1, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_EQ_BASS), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            views.setOnClickPendingIntent(R.id.widget_eq_mid, PendingIntent.getService(context, id * 10 + 2, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_EQ_MID), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            views.setOnClickPendingIntent(R.id.widget_eq_treble, PendingIntent.getService(context, id * 10 + 3, Intent(context, com.example.player.MusicService::class.java).setAction(com.example.player.MusicService.ACTION_EQ_TREBLE), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            
             WidgetPlaybackIntents.wireButtons(context, views, id, R.id.widget_btn_prev, R.id.widget_btn_play, R.id.widget_btn_next)
             manager.updateAppWidget(id, views)
         }

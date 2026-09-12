@@ -11,16 +11,13 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 import com.example.model.AudioItem
 import kotlinx.coroutines.*
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class DJDeckController(private val context: Context, val deckName: String) {
     // Wires the DSP plugin library into this deck's audio path. Without this,
     // the plugin chain stays empty and every effect toggle is a no-op even
     // though the UI shows it as "on".
     val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
-    val eqController = EqualizerController(context) { syncEq() }
-    private fun syncEq() {
-        val levels = eqController.bands.map { it.currentLevelDb.toFloat() }.toFloatArray()
-        fxProcessor.setEqLevels(levels, eqController.isEnabled)
-    }
+    val eqController = EqualizerController(context)
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
@@ -105,10 +102,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
     }
 
     private fun updateProcessorEffects() {
-        fxProcessor.activeEffects.clear()
-        activeEffects.filterValues { it }.keys.forEach { fxId ->
-            fxProcessor.activeEffects.add(fxId)
-        }
+        fxProcessor.activeEffects = activeEffects.filterValues { it }.keys.toSet()
     }
 
     fun loadTrack(song: AudioItem) {

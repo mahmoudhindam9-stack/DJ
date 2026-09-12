@@ -39,6 +39,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
@@ -60,6 +64,7 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.delay
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -83,6 +88,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
@@ -92,7 +98,7 @@ fun MainApp() {
     val initialRoute = remember { intentRoute ?: prefs.getString("last_route", "player") ?: "player" }
 
     // Persistent State Controllers
-    val playerController = remember { AudioPlayerController.obtain(context) }
+    val playerController = remember { AudioPlayerController.obtain(context).apply { activityCount++ } }
     val djMixerController = remember { DJMixerController(context) }
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
@@ -116,7 +122,13 @@ fun MainApp() {
     }
 
     // Master Library and Playlists State & Room DB Repository
-    val audioLibrary = remember { mutableStateListOf<AudioItem>().apply { addAll(PlayerLibraryStore.load(context)) } }
+    val audioLibrary = remember { mutableStateListOf<AudioItem>() }
+
+    LaunchedEffect(Unit) {
+        val loaded = PlayerLibraryStore.load(context)
+        audioLibrary.clear()
+        audioLibrary.addAll(loaded)
+    }
 
     // Persist the library the moment it changes (song imported, removed, etc.)
     // so it survives closing and reopening the app instead of only ever living
@@ -124,7 +136,9 @@ fun MainApp() {
     LaunchedEffect(audioLibrary) {
         snapshotFlow { audioLibrary.toList() }
             .collect { snapshot ->
-                PlayerLibraryStore.save(context, snapshot)
+                if (snapshot.isNotEmpty() || PlayerLibraryStore.isLoaded) {
+                    PlayerLibraryStore.save(context, snapshot)
+                }
             }
     }
 
@@ -134,33 +148,6 @@ fun MainApp() {
     val multiplePermissionsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { _ -> }
-
-    LaunchedEffect(Unit) {
-        val permissionsToRequest = mutableListOf<String>()
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
-            permissionsToRequest.add(Manifest.permission.READ_MEDIA_AUDIO)
-        } else {
-            permissionsToRequest.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        permissionsToRequest.add(Manifest.permission.RECORD_AUDIO)
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
-            permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
-        }
-
-        val missingPermissions = permissionsToRequest.filter {
-            androidx.core.content.ContextCompat.checkSelfPermission(
-                context, it
-            ) != android.content.pm.PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            multiplePermissionsLauncher.launch(missingPermissions.toTypedArray())
-        }
-    }
 
 
     val db = remember { com.example.room.AppDatabase.getDatabase(context) }
@@ -190,19 +177,27 @@ fun MainApp() {
 
     DisposableEffect(Unit) {
         onDispose {
-            if (!playerController.isPlaying && MusicService.instance?.playerController !== playerController) {
-                playerController.release()
-            }
+            playerController.activityCount--
+            playerController.checkRelease()
             djMixerController.release()
             eqController.release()
             musicStudioController.close()
             djFxController.release()
+            micController.close()
         }
     }
 
     Scaffold(
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(24.dp, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 0.dp
+            ) {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
@@ -287,6 +282,9 @@ fun MainApp() {
             startDestination = initialRoute,
             modifier = Modifier.padding(innerPadding)
         ) {
+            composable("weather") {
+                WeatherScreen(navController = navController)
+            }
             composable("player") {
                 PlayerScreenV2(
                     playerController = playerController,

@@ -46,10 +46,10 @@ class MusicService : Service() {
     override fun onCreate() {
         super.onCreate()
         instance = this
-        playerController = AudioPlayerController.obtain(applicationContext)
+        playerController = AudioPlayerController.obtain(applicationContext).apply { serviceCount++ }
         createNotificationChannel()
         mediaSession = MediaSessionCompat(this, "DJMusicSession").apply {
-            setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+            
             setCallback(object : MediaSessionCompat.Callback() {
                 override fun onPlay() { if (!PlaybackNotificationRouter.dispatchPlayPause()) playerController?.togglePlayPause() }
                 override fun onPause() { if (!PlaybackNotificationRouter.dispatchPlayPause()) playerController?.pause() }
@@ -174,5 +174,8 @@ class MusicService : Service() {
     }
 
     override fun onDestroy() {
-        serviceJob.cancel(); mediaSession.isActive = false; mediaSession.release(); super.onDestroy(); instance = null }
+        serviceJob.cancel(); mediaSession.isActive = false; mediaSession.release(); super.onDestroy(); instance = null
+        playerController?.serviceCount = (playerController?.serviceCount ?: 1) - 1
+        playerController?.checkRelease()
+    }
 }

@@ -35,22 +35,20 @@ class LocationWeatherActivity : ComponentActivity() {
                 prefs.edit().putBoolean(permissionPromptedKey, true).apply()
                 requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 9001)
             } else {
-                TimeWeatherWidgetProvider.setStatus(this, "Location permission required")
-                finish()
+                // Already prompted and denied, fallback to IP location
+                fetchWeatherByIpFallback()
             }
             return
         }
         fetchLocationAndWeather()
     }
 
+    @Suppress("DEPRECATION")
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == 9001) {
             if (hasLocationPermission()) fetchLocationAndWeather()
-            else {
-                TimeWeatherWidgetProvider.setStatus(this, "Location permission denied")
-                finish()
-            }
+            else fetchWeatherByIpFallback()
         }
     }
 
@@ -58,6 +56,7 @@ class LocationWeatherActivity : ComponentActivity() {
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    @android.annotation.SuppressLint("MissingPermission")
     private fun fetchLocationAndWeather() {
         val manager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
         val last = listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER)
@@ -86,30 +85,41 @@ class LocationWeatherActivity : ComponentActivity() {
                 }
             }
             if (!requested) {
-                TimeWeatherWidgetProvider.setStatus(this, "Location services are off")
-                finish()
+                fetchWeatherByIpFallback()
                 return
             }
             timeoutJob = CoroutineScope(Dispatchers.Main).launch {
                 delay(12_000L)
                 runCatching { manager.removeUpdates(listener) }
                 if (!isFinishing) {
-                    TimeWeatherWidgetProvider.setStatus(this@LocationWeatherActivity, "Unable to get current location")
-                    finish()
+                    fetchWeatherByIpFallback()
                 }
             }
         } catch (_: SecurityException) {
-            TimeWeatherWidgetProvider.setStatus(this, "Location permission required")
-            finish()
+            fetchWeatherByIpFallback()
         }
     }
 
-    private fun loadWeather(location: Location) {
+    private fun fetchWeatherByIpFallback() {
         CoroutineScope(Dispatchers.IO).launch {
-            val result = runCatching { fetchWeather(location.latitude, location.longitude) }.getOrNull()
+            val result = runCatching { 
+                val url = "https://get.geojs.io/v1/ip/geo.json"
+                val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                }
+                val body = connection.inputStream.bufferedReader().use { it.readText() }
+                connection.disconnect()
+                val json = JSONObject(body)
+                val lat = json.getDouble("latitude")
+                val lon = json.getDouble("longitude")
+                val cityName = json.optString("city", "Current location")
+                fetchWeather(lat, lon, cityName)
+            }.getOrNull()
+            
             withContext(Dispatchers.Main) {
                 if (result != null) {
-                    TimeWeatherWidgetProvider.updateWeather(this@LocationWeatherActivity, result.city, result.temperature, result.condition, result.timezone, result.warning)
+                    TimeWeatherWidgetProvider.updateWeather(this@LocationWeatherActivity, result.city, result.temperature, result.condition, result.timezone, result.warning, result.lat, result.lon)
                 } else {
                     TimeWeatherWidgetProvider.setStatus(this@LocationWeatherActivity, "Weather unavailable")
                 }
@@ -118,10 +128,24 @@ class LocationWeatherActivity : ComponentActivity() {
         }
     }
 
-    private data class WeatherResult(val city: String, val temperature: String, val condition: String, val timezone: String, val warning: String)
+    private fun loadWeather(location: Location) {
+        CoroutineScope(Dispatchers.IO).launch {
+            val result = runCatching { fetchWeather(location.latitude, location.longitude) }.getOrNull()
+            withContext(Dispatchers.Main) {
+                if (result != null) {
+                    TimeWeatherWidgetProvider.updateWeather(this@LocationWeatherActivity, result.city, result.temperature, result.condition, result.timezone, result.warning, result.lat, result.lon)
+                } else {
+                    TimeWeatherWidgetProvider.setStatus(this@LocationWeatherActivity, "Weather unavailable")
+                }
+                finish()
+            }
+        }
+    }
 
-    private fun fetchWeather(latitude: Double, longitude: Double): WeatherResult {
-        val url = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,weather_code&timezone=auto"
+    private data class WeatherResult(val city: String, val temperature: String, val condition: String, val timezone: String, val warning: String, val lat: Double, val lon: Double)
+
+    private fun fetchWeather(latitude: Double, longitude: Double, fallbackCity: String? = null): WeatherResult {
+        val url = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,weather_code,is_day&timezone=auto"
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000
@@ -137,13 +161,19 @@ class LocationWeatherActivity : ComponentActivity() {
         val json = JSONObject(body)
         val current = json.getJSONObject("current")
         val timezone = json.optString("timezone", TimeZone.getDefault().id)
-        val (desc, warn) = weatherDescription(current.getInt("weather_code"))
+        val isDay = current.optInt("is_day", 1) == 1
+        val (desc, warn) = weatherDescription(current.getInt("weather_code"), isDay)
+        
+        val cityName = fallbackCity ?: reverseGeocode(latitude, longitude)
+        
         return WeatherResult(
-            city = reverseGeocode(latitude, longitude),
+            city = cityName,
             temperature = String.format(Locale.getDefault(), "%.0f°C", current.getDouble("temperature_2m")),
             condition = desc,
             timezone = timezone,
-            warning = warn
+            warning = warn,
+            lat = latitude,
+            lon = longitude
         )
     }
 
@@ -154,9 +184,9 @@ class LocationWeatherActivity : ComponentActivity() {
         }
     }.getOrNull() ?: "Current location"
 
-    private fun weatherDescription(code: Int): Pair<String, String> = when (code) {
-        0 -> "☀️ Clear sky" to ""
-        1, 2 -> "🌤️ Partly cloudy" to ""
+    private fun weatherDescription(code: Int, isDay: Boolean = true): Pair<String, String> = when (code) {
+        0 -> if (isDay) "☀️ Clear sky" to "" else "🌙 Clear night" to ""
+        1, 2 -> if (isDay) "🌤️ Partly cloudy" to "" else "☁️ Partly cloudy" to ""
         3 -> "☁️ Overcast" to ""
         45, 48 -> "🌫️ Foggy" to "Low visibility due to fog"
         51, 53, 55, 56, 57 -> "🌦️ Drizzle" to ""

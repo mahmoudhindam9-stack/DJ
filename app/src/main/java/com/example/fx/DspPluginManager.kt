@@ -135,6 +135,7 @@ class FilterPlugin : AudioPlugin {
     override val name = "Filter"
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private val lpState = FloatArray(2)
     private val hpState = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
@@ -164,11 +165,13 @@ class DelayPlugin : AudioPlugin {
     override val name = "Delay"
     override var enabled = false
     override var amount = 0.5f
-    private val delayLength = 22050 
-    private val buffer = FloatArray(delayLength * 2)
+    override var sampleRate = 44100
+    private val maxFrames = 96000
+    private val buffer = FloatArray(maxFrames * 2)
     private var writePos = 0
     override fun process(sample: Float, channel: Int): Float {
-        val readPos = (writePos - delayLength + buffer.size) % buffer.size
+        val delayLength = (sampleRate * 0.5).toInt().coerceIn(1, maxFrames)
+        val readPos = (writePos - delayLength * 2 + buffer.size) % buffer.size
         val delayed = buffer[readPos / 2 * 2 + channel]
         val wet = sample + delayed * 0.5f
         val writeIdx = writePos / 2 * 2 + channel
@@ -187,11 +190,13 @@ class ReverbPlugin : AudioPlugin {
     override val name = "Reverb"
     override var enabled = false
     override var amount = 0.5f
-    private val delayLength = 8820 
-    private val buffer = FloatArray(delayLength * 2)
+    override var sampleRate = 44100
+    private val maxFrames = 96000
+    private val buffer = FloatArray(maxFrames * 2)
     private var writePos = 0
     override fun process(sample: Float, channel: Int): Float {
-        val readPos = (writePos - delayLength + buffer.size) % buffer.size
+        val delayLength = (sampleRate * 0.2).toInt().coerceIn(1, maxFrames)
+        val readPos = (writePos - delayLength * 2 + buffer.size) % buffer.size
         val delayed = buffer[readPos / 2 * 2 + channel]
         val wet = sample + delayed * 0.4f
         val writeIdx = writePos / 2 * 2 + channel
@@ -210,13 +215,20 @@ class FlangerPlugin : AudioPlugin {
     override val name = "Flanger"
     override var enabled = false
     override var amount = 0.5f
-    private val maxDelay = 441 
-    private val buffer = FloatArray(maxDelay * 2)
+    override var sampleRate = 44100
+    private var buffer = FloatArray(44100 * 2)
     private var writePos = 0
     private var lfoPhase = 0.0
     override fun process(sample: Float, channel: Int): Float {
-        lfoPhase += 0.0001
-        if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        val maxDelay = (sampleRate * 0.01).toInt() // 10ms max delay
+        if (buffer.size != maxDelay * 2) {
+            buffer = FloatArray(maxDelay * 2)
+            writePos = 0
+        }
+        if (channel == 0) {
+            lfoPhase += 0.0001 * (44100.0 / sampleRate)
+            if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        }
         val lfo = (sin(lfoPhase) + 1.0) / 2.0
         val currentDelay = (maxDelay * lfo).toInt().coerceIn(1, maxDelay - 1)
         val readPos = (writePos - currentDelay * 2 + buffer.size) % buffer.size
@@ -239,11 +251,14 @@ class PhaserPlugin : AudioPlugin {
     override val name = "Phaser"
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private var lfoPhase = 0.0
     private val state1 = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
-        lfoPhase += 0.0002
-        if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        if (channel == 0) {
+            lfoPhase += 0.0002 * (44100.0 / sampleRate)
+            if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        }
         val lfo = (sin(lfoPhase) + 1.0) / 2.0
         val apf = 0.1f + 0.8f * lfo.toFloat()
         val wet = apf * (sample - state1[channel]) + state1[channel]
@@ -261,16 +276,19 @@ class BitcrusherPlugin : AudioPlugin {
     override val name = "Bitcrusher"
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private var counter = 0
+    private var isUpdatingFrame = false
     private val heldSample = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
         val decimation = (amount * 20).toInt() + 1
         if (channel == 0) {
             counter++
+            isUpdatingFrame = (counter >= decimation)
+            if (isUpdatingFrame) counter = 0
         }
-        if (counter >= decimation) {
-            if (channel == 1) counter = 0
-            val bits = 16 - (amount * 12).toInt()
+        if (isUpdatingFrame) {
+            val bits = (16 - (amount * 12).toInt()).coerceIn(1, 16)
             val steps = 1.shl(bits)
             heldSample[channel] = round(sample * steps) / steps
         }
@@ -278,6 +296,7 @@ class BitcrusherPlugin : AudioPlugin {
     }
     override fun reset() {
         counter = 0
+        isUpdatingFrame = false
         heldSample.fill(0f)
     }
 }
@@ -287,6 +306,7 @@ class DistortionPlugin : AudioPlugin {
     override val name = "Distortion"
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     override fun process(sample: Float, channel: Int): Float {
         val drive = 1f + amount * 10f
         val wet = (sample * drive).coerceIn(-1f, 1f)
@@ -305,6 +325,7 @@ class CompressorPlugin : AudioPlugin {
     override val name = "Compressor"
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private val threshold = 0.2f
     private val ratio = 4f
     override fun process(sample: Float, channel: Int): Float {
@@ -321,11 +342,13 @@ class CompressorPlugin : AudioPlugin {
 class CustomDelayPlugin(override val id: String, override val name: String, private val lengthParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
-    private val delayLength = (88200 * lengthParam).toInt().coerceAtLeast(1)
-    private val buffer = FloatArray(delayLength * 2)
+    override var sampleRate = 44100
+    private val maxFrames = 96000
+    private val buffer = FloatArray(maxFrames * 2)
     private var writePos = 0
     override fun process(sample: Float, channel: Int): Float {
-        val readPos = (writePos - delayLength + buffer.size) % buffer.size
+        val delayLength = (sampleRate * lengthParam).toInt().coerceIn(1, maxFrames)
+        val readPos = (writePos - delayLength * 2 + buffer.size) % buffer.size
         val delayed = buffer[readPos / 2 * 2 + channel]
         val wet = sample + delayed * 0.5f
         val writeIdx = writePos / 2 * 2 + channel
@@ -342,11 +365,13 @@ class CustomDelayPlugin(override val id: String, override val name: String, priv
 class CustomReverbPlugin(override val id: String, override val name: String, private val sizeParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
-    private val delayLength = (2000 + (sizeParam * 20000)).toInt().coerceAtLeast(200)
-    private val buffer = FloatArray(delayLength * 2)
+    override var sampleRate = 44100
+    private val maxFrames = 96000
+    private val buffer = FloatArray(maxFrames * 2)
     private var writePos = 0
     override fun process(sample: Float, channel: Int): Float {
-        val readPos = (writePos - delayLength + buffer.size) % buffer.size
+        val delayLength = (sampleRate * (0.04 + sizeParam * 0.4)).toInt().coerceIn(1, maxFrames)
+        val readPos = (writePos - delayLength * 2 + buffer.size) % buffer.size
         val delayed = buffer[readPos / 2 * 2 + channel]
         val wet = sample + delayed * 0.4f
         val writeIdx = writePos / 2 * 2 + channel
@@ -363,14 +388,21 @@ class CustomReverbPlugin(override val id: String, override val name: String, pri
 class CustomFlangerPlugin(override val id: String, override val name: String, private val rateParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
-    private val maxDelay = 441
-    private val buffer = FloatArray(maxDelay * 2)
+    override var sampleRate = 44100
+    private var buffer = FloatArray(44100 * 2)
     private var writePos = 0
     private var lfoPhase = 0.0
-    private val lfoSpeed = 0.00002 + rateParam * 0.0003
     override fun process(sample: Float, channel: Int): Float {
-        lfoPhase += lfoSpeed
-        if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        val maxDelay = (sampleRate * 0.01).toInt() // 10ms max delay
+        if (buffer.size != maxDelay * 2) {
+            buffer = FloatArray(maxDelay * 2)
+            writePos = 0
+        }
+        val lfoSpeed = 0.00002 + rateParam * 0.0003
+        if (channel == 0) {
+            lfoPhase += lfoSpeed * (44100.0 / sampleRate)
+            if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        }
         val lfo = (sin(lfoPhase) + 1.0) / 2.0
         val currentDelay = (maxDelay * lfo).toInt().coerceIn(1, maxDelay - 1)
         val readPos = (writePos - currentDelay * 2 + buffer.size) % buffer.size
@@ -391,12 +423,15 @@ class CustomFlangerPlugin(override val id: String, override val name: String, pr
 class CustomPhaserPlugin(override val id: String, override val name: String, private val rateParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private var lfoPhase = 0.0
-    private val lfoSpeed = 0.00005 + rateParam * 0.0006
     private val state1 = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
-        lfoPhase += lfoSpeed
-        if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        val lfoSpeed = 0.00005 + rateParam * 0.0006
+        if (channel == 0) {
+            lfoPhase += lfoSpeed * (44100.0 / sampleRate)
+            if (lfoPhase > 2.0 * PI) lfoPhase -= 2.0 * PI
+        }
         val lfo = (sin(lfoPhase) + 1.0) / 2.0
         val apf = 0.1f + 0.8f * lfo.toFloat()
         val wet = apf * (sample - state1[channel]) + state1[channel]
@@ -412,13 +447,18 @@ class CustomPhaserPlugin(override val id: String, override val name: String, pri
 class CustomBitcrusherPlugin(override val id: String, override val name: String, private val harshnessParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private var counter = 0
+    private var isUpdatingFrame = false
     private val heldSample = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
         val decimation = (harshnessParam * 20).toInt() + 1
-        if (channel == 0) counter++
-        if (counter >= decimation) {
-            if (channel == 1) counter = 0
+        if (channel == 0) {
+            counter++
+            isUpdatingFrame = (counter >= decimation)
+            if (isUpdatingFrame) counter = 0
+        }
+        if (isUpdatingFrame) {
             val bits = (16 - (harshnessParam * 12).toInt()).coerceIn(1, 16)
             val steps = 1.shl(bits)
             heldSample[channel] = round(sample * steps) / steps
@@ -427,6 +467,7 @@ class CustomBitcrusherPlugin(override val id: String, override val name: String,
     }
     override fun reset() {
         counter = 0
+        isUpdatingFrame = false
         heldSample.fill(0f)
     }
 }
@@ -434,6 +475,7 @@ class CustomBitcrusherPlugin(override val id: String, override val name: String,
 class CustomDistortionPlugin(override val id: String, override val name: String, private val driveParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     override fun process(sample: Float, channel: Int): Float {
         val drive = 1f + (amount * driveParam) * 15f
         val wet = (sample * drive).coerceIn(-1f, 1f)
@@ -451,6 +493,7 @@ class CustomCompressorPlugin(
 ) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     override fun process(sample: Float, channel: Int): Float {
         val threshold = 0.05f + thresholdParam * 0.6f
         val ratio = 1f + ratioParam * 9f
@@ -467,6 +510,7 @@ class CustomCompressorPlugin(
 class CustomFilterPlugin(override val id: String, override val name: String, private val cutoffParam: Float) : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
+    override var sampleRate = 44100
     private val lpState = FloatArray(2)
     override fun process(sample: Float, channel: Int): Float {
         val cutoff = 0.05f + 0.95f * (amount * cutoffParam)

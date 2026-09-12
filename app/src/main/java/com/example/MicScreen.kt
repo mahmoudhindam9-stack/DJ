@@ -81,11 +81,29 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Text(if (micController.isMicEnabled) "LIVE MONITOR ON" else "Tap to enable microphone", fontWeight = FontWeight.SemiBold)
         Spacer(Modifier.height(14.dp))
 
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
             Column(Modifier.padding(14.dp)) {
-                Text("Audio Routing", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Audio Card", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(
+                            "DJ Input / Master Output",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    IconButton(onClick = { micController.refreshDevices() }) {
+                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh audio devices")
+                    }
+                }
                 Spacer(Modifier.height(8.dp))
-                Text("Input Device", style = MaterialTheme.typography.labelSmall)
+
+                Text("INPUT • Microphone", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { inputExpanded = true }, Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -101,28 +119,32 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Text("Output Device", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.height(10.dp))
+
+                Text("OUTPUT • Master", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { outputExpanded = true }, Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
-                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) }, text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
-                            DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.VolumeUp, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
+                            DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
                         }
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { micController.refreshDevices() }, Modifier.fillMaxWidth()) {
-                    Icon(Icons.Filled.Refresh, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text("Refresh connected devices")
+                Spacer(Modifier.height(10.dp))
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.GraphicEq, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                Text("${micController.routingStatus}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 

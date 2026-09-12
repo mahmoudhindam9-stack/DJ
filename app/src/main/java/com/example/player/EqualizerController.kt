@@ -167,33 +167,41 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     private fun persistState() {
         try {
-            context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE).edit()
-                .putInt("bass", quickBassDb)
+            val editor = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE).edit()
+            editor.putInt("bass", quickBassDb)
                 .putInt("mid", quickMidDb)
                 .putInt("treble", quickTrebleDb)
                 .putString("preset", selectedPreset)
                 .putBoolean("enabled", isEnabled)
                 .putFloat("preamp", preampDb)
-                .apply()
+            for (i in bands.indices) {
+                editor.putInt("band_$i", bands[i].currentLevelDb)
+            }
+            editor.apply()
         } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     private fun loadState() {
         try {
             val prefs = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE)
-            bands[0].currentLevelDb = prefs.getInt("bass", 0).coerceIn(-12, 12)
-            bands[4].currentLevelDb = prefs.getInt("mid", 0).coerceIn(-12, 12)
-            bands[9].currentLevelDb = prefs.getInt("treble", 0).coerceIn(-12, 12)
+            for (i in bands.indices) {
+                bands[i].currentLevelDb = prefs.getInt("band_$i", prefs.getInt(when(i) {
+                    0 -> "bass"
+                    4 -> "mid"
+                    9 -> "treble"
+                    else -> "unknown_default"
+                }, 0)).coerceIn(-12, 12)
+            }
             selectedPreset = prefs.getString("preset", "Flat") ?: "Flat"
             isEnabled = prefs.getBoolean("enabled", false)
             preampDb = prefs.getFloat("preamp", 0f).coerceIn(0f, 12f)
-            if (isEnabled) //DeckFxAudioProcessor.setGlobalPreampDb(preampDb) else //DeckFxAudioProcessor.setGlobalPreampDb(0f)
             GlobalEqualizerState.update(
                 bands.map { it.currentLevelDb.toFloat() }.toFloatArray(),
                 isEnabled,
                 if (isEnabled) preampDb else 0f
             )
             syncQuickFromBands()
+            onUpdate()
         } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
@@ -209,6 +217,13 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     companion object {
         private val companionObjectRegistry = CopyOnWriteArraySet<EqualizerController>()
 
-        fun adjustQuickBand(context: Context, band: Int) { }
+        fun adjustQuickBand(context: Context, band: Int) {
+            val controller = companionObjectRegistry.firstOrNull() ?: EqualizerController(context)
+            when (band) {
+                0 -> controller.setQuickBass(if (controller.quickBassDb >= 12) -12 else controller.quickBassDb + 1)
+                1 -> controller.setQuickMid(if (controller.quickMidDb >= 12) -12 else controller.quickMidDb + 1)
+                2 -> controller.setQuickTreble(if (controller.quickTrebleDb >= 12) -12 else controller.quickTrebleDb + 1)
+            }
+        }
     }
 }
