@@ -65,7 +65,7 @@ object OnlineQueueDownloader {
                 } finally {
                     connection.disconnect()
                 }
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
             android.util.Log.w("OnlineQueueDownloader", "Caught throwable", e)
                 failed++
             }

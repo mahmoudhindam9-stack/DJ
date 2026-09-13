@@ -178,7 +178,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 editor.putInt("band_$i", bands[i].currentLevelDb)
             }
             editor.apply()
-        } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     private fun loadState() {
@@ -202,7 +202,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             )
             syncQuickFromBands()
             onUpdate()
-        } catch (e: Throwable) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     fun release() {

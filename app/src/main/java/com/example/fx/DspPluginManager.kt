@@ -167,9 +167,27 @@ class DelayPlugin : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2) // Always allocate for 2 channels (stereo max)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+ // Always allocate for 2 channels (stereo max)
     private var writeFrame = 0
     override fun process(sample: Float, channel: Int): Float {
         val delayLength = (sampleRate * 0.5).toInt().coerceIn(1, maxFrames - 1)
@@ -195,9 +213,27 @@ class ReverbPlugin : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+
     private var writeFrame = 0
     override fun process(sample: Float, channel: Int): Float {
         val delayLength = (sampleRate * 0.2).toInt().coerceIn(1, maxFrames - 1)
@@ -223,9 +259,27 @@ class FlangerPlugin : AudioPlugin {
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+
     private var writeFrame = 0
     private var lfoPhase = 0.0
     override fun process(sample: Float, channel: Int): Float {
@@ -351,9 +405,27 @@ class CustomDelayPlugin(override val id: String, override val name: String, priv
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+
     private var writeFrame = 0
     override fun process(sample: Float, channel: Int): Float {
         val delayLength = (sampleRate * lengthParam).toInt().coerceIn(1, maxFrames - 1)
@@ -374,9 +446,27 @@ class CustomReverbPlugin(override val id: String, override val name: String, pri
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+
     private var writeFrame = 0
     override fun process(sample: Float, channel: Int): Float {
         val delayLength = (sampleRate * (0.04 + sizeParam * 0.4)).toInt().coerceIn(1, maxFrames - 1)
@@ -397,9 +487,27 @@ class CustomFlangerPlugin(override val id: String, override val name: String, pr
     override var enabled = false
     override var amount = 0.5f
     override var sampleRate = 44100
+        set(value) {
+            field = value
+            ensureBuffer()
+        }
     override var channelCount = 2
-    private val maxFrames = 96000
-    private val buffer = FloatArray(maxFrames * 2)
+    private var maxFrames = 0
+    private var buffer = FloatArray(0)
+    
+    private fun ensureBuffer() {
+        val required = (sampleRate * 2).coerceAtLeast(44100)
+        if (buffer.size < required * 2) {
+            maxFrames = required
+            val newBuf = FloatArray(maxFrames * 2)
+            System.arraycopy(buffer, 0, newBuf, 0, minOf(buffer.size, newBuf.size))
+            buffer = newBuf
+        }
+    }
+    init {
+        ensureBuffer()
+    }
+
     private var writeFrame = 0
     private var lfoPhase = 0.0
     override fun process(sample: Float, channel: Int): Float {

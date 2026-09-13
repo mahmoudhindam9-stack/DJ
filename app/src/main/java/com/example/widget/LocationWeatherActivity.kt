@@ -9,6 +9,7 @@ import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -27,25 +28,27 @@ class LocationWeatherActivity : ComponentActivity() {
     private val prefsName = "time_weather_widget"
     private var timeoutJob: Job? = null
 
+
+    private val requestPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        if (permissions.values.any { it }) {
+            fetchLocationAndWeather()
+        } else {
+            fetchWeatherByIpFallback()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
         if (hasLocationPermission()) {
             fetchLocationAndWeather()
         } else {
-            // Check if we should ask. On Android M+, requestPermissions can just be called.
-            // If they selected "Don't ask again", requestPermissions will immediately call onRequestPermissionsResult with DENIED.
-            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 9001)
-        }
-
-    }
-
-    @Suppress("DEPRECATION")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 9001) {
-            if (hasLocationPermission()) fetchLocationAndWeather()
-            else fetchWeatherByIpFallback()
+            requestPermissionLauncher.launch(arrayOf(
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION
+            ))
         }
     }
 

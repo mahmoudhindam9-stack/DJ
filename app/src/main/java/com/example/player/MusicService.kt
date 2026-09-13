@@ -92,7 +92,7 @@ class MusicService : Service() {
     private fun startForegroundTyped(id: Int, notification: Notification, type: Int) {
         try {
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) ServiceCompat.startForeground(this, id, notification, type) else startForeground(id, notification)
-        } catch (e: Throwable) { android.util.Log.w("MusicService", "Caught throwable", e); try { startForeground(id, notification) } catch (e: Throwable) { android.util.Log.w("MusicService", "Caught throwable", e) } }
+        } catch (e: Exception) { android.util.Log.w("MusicService", "Caught throwable", e); try { startForeground(id, notification) } catch (e: Exception) { android.util.Log.w("MusicService", "Caught throwable", e) } }
     }
 
     private fun updateMicNotification() {

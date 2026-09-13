@@ -82,7 +82,7 @@ object ExtraSoundPlayer {
                 track.play()
                 Thread.sleep((seconds * 1000).toLong() + 40L)
                 track.release()
-            } catch (e: Throwable) {
+            } catch (e: Exception) {
             android.util.Log.w("ExtraSoundPlayer", "Caught throwable", e) }
         }.start()
     }

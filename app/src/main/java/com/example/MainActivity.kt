@@ -57,9 +57,6 @@ import com.example.model.Playlist
 import com.example.onlinemusic.OnlineDjBridge
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.player.*
-import com.example.studio.MusicStudioController
-import com.example.studio.MusicStudioScreen
-// STUDIO_CONTROLS_V1
 import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.delay
@@ -102,7 +99,6 @@ fun MainApp() {
     val djMixerController = remember { DJMixerController(context) }
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
-    val musicStudioController = remember { MusicStudioController(context) }
     val djFxController = remember { com.example.djfx.DjFxController(context) }
 
     LaunchedEffect(navController) {
@@ -177,7 +173,6 @@ fun MainApp() {
             playerController.checkRelease()
             djMixerController.release()
             eqController.release()
-            musicStudioController.close()
             djFxController.release()
             micController.close()
         }
@@ -228,18 +223,6 @@ fun MainApp() {
                     selected = currentDestination?.route == "equalizer",
                     onClick = {
                         navController.navigate("equalizer") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.MusicNote, contentDescription = "Radio") },
-                    label = { Text("Radio") },
-                    selected = currentDestination?.route == "studio",
-                    onClick = {
-                        navController.navigate("studio") {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true
@@ -304,9 +287,6 @@ fun MainApp() {
             }
             composable("mic") {
                 MicScreen(micController = micController, scope = scope)
-            }
-            composable("studio") {
-                MusicStudioScreen(musicStudioController)
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })

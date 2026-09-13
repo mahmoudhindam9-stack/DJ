@@ -230,7 +230,7 @@ class MicController(private val context: Context) {
                     else -> "${inputDevices.size} input device(s) • ${outputDevices.size} output device(s)"
                 }
             }
-        } catch (t: Throwable) {
+        } catch (t: Exception) {
             routingStatus = "Unable to read audio devices: ${t.message ?: "Unknown error"}"
         }
     }
@@ -321,7 +321,7 @@ class MicController(private val context: Context) {
                     appendRecordingPcm(buffer, read)
                 }
             }
-        } catch (t: Throwable) { routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"; t.printStackTrace(); stopMic() }
+        } catch (t: Exception) { routingStatus = "Microphone start failed: ${t.message ?: "Unknown error"}"; t.printStackTrace(); stopMic() }
     }
 
     fun toggleVoiceProcessing(enabled: Boolean) {
@@ -335,7 +335,7 @@ class MicController(private val context: Context) {
         try {
             val i = Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_START)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) ContextCompat.startForegroundService(context, i) else context.startService(i)
-        } catch (t: Throwable) { routingStatus = "Microphone service start failed: ${t.message ?: "Unknown error"}" }
+        } catch (t: Exception) { routingStatus = "Microphone service start failed: ${t.message ?: "Unknown error"}" }
     }
 
     private fun stopMicForegroundService() { try { context.startService(Intent(context, MusicService::class.java).setAction(MusicService.ACTION_MIC_STOP)) } catch (_: Throwable) { } }
@@ -356,14 +356,14 @@ class MicController(private val context: Context) {
             recordingTickerJob?.cancel(); recordingTickerJob = CoroutineScope(Dispatchers.Main.immediate).launch {
                 while (isActive && isOutputRecording) { val s = ((System.currentTimeMillis() - recordingStartedAt) / 1000L).coerceAtLeast(0L); recordingDurationText = "%02d:%02d".format(s / 60L, s % 60L); delay(500L) }
             }; true
-        } catch (t: Throwable) { recordingStatus = "Unable to start recording: ${t.message ?: "Unknown error"}"; false }
+        } catch (t: Exception) { recordingStatus = "Unable to start recording: ${t.message ?: "Unknown error"}"; false }
     }
 
     private fun appendRecordingPcm(buffer: ShortArray, count: Int) {
         synchronized(recordingLock) {
             val writer = recordingWriter ?: return; if (!isOutputRecording) return; val bytes = ByteArray(count * 2); var p = 0
             for (i in 0 until count) { val v = buffer[i].toInt(); bytes[p++] = (v and 0xff).toByte(); bytes[p++] = ((v ushr 8) and 0xff).toByte() }
-            try { writer.write(bytes); recordedPcmBytes += bytes.size.toLong() } catch (t: Throwable) { recordingStatus = "Recording write failed: ${t.message ?: "Unknown error"}" }
+            try { writer.write(bytes); recordedPcmBytes += bytes.size.toLong() } catch (t: Exception) { recordingStatus = "Recording write failed: ${t.message ?: "Unknown error"}" }
         }
     }
 
@@ -371,7 +371,7 @@ class MicController(private val context: Context) {
         synchronized(recordingLock) {
             if (!isOutputRecording) return pendingRecordingFile?.exists() == true
             isOutputRecording = false; recordingTickerJob?.cancel(); recordingTickerJob = null; val writer = recordingWriter; recordingWriter = null
-            try { writer?.let { writeWavHeader(it, recordedPcmBytes); it.fd.sync(); it.close() } } catch (t: Throwable) { recordingStatus = "Unable to finalize recording: ${t.message ?: "Unknown error"}" }
+            try { writer?.let { writeWavHeader(it, recordedPcmBytes); it.fd.sync(); it.close() } } catch (t: Exception) { recordingStatus = "Unable to finalize recording: ${t.message ?: "Unknown error"}" }
             pendingRecordingFile = recordingFile; recordingFile = null; recordingStatus = if (pendingRecordingFile?.exists() == true) "Choose a location and filename to save" else "Recording stopped"; return pendingRecordingFile?.exists() == true
         }
     }
@@ -381,7 +381,7 @@ class MicController(private val context: Context) {
     suspend fun savePendingRecording(uri: Uri): Boolean {
         val source = pendingRecordingFile ?: return false
         return try { context.contentResolver.openOutputStream(uri)?.use { out -> source.inputStream().use { it.copyTo(out) } } ?: return false; source.delete(); pendingRecordingFile = null; recordingStatus = "Recording saved successfully"; true }
-        catch (t: Throwable) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
+        catch (t: Exception) { recordingStatus = "Save failed: ${t.message ?: "Unknown error"}"; false }
     }
 
     fun discardPendingRecording() { pendingRecordingFile?.delete(); pendingRecordingFile = null; recordingStatus = "Recording discarded" }
@@ -406,7 +406,7 @@ class MicController(private val context: Context) {
             }
             applyOutputRouting()
             updateRoutingStatus()
-        } catch (t: Throwable) {
+        } catch (t: Exception) {
             routingStatus = "تعذر تغيير مصدر الإدخال: ${t.message ?: "خطأ"}"
         }
     }
@@ -436,7 +436,7 @@ class MicController(private val context: Context) {
                 }
             }
             updateRoutingStatus()
-        } catch (t: Throwable) {
+        } catch (t: Exception) {
             routingStatus = "تعذر تغيير مخرج الصوت: ${t.message ?: "خطأ"}"
         }
     }
@@ -483,21 +483,21 @@ class MicController(private val context: Context) {
             echoCanceler?.enabled = false
             echoCanceler?.release()
             echoCanceler = null
-        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("MicController", "Caught throwable", e) }
         try {
             noiseSuppressor?.enabled = false
             noiseSuppressor?.release()
             noiseSuppressor = null
-        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("MicController", "Caught throwable", e) }
         try {
             audioRecord?.stop()
             audioRecord?.release()
-        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("MicController", "Caught throwable", e) }
         audioRecord = null
         try {
             audioTrack?.stop()
             audioTrack?.release()
-        } catch (e: Throwable) { android.util.Log.w("MicController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("MicController", "Caught throwable", e) }
         audioTrack = null
 
         // We do not own a global communication-device selection anymore; only reset the

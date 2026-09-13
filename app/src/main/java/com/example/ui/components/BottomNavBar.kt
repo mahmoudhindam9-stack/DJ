@@ -48,12 +48,6 @@ fun DjBottomNavBar(
             onClick = { onNavigate("equalizer") }
         )
         DjNavItem(
-            icon = Icons.Filled.MusicNote,
-            label = "Studio",
-            selected = currentRoute == "studio",
-            onClick = { onNavigate("studio") }
-        )
-        DjNavItem(
             icon = Icons.Filled.Cloud,
             label = "Online",
             selected = currentRoute == "online_music",

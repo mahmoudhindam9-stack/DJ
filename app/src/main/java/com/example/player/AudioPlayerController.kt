@@ -149,7 +149,7 @@ class AudioPlayerController(private val context: Context) {
                 previous = { playPrevious() },
                 stop = { pause() }
             )
-        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
     }
 
     fun setQueue(songs: List<AudioItem>, startIndex: Int = 0) {
@@ -311,10 +311,10 @@ class AudioPlayerController(private val context: Context) {
         activePreferredAudioDevice = device
         try {
             exoPlayer.setPreferredAudioDevice(device)
-        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         try {
             previewPlayerInstance?.setPreferredAudioDevice(device)
-        } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
+        } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
     }
 
     private fun applyPreferredAudioDevice() {
@@ -549,10 +549,10 @@ class AudioPlayerController(private val context: Context) {
     fun release() {
         persistSession(force = true)
         PlaybackNotificationRouter.clear("player")
-        try { exoPlayer.setPreferredAudioDevice(null) } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
+        try { exoPlayer.setPreferredAudioDevice(null) } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         if (activeInstance === this) activeInstance = null
         exoPlayer.release()
-        try { previewPlayerInstance?.release() } catch (e: Throwable) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
+        try { previewPlayerInstance?.release() } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         previewPlayerInstance = null
     }
 

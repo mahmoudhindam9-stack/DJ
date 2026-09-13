@@ -119,7 +119,7 @@ class AudiusMusicRepository {
                         return root.optJSONArray("data") ?: JSONArray()
                     }
                 }
-            } catch (t: Throwable) {
+            } catch (t: Exception) {
                 lastFailure = t
             }
         }
