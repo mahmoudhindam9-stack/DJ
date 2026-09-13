@@ -342,7 +342,14 @@ fun DJDeck(
             }
             Slider(
                 value = deck.pitch,
-                onValueChange = { deck.setPlaybackPitch(it) },
+                onValueChange = { newValue ->
+                    val centerTolerance = 0.04f
+                    if (kotlin.math.abs(newValue - 1.0f) <= centerTolerance) {
+                        deck.setPlaybackPitch(1.0f)
+                    } else {
+                        deck.setPlaybackPitch(newValue)
+                    }
+                },
                 valueRange = 0.5f..1.5f,
                 colors = SliderDefaults.colors(
                     thumbColor = MaterialTheme.colorScheme.tertiary,

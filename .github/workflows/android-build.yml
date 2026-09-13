@@ -30,10 +30,10 @@ jobs:
         run: chmod +x gradlew
 
       - name: Assemble debug APK
-        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon
+        run: ./gradlew :app:assembleDebug --stacktrace --no-daemon --warning-mode none
 
       - name: Assemble release APK
-        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon
+        run: ./gradlew :app:assembleRelease --stacktrace --no-daemon --warning-mode none
 
       - name: Verify release APK exists
         shell: bash
