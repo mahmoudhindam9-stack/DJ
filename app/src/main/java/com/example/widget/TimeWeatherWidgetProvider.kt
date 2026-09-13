@@ -88,6 +88,8 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 views.setViewVisibility(R.id.weather_warning, android.view.View.GONE)
             }
             val zone = prefs.getString(TIMEZONE, java.util.TimeZone.getDefault().id) ?: java.util.TimeZone.getDefault().id
+            views.setString(R.id.weather_clock, "setTimeZone", zone)
+            views.setString(R.id.weather_date, "setTimeZone", zone)
 
             val refresh = PendingIntent.getActivity(
                 context, id * 41, Intent(context, LocationWeatherActivity::class.java),
@@ -138,7 +140,13 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
 
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
-        if (intent.action == ACTION_REFRESH) updateAll(context)
+
+        when (intent.action) {
+            ACTION_REFRESH,
+            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+                updateAll(context)
+            }
+        }
     }
 
     override fun onUpdate(context: Context, manager: AppWidgetManager, ids: IntArray) {

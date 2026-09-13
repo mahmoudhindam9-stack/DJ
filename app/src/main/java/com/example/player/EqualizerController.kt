@@ -218,11 +218,11 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         private val companionObjectRegistry = CopyOnWriteArraySet<EqualizerController>()
 
         fun adjustQuickBand(context: Context, band: Int) {
-            val controller = companionObjectRegistry.firstOrNull() ?: EqualizerController(context)
+            val controller = companionObjectRegistry.lastOrNull() ?: EqualizerController(context)
             when (band) {
-                0 -> controller.setQuickBass(if (controller.quickBassDb >= 12) -12 else controller.quickBassDb + 1)
-                1 -> controller.setQuickMid(if (controller.quickMidDb >= 12) -12 else controller.quickMidDb + 1)
-                2 -> controller.setQuickTreble(if (controller.quickTrebleDb >= 12) -12 else controller.quickTrebleDb + 1)
+                0 -> controller.setQuickBass((controller.quickBassDb + 1).coerceAtMost(12))
+                1 -> controller.setQuickMid((controller.quickMidDb + 1).coerceAtMost(12))
+                2 -> controller.setQuickTreble((controller.quickTrebleDb + 1).coerceAtMost(12))
             }
         }
     }

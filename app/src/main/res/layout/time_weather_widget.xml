@@ -2,9 +2,9 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@drawable/widget_dj_bg"
     android:orientation="vertical"
-    android:padding="16dp"
-    android:background="@drawable/widget_dj_bg">
+    android:padding="16dp">
 
     <!-- Top: Weather & Time Row -->
     <LinearLayout
@@ -32,7 +32,7 @@
             android:layout_weight="1"
             android:orientation="vertical"
             android:layout_marginStart="16dp">
-            
+
             <TextView
                 android:id="@+id/weather_temp"
                 android:layout_width="wrap_content"
@@ -42,7 +42,17 @@
                 android:textSize="32sp"
                 android:textStyle="bold"
                 android:includeFontPadding="false" />
-                
+
+            <TextView
+                android:id="@+id/weather_city"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="City"
+                android:textColor="#BBBBBB"
+                android:textSize="12sp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
             <TextView
                 android:id="@+id/weather_condition"
                 android:layout_width="wrap_content"
@@ -53,7 +63,6 @@
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
-
         </LinearLayout>
 
         <LinearLayout
@@ -81,6 +90,35 @@
                 android:format24Hour="EEEE, MMM d"
                 android:textColor="#AAAAAA"
                 android:textSize="12sp" />
+
+            <!-- Refresh controls under date -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginTop="4dp">
+
+                <TextView
+                    android:id="@+id/weather_status"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Location not set"
+                    android:textColor="#888888"
+                    android:textSize="8sp"
+                    android:layout_marginEnd="4dp" />
+
+                <ImageButton
+                    android:id="@+id/weather_refresh"
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:padding="2dp"
+                    android:scaleType="fitCenter"
+                    android:background="?android:attr/selectableItemBackgroundBorderless"
+                    android:src="@android:drawable/ic_popup_sync"
+                    android:tint="#888888"
+                    android:contentDescription="Refresh" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 
@@ -207,30 +245,7 @@
                 android:textColor="#888888"
                 android:textSize="12sp" />
         </LinearLayout>
-
     </LinearLayout>
-
-    <TextView
-        android:id="@+id/weather_status"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:text="Location not set"
-        android:textColor="#666666"
-        android:textSize="10sp"
-        android:gravity="center"
-        android:layout_marginTop="8dp" />
-        
-    <TextView
-        android:id="@+id/weather_city"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:visibility="gone" />
-        
-    <ImageButton
-        android:id="@+id/weather_refresh"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:visibility="gone" />
 
     <TextView
         android:id="@+id/weather_warning"

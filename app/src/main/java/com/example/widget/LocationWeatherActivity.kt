@@ -15,6 +15,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -24,23 +25,19 @@ import java.util.TimeZone
 
 class LocationWeatherActivity : ComponentActivity() {
     private val prefsName = "time_weather_widget"
-    private val permissionPromptedKey = "location_permission_prompted"
     private var timeoutJob: Job? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (!hasLocationPermission()) {
-            val prefs = getSharedPreferences(prefsName, Context.MODE_PRIVATE)
-            if (!prefs.getBoolean(permissionPromptedKey, false)) {
-                prefs.edit().putBoolean(permissionPromptedKey, true).apply()
-                requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 9001)
-            } else {
-                // Already prompted and denied, fallback to IP location
-                fetchWeatherByIpFallback()
-            }
-            return
+        
+        if (hasLocationPermission()) {
+            fetchLocationAndWeather()
+        } else {
+            // Check if we should ask. On Android M+, requestPermissions can just be called.
+            // If they selected "Don't ask again", requestPermissions will immediately call onRequestPermissionsResult with DENIED.
+            requestPermissions(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION), 9001)
         }
-        fetchLocationAndWeather()
+
     }
 
     @Suppress("DEPRECATION")
@@ -88,7 +85,7 @@ class LocationWeatherActivity : ComponentActivity() {
                 fetchWeatherByIpFallback()
                 return
             }
-            timeoutJob = CoroutineScope(Dispatchers.Main).launch {
+            timeoutJob = lifecycleScope.launch {
                 delay(12_000L)
                 runCatching { manager.removeUpdates(listener) }
                 if (!isFinishing) {
@@ -101,7 +98,7 @@ class LocationWeatherActivity : ComponentActivity() {
     }
 
     private fun fetchWeatherByIpFallback() {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching { 
                 val url = "https://get.geojs.io/v1/ip/geo.json"
                 val connection = (URL(url).openConnection() as HttpURLConnection).apply {
@@ -129,7 +126,7 @@ class LocationWeatherActivity : ComponentActivity() {
     }
 
     private fun loadWeather(location: Location) {
-        CoroutineScope(Dispatchers.IO).launch {
+        lifecycleScope.launch(Dispatchers.IO) {
             val result = runCatching { fetchWeather(location.latitude, location.longitude) }.getOrNull()
             withContext(Dispatchers.Main) {
                 if (result != null) {

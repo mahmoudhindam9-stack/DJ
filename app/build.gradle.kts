@@ -36,6 +36,14 @@ android {
         storePassword = System.getenv("STORE_PASSWORD")
         keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD")
+      } else {
+        val debugKs = file("${rootDir}/debug.keystore")
+        if (debugKs.exists()) {
+          storeFile = debugKs
+          storePassword = "android"
+          keyAlias = "androiddebugkey"
+          keyPassword = "android"
+        }
       }
     }
   }

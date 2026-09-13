@@ -168,7 +168,8 @@ class DeckFxAudioProcessor : AudioProcessor {
         for (ch in 0 until 2) {
             for (i in 0 until 10) activeEqFilters[ch][i].resetState()
         }
-        pluginChain.forEach { it.reset() }
+        val currentPlugins = pluginChain
+        currentPlugins.forEach { it.reset() }
     }
     override fun reset() {
         flush()

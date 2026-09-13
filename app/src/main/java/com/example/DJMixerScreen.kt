@@ -79,7 +79,8 @@ fun DJMixerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(top = 16.dp, bottom = 16.dp),
+            .padding(top = 16.dp, bottom = 16.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -140,7 +141,7 @@ fun DJMixerScreen(
 
         // Decks
         Row(
-            modifier = Modifier.fillMaxWidth().weight(1f).padding(horizontal = 16.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(modifier = Modifier.weight(1f)) {
@@ -149,6 +150,28 @@ fun DJMixerScreen(
             Box(modifier = Modifier.weight(1f)) {
                 DJDeck(deckB, audioLibrary, onImportClicked, onPauseMainPlayer, MaterialTheme.colorScheme.secondary)
             }
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // DJ FX / Effects
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                DJFxRack(deckA)
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                DJFxRack(deckB)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        // Sounds / Sound FX
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            com.example.djfx.DjFxBoard(controller = djFxController)
         }
     }
 }
@@ -164,14 +187,13 @@ fun DJDeck(
     var showTrackSelector by remember { mutableStateOf(false) }
 
     DjSurfaceCard(
-        modifier = Modifier.fillMaxHeight(),
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         borderColor = accentColor.copy(alpha = 0.5f)
     ) {
         Column(
             modifier = Modifier
-                .padding(12.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(12.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             // Deck Label
@@ -331,11 +353,6 @@ fun DJDeck(
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // FX Rack inside deck
-            DJFxRack(deck)
         }
     }
 

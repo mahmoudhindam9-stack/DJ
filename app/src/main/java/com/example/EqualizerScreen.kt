@@ -17,6 +17,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.player.EqualizerController
+import com.example.ui.components.CustomVerticalSlider
 import com.example.ui.components.DjSurfaceCard
 import kotlin.math.roundToInt
 
@@ -220,8 +221,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                                     .padding(horizontal = 4.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Vertical slider hack
-                                Slider(
+                                CustomVerticalSlider(
                                     value = band.currentLevelDb.toFloat(),
                                     onValueChange = {
                                         eqController.updateBandLevel(band.id, it.roundToInt())
@@ -230,13 +230,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                                     enabled = eqController.isEnabled,
                                     modifier = Modifier
                                         .fillMaxHeight()
-                                        .rotate(-90f)
-                                        .width(200.dp), // Width becomes height after rotation
-                                    colors = SliderDefaults.colors(
-                                        thumbColor = MaterialTheme.colorScheme.primary,
-                                        activeTrackColor = MaterialTheme.colorScheme.primary,
-                                        inactiveTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                                    )
+                                        .width(48.dp)
                                 )
                             }
                             

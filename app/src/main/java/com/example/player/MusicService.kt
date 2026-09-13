@@ -108,17 +108,18 @@ class MusicService : Service() {
         progressJob = serviceScope.launch {
             while (isActive) {
                 if (playerController?.isPlaying == true) {
+                    playerController?.updateProgress()
                     refreshPlaybackPosition()
                     playerController?.let {
                         PlaybackNotificationRouter.updateProgress(
                             applicationContext, "player", it.currentPositionMs, it.durationMs
                         )
                     }
+                    kotlinx.coroutines.delay(100)
                 } else {
-                    progressJob?.cancel()
                     break
                 }
-                delay(1000)
+                delay(100)
             }
         }
     }

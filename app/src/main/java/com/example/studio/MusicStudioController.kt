@@ -29,7 +29,12 @@ import kotlin.math.sin
  * Includes multi-track piano roll, chords, melody/rhythm banks, live Darbuka pads,
  * and a full Studio Master FX Rack (Reverb, Delay, Filter, Warmth).
  */
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+
 class MusicStudioController(private val context: Context) {
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     data class StudioNote(var pitch: Int, var startBeat: Float, var lengthBeats: Float = 1f, var velocity: Float = 0.9f)
     data class StudioTrack(
         val id: Int,
@@ -166,7 +171,7 @@ class MusicStudioController(private val context: Context) {
     private var previewTrack: AudioTrack? = null
 
     fun playNotePreview(pitch: Int) {
-        CoroutineScope(Dispatchers.Default).launch {
+        controllerScope.launch {
             try {
                 val freq = midiToHz(pitch)
                 val durSec = 0.25
@@ -518,7 +523,7 @@ class MusicStudioController(private val context: Context) {
     }
 
     fun playLiveDarbuka(type: String) {
-        CoroutineScope(Dispatchers.Default).launch {
+        controllerScope.launch {
             try {
                 val durSec = 0.30
                 val samples = (sampleRate * durSec).toInt()
@@ -662,6 +667,7 @@ class MusicStudioController(private val context: Context) {
 
     fun close() {
         stopPlayback()
+        controllerScope.cancel()
         try { previewTrack?.stop() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
         try { previewTrack?.release() } catch (e: Throwable) { android.util.Log.w("MusicStudioController", "Caught throwable", e) }
         previewTrack = null

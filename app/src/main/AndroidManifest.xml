@@ -39,19 +39,31 @@
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
         </receiver>
         <receiver android:name=".widget.MusicWidgetProvider" android:exported="true" android:label="@string/widget_music_player_label">
-            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_widget_info" />
         </receiver>
         <receiver android:name=".widget.QuickPlayerWidgetProvider" android:exported="true" android:label="@string/widget_quick_player_label">
-            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/quick_player_widget_info" />
         </receiver>
         <receiver android:name=".widget.DJMixerWidgetProvider" android:exported="true" android:label="@string/widget_dj_mixer_label">
-            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/dj_mixer_widget_info" />
         </receiver>
         <receiver android:name=".widget.TimeWeatherWidgetProvider" android:exported="true" android:label="@string/widget_time_weather_label">
-            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/time_weather_widget_info" />
         </receiver>
     

@@ -169,10 +169,6 @@ fun MainApp() {
     // Synchronize progress for seekbar
     LaunchedEffect(Unit) {
         eqController.attachToSession(playerController.exoPlayer.audioSessionId)
-        while (true) {
-            playerController.updateProgress()
-            delay(50)
-        }
     }
 
     DisposableEffect(Unit) {

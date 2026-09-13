@@ -158,6 +158,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
 
     fun release() {
         activeDecks.remove(this)
+        eqController.release()
         exoPlayer.release()
     }
 
