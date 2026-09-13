@@ -10,9 +10,25 @@ import com.example.MainActivity
 import com.example.R
 import com.example.player.MusicService
 import com.example.player.PlaybackNotificationRouter
+import org.json.JSONArray
 
 class TimeWeatherWidgetProvider : AppWidgetProvider() {
     companion object {
+        fun mapCodeToDrawable(code: Int, isDay: Boolean = true): Int {
+            return when (code) {
+                0 -> if (isDay) R.drawable.ic_weather_sunny else R.drawable.ic_weather_clear_night
+                1, 2 -> if (isDay) R.drawable.ic_weather_partly_cloudy else R.drawable.ic_weather_clear_night
+                3 -> R.drawable.ic_weather_cloudy
+                45, 48 -> R.drawable.ic_weather_fog
+                51, 53, 55, 56, 57 -> R.drawable.ic_weather_rain
+                61, 63, 65, 66, 67 -> R.drawable.ic_weather_rain
+                71, 73, 75, 77, 85, 86 -> R.drawable.ic_weather_snow
+                80, 81, 82 -> R.drawable.ic_weather_rain
+                95, 96, 99 -> R.drawable.ic_weather_thunderstorm
+                else -> R.drawable.ic_weather_unknown
+            }
+        }
+
         private fun mapConditionToDrawable(condition: String): Int {
             return when {
                 condition.contains("🌙") || condition.contains("Night") -> R.drawable.ic_weather_clear_night
@@ -35,6 +51,8 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
         private const val TIMEZONE = "timezone"
         private const val STATUS = "status"
         private const val WARNING = "warning"
+        private const val FORECAST_HOURLY = "forecast_hourly"
+        private const val FORECAST_DAILY = "forecast_daily"
 
         private const val LAT = "lat"
         private const val LON = "lon"
@@ -44,11 +62,37 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             updateAll(context)
         }
 
-        fun updateWeather(context: Context, city: String, temperature: String, condition: String, timezone: String, warning: String = "", lat: Double = 0.0, lon: Double = 0.0) {
-            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+        fun updateWeather(
+            context: Context,
+            city: String,
+            temperature: String,
+            condition: String,
+            timezone: String,
+            warning: String = "",
+            lat: Double = 0.0,
+            lon: Double = 0.0,
+            hourlyJson: String? = null,
+            dailyJson: String? = null
+        ) {
+            val editor = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
                 .putString(CITY, city).putString(TEMP, temperature).putString(CONDITION, condition)
                 .putString(TIMEZONE, timezone).putString(STATUS, "Updated now").putString(WARNING, warning)
-                .putFloat(LAT, lat.toFloat()).putFloat(LON, lon.toFloat()).apply()
+                .putFloat(LAT, lat.toFloat()).putFloat(LON, lon.toFloat())
+            if (!hourlyJson.isNullOrEmpty()) {
+                editor.putString(FORECAST_HOURLY, hourlyJson)
+            }
+            if (!dailyJson.isNullOrEmpty()) {
+                editor.putString(FORECAST_DAILY, dailyJson)
+            }
+            editor.apply()
+            updateAll(context)
+        }
+
+        fun updateForecast(context: Context, hourlyJson: String, dailyJson: String) {
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+                .putString(FORECAST_HOURLY, hourlyJson)
+                .putString(FORECAST_DAILY, dailyJson)
+                .apply()
             updateAll(context)
         }
 
@@ -133,6 +177,62 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             views.setOnClickPendingIntent(R.id.widget_title, openPlayerPending)
             views.setOnClickPendingIntent(R.id.widget_artist, openPlayerPending)
             views.setOnClickPendingIntent(R.id.widget_music_container, openPlayerPending)
+
+            // Forecast container click listener (opens weather screen)
+            views.setOnClickPendingIntent(R.id.widget_forecast_container, openWeatherPending)
+
+            // Bind Hourly Forecast (5 slots)
+            val hourlyRaw = prefs.getString(FORECAST_HOURLY, null)
+            val hourlyTimeIds = intArrayOf(R.id.hourly_time_1, R.id.hourly_time_2, R.id.hourly_time_3, R.id.hourly_time_4, R.id.hourly_time_5)
+            val hourlyIconIds = intArrayOf(R.id.hourly_icon_1, R.id.hourly_icon_2, R.id.hourly_icon_3, R.id.hourly_icon_4, R.id.hourly_icon_5)
+            val hourlyTempIds = intArrayOf(R.id.hourly_temp_1, R.id.hourly_temp_2, R.id.hourly_temp_3, R.id.hourly_temp_4, R.id.hourly_temp_5)
+
+            if (!hourlyRaw.isNullOrEmpty()) {
+                runCatching {
+                    val arr = JSONArray(hourlyRaw)
+                    for (i in 0 until 5) {
+                        if (i < arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            views.setTextViewText(hourlyTimeIds[i], obj.optString("time", "--"))
+                            views.setTextViewText(hourlyTempIds[i], obj.optString("temp", "--°"))
+                            val code = obj.optInt("code", 0)
+                            val isDay = obj.optBoolean("isDay", true)
+                            views.setImageViewResource(hourlyIconIds[i], mapCodeToDrawable(code, isDay))
+                        }
+                    }
+                    views.setTextViewText(R.id.forecast_hourly_subtitle, "Next 5 Hours")
+                }.onFailure {
+                    views.setTextViewText(R.id.forecast_hourly_subtitle, "Hourly Forecast")
+                }
+            } else {
+                views.setTextViewText(R.id.forecast_hourly_subtitle, "Tap ⟳ to load")
+            }
+
+            // Bind Daily Forecast (5 slots)
+            val dailyRaw = prefs.getString(FORECAST_DAILY, null)
+            val dailyDayIds = intArrayOf(R.id.daily_day_1, R.id.daily_day_2, R.id.daily_day_3, R.id.daily_day_4, R.id.daily_day_5)
+            val dailyIconIds = intArrayOf(R.id.daily_icon_1, R.id.daily_icon_2, R.id.daily_icon_3, R.id.daily_icon_4, R.id.daily_icon_5)
+            val dailyTempIds = intArrayOf(R.id.daily_temp_1, R.id.daily_temp_2, R.id.daily_temp_3, R.id.daily_temp_4, R.id.daily_temp_5)
+
+            if (!dailyRaw.isNullOrEmpty()) {
+                runCatching {
+                    val arr = JSONArray(dailyRaw)
+                    for (i in 0 until 5) {
+                        if (i < arr.length()) {
+                            val obj = arr.getJSONObject(i)
+                            views.setTextViewText(dailyDayIds[i], obj.optString("day", "--"))
+                            views.setTextViewText(dailyTempIds[i], obj.optString("temp", "--° / --°"))
+                            val code = obj.optInt("code", 0)
+                            views.setImageViewResource(dailyIconIds[i], mapCodeToDrawable(code, true))
+                        }
+                    }
+                    views.setTextViewText(R.id.forecast_daily_subtitle, "High / Low")
+                }.onFailure {
+                    views.setTextViewText(R.id.forecast_daily_subtitle, "5-Day Outlook")
+                }
+            } else {
+                views.setTextViewText(R.id.forecast_daily_subtitle, "5-Day Outlook")
+            }
 
             manager.updateAppWidget(id, views)
         }

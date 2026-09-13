@@ -67,6 +67,30 @@ fun WeatherScreen(navController: NavController) {
             val data = withContext(Dispatchers.IO) { fetchFullWeather(lat, lon) }
             weatherData = data
             errorMsg = null
+            runCatching {
+                val hourlyArr = org.json.JSONArray()
+                for (h in data.hourly.take(5)) {
+                    hourlyArr.put(org.json.JSONObject().apply {
+                        put("time", h.time)
+                        put("temp", "${h.temp}°")
+                        put("code", h.weatherCode)
+                        put("isDay", h.isDay)
+                    })
+                }
+                val dailyArr = org.json.JSONArray()
+                for (d in data.daily.take(5)) {
+                    dailyArr.put(org.json.JSONObject().apply {
+                        put("day", if (d.day.length > 3) d.day.substring(0, 3) else d.day)
+                        put("temp", "${d.maxTemp}° / ${d.minTemp}°")
+                        put("code", d.weatherCode)
+                    })
+                }
+                com.example.widget.TimeWeatherWidgetProvider.updateForecast(
+                    context,
+                    hourlyArr.toString(),
+                    dailyArr.toString()
+                )
+            }
         } catch (e: Exception) {
             errorMsg = "Could not fetch weather data: ${e.message}"
         } finally {

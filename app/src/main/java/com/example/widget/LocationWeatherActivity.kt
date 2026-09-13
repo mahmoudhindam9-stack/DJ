@@ -21,6 +21,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
@@ -120,7 +121,18 @@ class LocationWeatherActivity : ComponentActivity() {
             
             withContext(Dispatchers.Main) {
                 if (result != null) {
-                    TimeWeatherWidgetProvider.updateWeather(this@LocationWeatherActivity, result.city, result.temperature, result.condition, result.timezone, result.warning, result.lat, result.lon)
+                    TimeWeatherWidgetProvider.updateWeather(
+                        this@LocationWeatherActivity,
+                        result.city,
+                        result.temperature,
+                        result.condition,
+                        result.timezone,
+                        result.warning,
+                        result.lat,
+                        result.lon,
+                        result.hourlyJson,
+                        result.dailyJson
+                    )
                 } else {
                     TimeWeatherWidgetProvider.setStatus(this@LocationWeatherActivity, "Weather unavailable")
                 }
@@ -134,7 +146,18 @@ class LocationWeatherActivity : ComponentActivity() {
             val result = runCatching { fetchWeather(location.latitude, location.longitude) }.getOrNull()
             withContext(Dispatchers.Main) {
                 if (result != null) {
-                    TimeWeatherWidgetProvider.updateWeather(this@LocationWeatherActivity, result.city, result.temperature, result.condition, result.timezone, result.warning, result.lat, result.lon)
+                    TimeWeatherWidgetProvider.updateWeather(
+                        this@LocationWeatherActivity,
+                        result.city,
+                        result.temperature,
+                        result.condition,
+                        result.timezone,
+                        result.warning,
+                        result.lat,
+                        result.lon,
+                        result.hourlyJson,
+                        result.dailyJson
+                    )
                 } else {
                     TimeWeatherWidgetProvider.setStatus(this@LocationWeatherActivity, "Weather unavailable")
                 }
@@ -143,10 +166,20 @@ class LocationWeatherActivity : ComponentActivity() {
         }
     }
 
-    private data class WeatherResult(val city: String, val temperature: String, val condition: String, val timezone: String, val warning: String, val lat: Double, val lon: Double)
+    private data class WeatherResult(
+        val city: String,
+        val temperature: String,
+        val condition: String,
+        val timezone: String,
+        val warning: String,
+        val lat: Double,
+        val lon: Double,
+        val hourlyJson: String = "",
+        val dailyJson: String = ""
+    )
 
     private fun fetchWeather(latitude: Double, longitude: Double, fallbackCity: String? = null): WeatherResult {
-        val url = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,weather_code,is_day&timezone=auto"
+        val url = "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&current=temperature_2m,weather_code,is_day&hourly=temperature_2m,weather_code,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto"
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000
@@ -164,9 +197,66 @@ class LocationWeatherActivity : ComponentActivity() {
         val timezone = json.optString("timezone", TimeZone.getDefault().id)
         val isDay = current.optInt("is_day", 1) == 1
         val (desc, warn) = weatherDescription(current.getInt("weather_code"), isDay)
-        
+
+        // Parse next 5 hours
+        val hourlyJsonObj = json.optJSONObject("hourly")
+        val hourlyArray = org.json.JSONArray()
+        if (hourlyJsonObj != null) {
+            val times = hourlyJsonObj.optJSONArray("time")
+            val temps = hourlyJsonObj.optJSONArray("temperature_2m")
+            val codes = hourlyJsonObj.optJSONArray("weather_code")
+            val isDays = hourlyJsonObj.optJSONArray("is_day")
+            val sdfIn = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
+            val sdfOut = SimpleDateFormat("h a", Locale.getDefault())
+            val nowMs = System.currentTimeMillis()
+            if (times != null && temps != null && codes != null) {
+                for (i in 0 until times.length()) {
+                    val tStr = times.optString(i, "")
+                    val parsedDate = runCatching { sdfIn.parse(tStr) }.getOrNull()
+                    if (parsedDate != null && parsedDate.time < nowMs - 3600_000L) {
+                        continue
+                    }
+                    val item = JSONObject().apply {
+                        put("time", if (hourlyArray.length() == 0) "Now" else (parsedDate?.let { sdfOut.format(it) } ?: tStr))
+                        put("temp", String.format(Locale.getDefault(), "%.0f°", temps.optDouble(i, 0.0)))
+                        put("code", codes.optInt(i, 0))
+                        put("isDay", isDays?.optInt(i, 1) == 1)
+                    }
+                    hourlyArray.put(item)
+                    if (hourlyArray.length() >= 5) break
+                }
+            }
+        }
+
+        // Parse next 5 days
+        val dailyJsonObj = json.optJSONObject("daily")
+        val dailyArray = org.json.JSONArray()
+        if (dailyJsonObj != null) {
+            val times = dailyJsonObj.optJSONArray("time")
+            val maxTemps = dailyJsonObj.optJSONArray("temperature_2m_max")
+            val minTemps = dailyJsonObj.optJSONArray("temperature_2m_min")
+            val codes = dailyJsonObj.optJSONArray("weather_code")
+            val sdfDayIn = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+            val sdfDayOut = SimpleDateFormat("EEE", Locale.getDefault())
+            if (times != null && maxTemps != null && minTemps != null && codes != null) {
+                for (i in 0 until minOf(5, times.length())) {
+                    val tStr = times.optString(i, "")
+                    val parsedDate = runCatching { sdfDayIn.parse(tStr) }.getOrNull()
+                    val dayName = if (i == 0) "Today" else (parsedDate?.let { sdfDayOut.format(it) } ?: tStr)
+                    val maxT = String.format(Locale.getDefault(), "%.0f°", maxTemps.optDouble(i, 0.0))
+                    val minT = String.format(Locale.getDefault(), "%.0f°", minTemps.optDouble(i, 0.0))
+                    val item = JSONObject().apply {
+                        put("day", dayName)
+                        put("temp", "$maxT / $minT")
+                        put("code", codes.optInt(i, 0))
+                    }
+                    dailyArray.put(item)
+                }
+            }
+        }
+
         val cityName = fallbackCity ?: reverseGeocode(latitude, longitude)
-        
+
         return WeatherResult(
             city = cityName,
             temperature = String.format(Locale.getDefault(), "%.0f°C", current.getDouble("temperature_2m")),
@@ -174,7 +264,9 @@ class LocationWeatherActivity : ComponentActivity() {
             timezone = timezone,
             warning = warn,
             lat = latitude,
-            lon = longitude
+            lon = longitude,
+            hourlyJson = hourlyArray.toString(),
+            dailyJson = dailyArray.toString()
         )
     }
 
