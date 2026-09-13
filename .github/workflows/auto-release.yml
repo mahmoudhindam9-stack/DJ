@@ -50,8 +50,10 @@ jobs:
 
       - name: Rename APK
         run: |
-          if [ -f app/build/outputs/apk/release/app-release.apk ]; then
-            mv app/build/outputs/apk/release/app-release.apk app-update.apk
+          APK_FILE=$(find app/build/outputs/apk/release -maxdepth 1 -type f -name '*.apk' | head -n 1)
+          if [ -n "$APK_FILE" ] && [ -f "$APK_FILE" ]; then
+            mv "$APK_FILE" app-update.apk
+            echo "Found and moved $APK_FILE to app-update.apk"
           else
             echo "APK not found! Check your build logs."
             exit 1
