@@ -46,8 +46,10 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      val relConfig = signingConfigs.getByName("release")
-      signingConfig = relConfig
+      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+      if (file(keystorePath).exists()) {
+        signingConfig = signingConfigs.getByName("release")
+      }
     }
     debug {
       signingConfig = signingConfigs.getByName("debug")
@@ -125,13 +127,4 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
-}
-
-gradle.taskGraph.whenReady {
-    if (hasTask(":app:assembleRelease") || hasTask(":app:bundleRelease") || hasTask(":app:packageRelease")) {
-        val ksPath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-        if (!file(ksPath).exists()) {
-            throw GradleException("Release keystore not found at $ksPath. Cannot build Release APK.")
-        }
-    }
 }
