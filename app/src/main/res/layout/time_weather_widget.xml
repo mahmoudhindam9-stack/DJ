@@ -4,7 +4,8 @@
     android:layout_height="match_parent"
     android:background="@drawable/widget_dj_bg"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingHorizontal="10dp"
+    android:paddingVertical="6dp">
 
     <!-- Top: Weather & Time Row -->
     <LinearLayout
@@ -12,7 +13,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/widget_panel_bg"
-        android:padding="16dp"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:clickable="true"
@@ -20,8 +22,8 @@
 
         <ImageView
             android:id="@+id/weather_icon"
-            android:layout_width="64dp"
-            android:layout_height="64dp"
+            android:layout_width="44dp"
+            android:layout_height="44dp"
             android:contentDescription="Weather icon"
             android:src="@drawable/ic_weather_sunny"
             android:scaleType="fitCenter" />
@@ -31,7 +33,7 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:orientation="vertical"
-            android:layout_marginStart="16dp">
+            android:layout_marginStart="10dp">
 
             <TextView
                 android:id="@+id/weather_temp"
@@ -39,7 +41,7 @@
                 android:layout_height="wrap_content"
                 android:text="24°"
                 android:textColor="#FFFFFF"
-                android:textSize="32sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
                 android:includeFontPadding="false" />
 
@@ -49,7 +51,7 @@
                 android:layout_height="wrap_content"
                 android:text="City"
                 android:textColor="#BBBBBB"
-                android:textSize="12sp"
+                android:textSize="11sp"
                 android:maxLines="1"
                 android:ellipsize="end" />
 
@@ -59,7 +61,7 @@
                 android:layout_height="wrap_content"
                 android:text="Clear Sky"
                 android:textColor="#2962FF"
-                android:textSize="14sp"
+                android:textSize="12sp"
                 android:textStyle="bold"
                 android:maxLines="1"
                 android:ellipsize="end" />
@@ -78,7 +80,7 @@
                 android:format12Hour="h:mm"
                 android:format24Hour="HH:mm"
                 android:textColor="#FFFFFF"
-                android:textSize="32sp"
+                android:textSize="24sp"
                 android:textStyle="bold"
                 android:includeFontPadding="false" />
 
@@ -89,7 +91,7 @@
                 android:format12Hour="EEEE, MMM d"
                 android:format24Hour="EEEE, MMM d"
                 android:textColor="#AAAAAA"
-                android:textSize="12sp" />
+                android:textSize="11sp" />
 
             <!-- Refresh controls under date -->
             <LinearLayout
@@ -97,7 +99,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginTop="4dp">
+                android:layout_marginTop="2dp">
 
                 <TextView
                     android:id="@+id/weather_status"
@@ -110,8 +112,8 @@
 
                 <ImageButton
                     android:id="@+id/weather_refresh"
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:padding="2dp"
                     android:scaleType="fitCenter"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
@@ -124,7 +126,7 @@
 
     <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="12dp" />
+        android:layout_height="6dp" />
 
     <!-- Bottom: Music Player Row -->
     <LinearLayout
@@ -132,7 +134,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/widget_panel_bg"
-        android:padding="16dp"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
         android:orientation="vertical"
         android:clickable="true"
         android:focusable="true">
@@ -155,7 +158,7 @@
                     android:layout_height="wrap_content"
                     android:text="No Track Loaded"
                     android:textColor="#FFFFFF"
-                    android:textSize="16sp"
+                    android:textSize="13sp"
                     android:textStyle="bold"
                     android:maxLines="1"
                     android:ellipsize="end" />
@@ -166,10 +169,10 @@
                     android:layout_height="wrap_content"
                     android:text="DJ Engine"
                     android:textColor="#AAAAAA"
-                    android:textSize="14sp"
+                    android:textSize="11sp"
                     android:maxLines="1"
                     android:ellipsize="end"
-                    android:layout_marginTop="2dp" />
+                    android:layout_marginTop="1dp" />
             </LinearLayout>
 
             <!-- Controls -->
@@ -178,12 +181,12 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:layout_marginStart="8dp">
+                android:layout_marginStart="6dp">
 
                 <ImageButton
                     android:id="@+id/widget_btn_prev"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_media_previous"
                     android:tint="#FFFFFF"
@@ -191,9 +194,9 @@
 
                 <ImageButton
                     android:id="@+id/widget_btn_play"
-                    android:layout_width="48dp"
-                    android:layout_height="48dp"
-                    android:layout_marginHorizontal="8dp"
+                    android:layout_width="36dp"
+                    android:layout_height="36dp"
+                    android:layout_marginHorizontal="6dp"
                     android:background="@drawable/widget_play_btn_bg"
                     android:src="@android:drawable/ic_media_play"
                     android:tint="#FFFFFF"
@@ -201,8 +204,8 @@
 
                 <ImageButton
                     android:id="@+id/widget_btn_next"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
+                    android:layout_width="32dp"
+                    android:layout_height="32dp"
                     android:background="?android:attr/selectableItemBackgroundBorderless"
                     android:src="@android:drawable/ic_media_next"
                     android:tint="#FFFFFF"
@@ -216,7 +219,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginTop="12dp">
+            android:layout_marginTop="4dp">
 
             <TextView
                 android:id="@+id/widget_time_current"
@@ -224,15 +227,15 @@
                 android:layout_height="wrap_content"
                 android:text="0:00"
                 android:textColor="#888888"
-                android:textSize="12sp" />
+                android:textSize="10sp" />
 
             <ProgressBar
                 android:id="@+id/widget_progress"
                 style="?android:attr/progressBarStyleHorizontal"
                 android:layout_width="0dp"
-                android:layout_height="6dp"
+                android:layout_height="4dp"
                 android:layout_weight="1"
-                android:layout_marginHorizontal="8dp"
+                android:layout_marginHorizontal="6dp"
                 android:max="1000"
                 android:progress="0"
                 android:progressDrawable="@drawable/widget_progress_bg" />
@@ -243,7 +246,7 @@
                 android:layout_height="wrap_content"
                 android:text="0:00"
                 android:textColor="#888888"
-                android:textSize="12sp" />
+                android:textSize="10sp" />
         </LinearLayout>
     </LinearLayout>
 
@@ -251,7 +254,7 @@
     <FrameLayout
         android:id="@+id/forecast_spacer"
         android:layout_width="match_parent"
-        android:layout_height="12dp" />
+        android:layout_height="6dp" />
 
     <!-- Forecast Section: Directly below existing Music Player -->
     <LinearLayout
@@ -259,7 +262,8 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/widget_panel_bg"
-        android:padding="14dp"
+        android:paddingHorizontal="10dp"
+        android:paddingVertical="6dp"
         android:orientation="vertical"
         android:clickable="true"
         android:focusable="true">
@@ -270,7 +274,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="8dp">
+            android:layout_marginBottom="4dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -278,7 +282,7 @@
                 android:layout_weight="1"
                 android:text="HOURLY FORECAST"
                 android:textColor="#2962FF"
-                android:textSize="10sp"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
 
@@ -288,7 +292,7 @@
                 android:layout_height="wrap_content"
                 android:text="Next Hours"
                 android:textColor="#777777"
-                android:textSize="10sp" />
+                android:textSize="9sp" />
         </LinearLayout>
 
         <!-- Hourly Forecast Row: 5 Columns -->
@@ -313,14 +317,14 @@
                     android:layout_height="wrap_content"
                     android:text="Now"
                     android:textColor="#AAAAAA"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:maxLines="1" />
 
                 <ImageView
                     android:id="@+id/hourly_icon_1"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_marginVertical="3dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginVertical="2dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Hourly weather" />
@@ -331,7 +335,7 @@
                     android:layout_height="wrap_content"
                     android:text="--°"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -349,14 +353,14 @@
                     android:layout_height="wrap_content"
                     android:text="+1h"
                     android:textColor="#AAAAAA"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:maxLines="1" />
 
                 <ImageView
                     android:id="@+id/hourly_icon_2"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_marginVertical="3dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginVertical="2dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Hourly weather" />
@@ -367,7 +371,7 @@
                     android:layout_height="wrap_content"
                     android:text="--°"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -385,14 +389,14 @@
                     android:layout_height="wrap_content"
                     android:text="+2h"
                     android:textColor="#AAAAAA"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:maxLines="1" />
 
                 <ImageView
                     android:id="@+id/hourly_icon_3"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_marginVertical="3dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginVertical="2dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Hourly weather" />
@@ -403,7 +407,7 @@
                     android:layout_height="wrap_content"
                     android:text="--°"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -421,14 +425,14 @@
                     android:layout_height="wrap_content"
                     android:text="+3h"
                     android:textColor="#AAAAAA"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:maxLines="1" />
 
                 <ImageView
                     android:id="@+id/hourly_icon_4"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_marginVertical="3dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginVertical="2dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Hourly weather" />
@@ -439,7 +443,7 @@
                     android:layout_height="wrap_content"
                     android:text="--°"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -457,14 +461,14 @@
                     android:layout_height="wrap_content"
                     android:text="+4h"
                     android:textColor="#AAAAAA"
-                    android:textSize="11sp"
+                    android:textSize="10sp"
                     android:maxLines="1" />
 
                 <ImageView
                     android:id="@+id/hourly_icon_5"
-                    android:layout_width="26dp"
-                    android:layout_height="26dp"
-                    android:layout_marginVertical="3dp"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_marginVertical="2dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Hourly weather" />
@@ -475,7 +479,7 @@
                     android:layout_height="wrap_content"
                     android:text="--°"
                     android:textColor="#FFFFFF"
-                    android:textSize="13sp"
+                    android:textSize="11sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
@@ -485,8 +489,8 @@
             android:layout_width="match_parent"
             android:layout_height="1dp"
             android:background="#1e2129"
-            android:layout_marginTop="12dp"
-            android:layout_marginBottom="10dp" />
+            android:layout_marginTop="5dp"
+            android:layout_marginBottom="4dp" />
 
         <!-- Daily Forecast Header -->
         <LinearLayout
@@ -494,7 +498,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
+            android:layout_marginBottom="3dp">
 
             <TextView
                 android:layout_width="0dp"
@@ -502,7 +506,7 @@
                 android:layout_weight="1"
                 android:text="5-DAY FORECAST"
                 android:textColor="#2962FF"
-                android:textSize="10sp"
+                android:textSize="9sp"
                 android:textStyle="bold"
                 android:letterSpacing="0.05" />
 
@@ -512,7 +516,7 @@
                 android:layout_height="wrap_content"
                 android:text="High / Low"
                 android:textColor="#777777"
-                android:textSize="10sp" />
+                android:textSize="9sp" />
         </LinearLayout>
 
         <!-- Daily Forecast Rows -->
@@ -528,7 +532,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingVertical="3dp">
+                android:paddingVertical="1dp">
 
                 <TextView
                     android:id="@+id/daily_day_1"
@@ -537,17 +541,17 @@
                     android:layout_weight="1"
                     android:text="Today"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
 
                 <ImageView
                     android:id="@+id/daily_icon_1"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Daily weather icon"
-                    android:layout_marginEnd="16dp" />
+                    android:layout_marginEnd="8dp" />
 
                 <TextView
                     android:id="@+id/daily_temp_1"
@@ -555,7 +559,7 @@
                     android:layout_height="wrap_content"
                     android:text="--° / --°"
                     android:textColor="#CCCCCC"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -565,7 +569,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingVertical="3dp">
+                android:paddingVertical="1dp">
 
                 <TextView
                     android:id="@+id/daily_day_2"
@@ -574,17 +578,17 @@
                     android:layout_weight="1"
                     android:text="Tomorrow"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
 
                 <ImageView
                     android:id="@+id/daily_icon_2"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Daily weather icon"
-                    android:layout_marginEnd="16dp" />
+                    android:layout_marginEnd="8dp" />
 
                 <TextView
                     android:id="@+id/daily_temp_2"
@@ -592,7 +596,7 @@
                     android:layout_height="wrap_content"
                     android:text="--° / --°"
                     android:textColor="#CCCCCC"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -602,7 +606,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingVertical="3dp">
+                android:paddingVertical="1dp">
 
                 <TextView
                     android:id="@+id/daily_day_3"
@@ -611,17 +615,17 @@
                     android:layout_weight="1"
                     android:text="Day 3"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
 
                 <ImageView
                     android:id="@+id/daily_icon_3"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Daily weather icon"
-                    android:layout_marginEnd="16dp" />
+                    android:layout_marginEnd="8dp" />
 
                 <TextView
                     android:id="@+id/daily_temp_3"
@@ -629,7 +633,7 @@
                     android:layout_height="wrap_content"
                     android:text="--° / --°"
                     android:textColor="#CCCCCC"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -639,7 +643,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingVertical="3dp">
+                android:paddingVertical="1dp">
 
                 <TextView
                     android:id="@+id/daily_day_4"
@@ -648,17 +652,17 @@
                     android:layout_weight="1"
                     android:text="Day 4"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
 
                 <ImageView
                     android:id="@+id/daily_icon_4"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Daily weather icon"
-                    android:layout_marginEnd="16dp" />
+                    android:layout_marginEnd="8dp" />
 
                 <TextView
                     android:id="@+id/daily_temp_4"
@@ -666,7 +670,7 @@
                     android:layout_height="wrap_content"
                     android:text="--° / --°"
                     android:textColor="#CCCCCC"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
 
@@ -676,7 +680,7 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:gravity="center_vertical"
-                android:paddingVertical="3dp">
+                android:paddingVertical="1dp">
 
                 <TextView
                     android:id="@+id/daily_day_5"
@@ -685,17 +689,17 @@
                     android:layout_weight="1"
                     android:text="Day 5"
                     android:textColor="#FFFFFF"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
 
                 <ImageView
                     android:id="@+id/daily_icon_5"
-                    android:layout_width="22dp"
-                    android:layout_height="22dp"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
                     android:src="@drawable/ic_weather_sunny"
                     android:scaleType="fitCenter"
                     android:contentDescription="Daily weather icon"
-                    android:layout_marginEnd="16dp" />
+                    android:layout_marginEnd="8dp" />
 
                 <TextView
                     android:id="@+id/daily_temp_5"
@@ -703,7 +707,7 @@
                     android:layout_height="wrap_content"
                     android:text="--° / --°"
                     android:textColor="#CCCCCC"
-                    android:textSize="12sp"
+                    android:textSize="10sp"
                     android:textStyle="bold" />
             </LinearLayout>
         </LinearLayout>
