@@ -25,6 +25,7 @@ class DeckFxAudioProcessor : AudioProcessor {
 
     private var pluginManager: DspPluginManager? = null
     @Volatile private var pluginChain = emptyList<AudioPlugin>()
+    private val pluginCache = mutableMapOf<String, AudioPlugin>()
 
     // EQ stuff
     private var eqEnabled = false
@@ -33,7 +34,6 @@ class DeckFxAudioProcessor : AudioProcessor {
     
     fun initContext(context: android.content.Context) {
         pluginManager = DspPluginManager(context)
-        pluginChain = pluginManager?.getAvailablePlugins() ?: emptyList()
     }
 
     /**
@@ -44,7 +44,37 @@ class DeckFxAudioProcessor : AudioProcessor {
      * but never actually touch the audio.
      */
     fun refreshPlugins() {
-        pluginManager?.let { pluginChain = it.getAvailablePlugins() }
+        // Clear cache for custom plugins so they can be rebuilt if they changed
+        val keysToRemove = pluginCache.keys.filter { it.startsWith("custom_") }
+        keysToRemove.forEach { pluginCache.remove(it) }
+        
+        // Re-evaluate the active effects to rebuild the chain
+        val currentEffects = activeEffects
+        activeEffects = emptySet()
+        updateActiveEffects(currentEffects)
+    }
+    
+    fun updateActiveEffects(newActiveEffects: Set<String>) {
+        if (activeEffects == newActiveEffects) return
+        
+        val newChain = mutableListOf<AudioPlugin>()
+        for (effectId in newActiveEffects) {
+            if (effectId.startsWith("voice_")) continue
+            var plugin = pluginCache[effectId]
+            if (plugin == null) {
+                plugin = pluginManager?.createPlugin(effectId)
+                if (plugin != null) {
+                    plugin.sampleRate = sampleRate
+                    pluginCache[effectId] = plugin
+                }
+            }
+            if (plugin != null) {
+                newChain.add(plugin)
+            }
+        }
+        
+        activeEffects = newActiveEffects
+        pluginChain = newChain
     }
 
     private fun syncGlobalState() {
@@ -134,11 +164,10 @@ class DeckFxAudioProcessor : AudioProcessor {
 
                 // Apply Modular FX Engine
                 for (plugin in pluginChain) {
-                    val targetEnabled = activeEffects.contains(plugin.id)
-                    if (targetEnabled && fxAmount > 0.01f) {
-                        plugin.enabled = true
+                    if (fxAmount > 0.01f) {
+                        if (!plugin.enabled) plugin.enabled = true
                         plugin.amount = fxAmount
-                        plugin.sampleRate = sampleRate
+                        if (plugin.sampleRate != sampleRate) plugin.sampleRate = sampleRate
                         sample = plugin.process(sample, ch)
                     } else {
                         if (plugin.enabled) {
@@ -176,7 +205,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         inputFormat = AudioProcessor.AudioFormat.NOT_SET
         sampleRate = 44_100
         channelCount = 2
-        activeEffects = emptySet()
+        updateActiveEffects(emptySet())
         eqEnabled = false
         appliedEqVersion = -1L
     }

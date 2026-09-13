@@ -102,7 +102,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
     }
 
     private fun updateProcessorEffects() {
-        fxProcessor.activeEffects = activeEffects.filterValues { it }.keys.toSet()
+        fxProcessor.updateActiveEffects(activeEffects.filterValues { it }.keys.toSet())
     }
 
     fun loadTrack(song: AudioItem) {

@@ -17,19 +17,28 @@ import kotlin.math.*
  */
 class DspPluginManager(private val context: Context) {
 
-    fun getAvailablePlugins(): List<AudioPlugin> {
-        val builtIns = listOf(
-            FilterPlugin(),
-            DelayPlugin(),
-            ReverbPlugin(),
-            FlangerPlugin(),
-            PhaserPlugin(),
-            BitcrusherPlugin(),
-            DistortionPlugin(),
-            CompressorPlugin()
-        )
-        return builtIns + loadCustomPlugins()
+
+    fun createPlugin(id: String): AudioPlugin? {
+        if (com.example.BuildConfig.DEBUG) {
+            android.util.Log.d("DspPluginManager", "Creating plugin instance for: $id")
+        }
+        when (id) {
+            "fx_filter" -> return FilterPlugin()
+            "fx_delay" -> return DelayPlugin()
+            "fx_reverb" -> return ReverbPlugin()
+            "fx_flanger" -> return FlangerPlugin()
+            "fx_phaser" -> return PhaserPlugin()
+            "fx_bitcrush" -> return BitcrusherPlugin()
+            "fx_distortion" -> return DistortionPlugin()
+            "fx_compressor" -> return CompressorPlugin()
+        }
+        val preset = getCustomPresets().find { it.id == id }
+        if (preset != null) {
+            return buildEngine(preset.engineType, preset.id, preset.name, preset.param1, preset.param2)
+        }
+        return null
     }
+
 
     // ---------------------------------------------------------------------
     // User-authored library (persisted in SharedPreferences as JSON so it
@@ -95,10 +104,7 @@ class DspPluginManager(private val context: Context) {
         prefs().edit().putString(KEY_PRESETS, kept.toString()).apply()
     }
 
-    private fun loadCustomPlugins(): List<AudioPlugin> =
-        getCustomPresets().map { preset ->
-            buildEngine(preset.engineType, preset.id, preset.name, preset.param1, preset.param2)
-        }
+
 
     companion object {
         private const val PREFS_NAME = "modular_fx"

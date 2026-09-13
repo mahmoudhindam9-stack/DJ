@@ -29,6 +29,7 @@ class LocationWeatherActivity : ComponentActivity() {
     private var timeoutJob: Job? = null
 
 
+    @android.annotation.SuppressLint("InvalidFragmentVersionForActivityResult")
     private val requestPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->

@@ -1,8 +1,10 @@
-import re
-with open('app/build.gradle.kts', 'r') as f:
+with open('app/src/main/java/com/example/widget/LocationWeatherActivity.kt', 'r') as f:
     content = f.read()
 
-content = content.replace("abortOnError = true", "abortOnError = false")
+content = content.replace(
+    "private val requestPermissionLauncher = registerForActivityResult(",
+    "@android.annotation.SuppressLint(\"InvalidFragmentVersionForActivityResult\")\n    private val requestPermissionLauncher = registerForActivityResult("
+)
 
-with open('app/build.gradle.kts', 'w') as f:
+with open('app/src/main/java/com/example/widget/LocationWeatherActivity.kt', 'w') as f:
     f.write(content)

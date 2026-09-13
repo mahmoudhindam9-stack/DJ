@@ -32,13 +32,11 @@ android {
       val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
       val ksFile = file(keystorePath)
       
-      storeFile = ksFile
       if (ksFile.exists()) {
+        storeFile = ksFile
         storePassword = System.getenv("STORE_PASSWORD") ?: ""
         keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
         keyPassword = System.getenv("KEY_PASSWORD") ?: ""
-      } else {
-        // Will fail on assembleRelease if keystore is missing, but configures fine.
       }
     }
   }
@@ -127,4 +125,13 @@ dependencies {
   debugImplementation(libs.androidx.compose.ui.tooling)
   "ksp"(libs.androidx.room.compiler)
   "ksp"(libs.moshi.kotlin.codegen)
+}
+
+gradle.taskGraph.whenReady {
+    if (hasTask(":app:assembleRelease") || hasTask(":app:bundleRelease") || hasTask(":app:packageRelease")) {
+        val ksPath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
+        if (!file(ksPath).exists()) {
+            throw GradleException("Release keystore not found at $ksPath. Cannot build Release APK.")
+        }
+    }
 }
