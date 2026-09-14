@@ -45,45 +45,76 @@ data class RadioStation(
 )
 
 object RadioBrowserRepository {
-    private const val BASE = "https://de1.api.radio-browser.info/json/stations/search"
+    private val HOSTS = listOf(
+        "at1.api.radio-browser.info",
+        "de1.api.radio-browser.info",
+        "nl1.api.radio-browser.info"
+    )
 
     suspend fun stations(countryCode: String?, query: String): List<RadioStation> = withContext(Dispatchers.IO) {
+        val isGlobalNoSearch = countryCode.isNullOrBlank() && query.isBlank()
+        
+        val path = if (isGlobalNoSearch) "/json/stations/topvote" else "/json/stations/search"
         val params = buildString {
-            append("hidebroken=true&lastcheckok=1&order=votes&reverse=true&limit=100")
-            if (!countryCode.isNullOrBlank()) append("&countrycode=").append(URLEncoder.encode(countryCode, "UTF-8"))
-            if (query.isNotBlank()) append("&name=").append(URLEncoder.encode(query, "UTF-8"))
-        }
-        val connection = (URL("$BASE?$params").openConnection() as HttpURLConnection).apply {
-            requestMethod = "GET"
-            connectTimeout = 12_000
-            readTimeout = 15_000
-            setRequestProperty("User-Agent", "DJ-Music-Player/1.0")
-            setRequestProperty("Accept", "application/json")
-        }
-        try {
-            if (connection.responseCode !in 200..299) return@withContext emptyList()
-            val json = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
-            buildList {
-                for (i in 0 until json.length()) {
-                    val item = json.optJSONObject(i) ?: continue
-                    val resolved = item.optString("url_resolved").trim()
-                    val raw = item.optString("url").trim()
-                    val urls = listOf(resolved, raw).filter { it.startsWith("http://") || it.startsWith("https://") }.distinct()
-                    if (urls.isEmpty()) continue
-                    add(
-                        RadioStation(
-                            id = item.optString("stationuuid").ifBlank { urls.first() },
-                            name = item.optString("name").ifBlank { "Radio" },
-                            streamUrls = urls,
-                            tags = item.optString("tags"),
-                            codec = item.optString("codec").uppercase(),
-                            bitrate = item.optInt("bitrate", 0),
-                            countryCode = item.optString("countrycode")
-                        )
-                    )
-                }
+            if (isGlobalNoSearch) {
+                append("limit=100&hidebroken=true&lastcheckok=1")
+            } else {
+                append("hidebroken=true&lastcheckok=1&order=votes&reverse=true&limit=100")
+                if (!countryCode.isNullOrBlank()) append("&countrycode=").append(URLEncoder.encode(countryCode, "UTF-8"))
+                if (query.isNotBlank()) append("&name=").append(URLEncoder.encode(query, "UTF-8"))
             }
-        } finally { connection.disconnect() }
+        }
+
+        var lastException: Exception? = null
+
+        for (host in HOSTS) {
+            val urlString = "https://$host$path?$params"
+            try {
+                val connection = (URL(urlString).openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 8_000
+                    readTimeout = 10_000
+                    setRequestProperty("User-Agent", "DJ-Music-Player/1.0")
+                    setRequestProperty("Accept", "application/json")
+                }
+                
+                val responseCode = connection.responseCode
+                if (responseCode in 200..299) {
+                    val json = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
+                    connection.disconnect()
+                    return@withContext buildList {
+                        for (i in 0 until json.length()) {
+                            val item = json.optJSONObject(i) ?: continue
+                            val resolved = item.optString("url_resolved").trim()
+                            val raw = item.optString("url").trim()
+                            val urls = listOf(resolved, raw).filter { it.startsWith("http://") || it.startsWith("https://") }.distinct()
+                            if (urls.isEmpty()) continue
+                            add(
+                                RadioStation(
+                                    id = item.optString("stationuuid").ifBlank { urls.first() },
+                                    name = item.optString("name").ifBlank { "Radio" },
+                                    streamUrls = urls,
+                                    tags = item.optString("tags"),
+                                    codec = item.optString("codec").uppercase(),
+                                    bitrate = item.optInt("bitrate", 0),
+                                    countryCode = item.optString("countrycode")
+                                )
+                            )
+                        }
+                    }
+                } else {
+                    connection.disconnect()
+                }
+            } catch (e: Exception) {
+                lastException = e
+                android.util.Log.e("RadioBrowserRepository", "Error fetching from $host", e)
+            }
+        }
+        
+        if (lastException != null) {
+            throw lastException
+        }
+        emptyList()
     }
 }
 
