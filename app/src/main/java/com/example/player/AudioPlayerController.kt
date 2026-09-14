@@ -58,6 +58,7 @@ class AudioPlayerController(private val context: Context) {
     private var isCrossfading = false
     private var crossfadeStartTimeMs = 0L
     private var activeCrossfadeDurationMs = 2000L
+    private var pendingStopPreview = false
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -755,10 +756,17 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun updateProgress() {
-        if (exoPlayer.isPlaying || durationMs == 0L || isCrossfading) {
+        if (exoPlayer.isPlaying || durationMs == 0L || isCrossfading || pendingStopPreview) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             val realDuration = exoPlayer.duration
             if (realDuration > 0L) durationMs = realDuration
+
+            if (pendingStopPreview) {
+                if (exoPlayer.playbackState == Player.STATE_READY && exoPlayer.isPlaying) {
+                    stopCrossfadePreview()
+                    pendingStopPreview = false
+                }
+            }
 
             if (crossfadeDurationMs > 0L) {
                 if (isCrossfading) {
@@ -873,10 +881,6 @@ class AudioPlayerController(private val context: Context) {
         val preview = previewPlayerInstance
         val previewPosition = preview?.currentPosition ?: 0L
 
-        try {
-            preview?.pause()
-        } catch (e: Exception) {}
-
         val previewMediaId = preview?.currentMediaItem?.mediaId
 
         var targetIndex = -1
@@ -936,13 +940,15 @@ class AudioPlayerController(private val context: Context) {
             seekOrLoadMedia(currentSong, playlist.toList(), currentSongIndex, previewPosition)
             applyPreferredAudioDevice()
             exoPlayer.play()
+            pendingStopPreview = true
         } else {
             isPlaying = false
             exoPlayer.volume = volume
             exoPlayer.pause()
+            stopCrossfadePreview()
+            pendingStopPreview = false
         }
 
-        stopCrossfadePreview()
         skipNextFadeIn = true
         persistSession(force = true)
         syncNotificationSafely()
