@@ -22,11 +22,10 @@ class DjFxController(private val context: Context) {
     var currentBank by mutableStateOf("A")
         private set
 
-    val banks = listOf("A", "B", "C", "D")
+    val banks = listOf("A", "C", "D")
 
     val bankLabels = mapOf(
         "A" to "DJ",
-        "B" to "Oriental",
         "C" to "Comedy",
         "D" to "Trends"
     )
@@ -53,9 +52,13 @@ class DjFxController(private val context: Context) {
             // though the sounds already exist in the library. Guarded by its
             // own flag (separate from the purge above) so it only ever runs
             // once and never re-fills a pad the user has cleared since.
-            if (!prefs.getBoolean("default_pads_seeded_v2", false)) {
-                repository.seedDefaultPads(bankLabels)
-                prefs.edit().putBoolean("default_pads_seeded_v2", true).apply()
+            if (!prefs.getBoolean("default_pads_seeded_v4", false)) {
+                repository.seedDefaultPads(mapOf(
+                    "A" to "DJ FX",
+                    "C" to "Comedy",
+                    "D" to "Trends"
+                ))
+                prefs.edit().putBoolean("default_pads_seeded_v4", true).apply()
             }
 
             allFx = repository.getAllFx()

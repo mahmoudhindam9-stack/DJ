@@ -36,24 +36,6 @@ object FactoryFxCatalog {
         localAsset("dj_metal_hit", "Metal Impact Hit", "DJ FX", "impactMetal_000.ogg"),
         localAsset("dj_subboom", "Sub Bass Boom", "DJ FX", "lowFrequency_explosion_000.ogg"),
 
-        // NEW BANK — ORIENTAL / ARABIC
-        localAsset("or_doom01", "Darbuka Doom 01", "Oriental", "doom_01_01.flac"),
-        localAsset("or_doom02", "Darbuka Doom 02", "Oriental", "doom_01_02.flac"),
-        localAsset("or_doom03", "Darbuka Doom 03", "Oriental", "doom_01_03.flac"),
-        localAsset("or_doom04", "Darbuka Doom 04", "Oriental", "doom_01_04.flac"),
-        localAsset("or_doom05", "Darbuka Doom 05", "Oriental", "doom_01_05.flac"),
-        localAsset("or_doom06", "Darbuka Doom 06", "Oriental", "doom_01_06.flac"),
-        localAsset("or_doom07", "Darbuka Doom 07", "Oriental", "doom_01_07.flac"),
-        localAsset("or_doom08", "Darbuka Doom 08", "Oriental", "doom_01_08.flac"),
-        localAsset("or_doom09", "Darbuka Doom 09", "Oriental", "doom_01_09.flac"),
-        localAsset("or_doom10", "Darbuka Doom 10", "Oriental", "doom_01_10.flac"),
-        localAsset("or_doom11", "Darbuka Doom 11", "Oriental", "doom_01_11.flac"),
-        localAsset("or_doom12", "Darbuka Doom 12", "Oriental", "doom_01_12.flac"),
-        localAsset("or_bongo01", "Bongo 01", "Oriental", "1_01.flac"),
-        localAsset("or_bongo02", "Bongo 02", "Oriental", "1_02.flac"),
-        localAsset("or_bongo03", "Bongo 03", "Oriental", "1_03.flac"),
-        localAsset("or_bongo04", "Bongo 04", "Oriental", "1_04.flac"),
-
         // NEW BANK — COMEDY / MEME-STYLE (PUBLIC DOMAIN / CC0)
         localAsset("co_boing", "Boing", "Comedy", "boing cartoon.mp3"),
         localAsset("co_bruh", "Bruh", "Comedy", "bruh.mp3"),

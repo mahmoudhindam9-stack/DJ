@@ -57,6 +57,7 @@ class AudioPlayerController(private val context: Context) {
     private var crossfadePreparedIndex: Int = -1
     private var isCrossfading = false
     private var crossfadeStartTimeMs = 0L
+    private var activeCrossfadeDurationMs = 2000L
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -762,10 +763,10 @@ class AudioPlayerController(private val context: Context) {
             if (crossfadeDurationMs > 0L) {
                 if (isCrossfading) {
                     val elapsed = android.os.SystemClock.elapsedRealtime() - crossfadeStartTimeMs
-                    if (elapsed >= crossfadeDurationMs) {
+                    if (elapsed >= activeCrossfadeDurationMs) {
                         completeCrossfade()
                     } else {
-                        val progress = (elapsed.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
+                        val progress = (elapsed.toFloat() / activeCrossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
                         val outVol = volume * (1f - progress)
                         val inVol = volume * progress
                         try { previewPlayerInstance?.volume = inVol } catch (e: Exception) {}
@@ -794,7 +795,7 @@ class AudioPlayerController(private val context: Context) {
                     }
 
                     if (repeatOption != RepeatOption.ONE && remaining in 1 until crossfadeDurationMs && nextMediaItem != null) {
-                        startCrossfade(nextMediaItem)
+                        startCrossfade(nextMediaItem, remaining)
                     } else if (!skipNextFadeIn && currentPositionMs < crossfadeDurationMs) {
                         val fraction = (currentPositionMs.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
                         val targetVol = kotlin.math.sin(fraction * (kotlin.math.PI / 2)).toFloat()
@@ -837,7 +838,7 @@ class AudioPlayerController(private val context: Context) {
         }
     }
 
-    private fun startCrossfade(nextItem: MediaItem) {
+    private fun startCrossfade(nextItem: MediaItem, customDurationMs: Long = 0L) {
         val currentMediaId = exoPlayer.currentMediaItem?.mediaId
         val nextId = nextItem.mediaId
 
@@ -845,6 +846,7 @@ class AudioPlayerController(private val context: Context) {
             return
         }
 
+        activeCrossfadeDurationMs = if (customDurationMs > 0L) customDurationMs else crossfadeDurationMs
         isCrossfading = true
         crossfadeStartTimeMs = android.os.SystemClock.elapsedRealtime()
         skipNextFadeIn = true
