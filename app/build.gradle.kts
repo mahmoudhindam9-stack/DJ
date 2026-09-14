@@ -1,4 +1,3 @@
-import com.google.gms.googleservices.GoogleServicesPlugin.MissingGoogleServicesStrategy
 import java.net.HttpURLConnection
 import java.net.URL
 
@@ -8,13 +7,12 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.google.services)
 }
 
 android {
-    lint {
-        abortOnError = false
-    }
+  lint {
+    abortOnError = false
+  }
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
@@ -29,15 +27,20 @@ android {
 
   signingConfigs {
     create("release") {
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      val ksFile = file(keystorePath)
-      
-      if (ksFile.exists()) {
-        storeFile = ksFile
-        storePassword = System.getenv("STORE_PASSWORD") ?: ""
-        keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
-        keyPassword = System.getenv("KEY_PASSWORD") ?: ""
+      val keystorePath = System.getenv("KEYSTORE_PATH")
+      if (!keystorePath.isNullOrBlank()) {
+        val ksFile = if (keystorePath.startsWith("/")) {
+          file(keystorePath)
+        } else {
+          file("${rootDir}/$keystorePath")
+        }
+        if (ksFile.exists() && ksFile.isFile) {
+          storeFile = ksFile
+        }
       }
+      storePassword = System.getenv("STORE_PASSWORD")
+      keyAlias = System.getenv("KEY_ALIAS")
+      keyPassword = System.getenv("KEY_PASSWORD")
     }
   }
 
@@ -46,29 +49,64 @@ android {
       isCrunchPngs = false
       isMinifyEnabled = false
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-      val keystorePath = System.getenv("KEYSTORE_PATH") ?: "${rootDir}/my-upload-key.jks"
-      if (file(keystorePath).exists()) {
-        signingConfig = signingConfigs.getByName("release")
-      } else {
-        signingConfig = signingConfigs.getByName("debug")
-      }
+      signingConfig = signingConfigs.getByName("release")
     }
     debug {
       signingConfig = signingConfigs.getByName("debug")
     }
   }
+
   compileOptions {
     sourceCompatibility = JavaVersion.VERSION_11
     targetCompatibility = JavaVersion.VERSION_11
   }
+
   buildFeatures {
     compose = true
     buildConfig = true
   }
+
   testOptions { unitTests { isIncludeAndroidResources = true } }
+
   dependenciesInfo {
     includeInApk = false
     includeInBundle = true
+  }
+}
+
+val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
+  doFirst {
+    val storePassword = System.getenv("STORE_PASSWORD")
+    val keyAlias = System.getenv("KEY_ALIAS")
+    val keyPassword = System.getenv("KEY_PASSWORD")
+    val keystorePath = System.getenv("KEYSTORE_PATH")
+
+    if (keystorePath.isNullOrBlank() ||
+        storePassword.isNullOrBlank() ||
+        keyAlias.isNullOrBlank() ||
+        keyPassword.isNullOrBlank()) {
+      throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
+    }
+
+    val ksFile = if (keystorePath.startsWith("/")) {
+      file(keystorePath)
+    } else {
+      file("${rootDir}/$keystorePath")
+    }
+
+    if (!ksFile.exists() || !ksFile.isFile ||
+        storePassword == "android" ||
+        keyPassword == "android" ||
+        keyAlias == "androiddebugkey" ||
+        ksFile.name == "debug.keystore") {
+      throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
+    }
+  }
+}
+
+tasks.configureEach {
+  if (name.startsWith("packageRelease") || name.startsWith("assembleRelease") || name.startsWith("bundleRelease")) {
+    dependsOn(verifyReleaseSigning)
   }
 }
 
@@ -77,8 +115,6 @@ secrets {
   defaultPropertiesFileName = ".env.example"
   ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
-
-googleServices { missingGoogleServicesStrategy = MissingGoogleServicesStrategy.WARN }
 
 dependencies {
   implementation(platform(libs.androidx.compose.bom))

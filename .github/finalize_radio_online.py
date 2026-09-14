@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-RADIO = '''package com.example.studio
+RADIO = '''package com.example.radio
 
 import android.net.Uri
 import androidx.compose.foundation.background
@@ -13,12 +13,14 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,13 +31,14 @@ import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
 import com.example.player.AudioPlayerController
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.HttpURLConnection
-import java.net.URLEncoder
 import java.net.URL
+import java.net.URLEncoder
 
-private data class RadioStation(
+data class RadioStation(
     val id: String,
     val name: String,
     val streamUrls: List<String>,
@@ -45,7 +48,7 @@ private data class RadioStation(
     val countryCode: String
 )
 
-private object RadioBrowserRepository {
+object RadioBrowserRepository {
     private const val BASE = "https://de1.api.radio-browser.info/json/stations/search"
 
     suspend fun stations(countryCode: String?, query: String): List<RadioStation> = withContext(Dispatchers.IO) {
@@ -88,7 +91,7 @@ private object RadioBrowserRepository {
     }
 }
 
-private enum class RadioStatus { IDLE, LOADING, LIVE, FAILED }
+enum class RadioStatus { IDLE, LOADING, LIVE, FAILED }
 
 private suspend fun resolvePlaylistUrl(url: String): String = withContext(Dispatchers.IO) {
     val lower = url.lowercase()
@@ -126,85 +129,61 @@ private fun radioMime(codec: String, url: String): String? {
 }
 
 @Composable
-fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioController) {
-    val context = androidx.compose.ui.platform.LocalContext.current
-    val playerController = remember { AudioPlayerController.obtain(context) }
+fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.obtain(LocalContext.current)) {
+    val crScope = rememberCoroutineScope()
     var country by remember { mutableStateOf("EG") }
     var search by remember { mutableStateOf("") }
     var refreshToken by remember { mutableIntStateOf(0) }
+
     var stations by remember { mutableStateOf<List<RadioStation>>(emptyList()) }
-    var favorites by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var loading by remember { mutableStateOf(true) }
+    var loading by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
-    val stationStatus = remember { mutableStateMapOf<String, RadioStatus>() }
-    val attempts = remember { mutableStateMapOf<String, Int>() }
     var deckPicker by remember { mutableStateOf<RadioStation?>(null) }
+    var favorites by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var loadingStationId by remember { mutableStateOf<String?>(null) }
+    var failedStationId by remember { mutableStateOf<String?>(null) }
+    val attempts = remember { mutableStateMapOf<String, Int>() }
+
+    val currentMediaId = playerController.currentSong?.id
+    val isPlayerPlaying = playerController.isPlaying
+    val isPlayerBuffering = playerController.isBuffering
 
     LaunchedEffect(country, search, refreshToken) {
         loading = true
         error = null
         try {
-            val result = RadioBrowserRepository.stations(country, search.trim())
-            stations = result
-            stationStatus.clear()
-            result.forEach { stationStatus[it.id] = RadioStatus.IDLE }
-            if (result.isEmpty()) error = "لم يتم العثور على إذاعات متاحة حالياً"
-        } catch (_: Exception) {
-            stations = emptyList()
-            error = "تعذر تحميل الإذاعات. تحقق من اتصال الإنترنت ثم حاول مرة أخرى."
-        } finally { loading = false }
-    }
-
-    DisposableEffect(playerController) {
-        val listener = object : Player.Listener {
-            override fun onPlaybackStateChanged(state: Int) {
-                val id = playerController.currentSong?.id ?: return
-                if (!stationStatus.containsKey(id)) return
-                stationStatus[id] = when (state) {
-                    Player.STATE_BUFFERING -> RadioStatus.LOADING
-                    Player.STATE_READY -> if (playerController.isPlaying) RadioStatus.LIVE else RadioStatus.IDLE
-                    Player.STATE_ENDED -> RadioStatus.IDLE
-                    else -> stationStatus[id] ?: RadioStatus.IDLE
-                }
-            }
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                val id = playerController.currentSong?.id ?: return
-                if (stationStatus.containsKey(id) && isPlaying) stationStatus[id] = RadioStatus.LIVE
-            }
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                val id = playerController.currentSong?.id ?: return
-                val station = stations.firstOrNull { it.id == id } ?: return
-                val next = (attempts[id] ?: 0) + 1
-                if (next < station.streamUrls.size) {
-                    attempts[id] = next
-                    stationStatus[id] = RadioStatus.LOADING
-                    val scope = androidx.compose.runtime.rememberCoroutineScope
-                } else {
-                    stationStatus[id] = RadioStatus.FAILED
-                }
-            }
+            stations = RadioBrowserRepository.stations(country.ifBlank { null }, search)
+        } catch (e: Exception) {
+            error = e.localizedMessage ?: "فشل الاتصال بالخادم"
+        } finally {
+            loading = false
         }
-        playerController.exoPlayer.addListener(listener)
-        onDispose { playerController.exoPlayer.removeListener(listener) }
     }
 
     suspend fun playStation(station: RadioStation, requestedIndex: Int = 0) {
         var index = requestedIndex.coerceIn(0, station.streamUrls.lastIndex)
-        stationStatus[station.id] = RadioStatus.LOADING
+        loadingStationId = station.id
+        failedStationId = null
         attempts[station.id] = index
         while (index < station.streamUrls.size) {
             val resolvedUrl = resolvePlaylistUrl(station.streamUrls[index])
             val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(resolvedUrl))
             runCatching {
-                playerController.playSong(item, listOf(item))
+                playerController.play(item, listOf(item))
                 val media = MediaItem.Builder().setUri(resolvedUrl).apply { radioMime(station.codec, resolvedUrl)?.let(::setMimeType) }.build()
                 playerController.exoPlayer.setMediaItem(media)
                 playerController.exoPlayer.prepare()
                 playerController.exoPlayer.play()
-            }.onSuccess { stationStatus[station.id] = RadioStatus.LOADING; return }
-                .onFailure { index++; attempts[station.id] = index }
+            }.onSuccess {
+                loadingStationId = null
+                return
+            }.onFailure {
+                index++
+                attempts[station.id] = index
+            }
         }
-        stationStatus[station.id] = RadioStatus.FAILED
+        loadingStationId = null
+        failedStationId = station.id
     }
 
     val visibleStations = if (favorites.isEmpty()) stations else stations.sortedByDescending { favorites.contains(it.id) }
@@ -234,36 +213,54 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
             items(visibleStations, key = { it.id }) { station ->
-                val current = playerController.currentSong?.id == station.id
-                val status = stationStatus[station.id] ?: RadioStatus.IDLE
+                val isCurrentStation = (currentMediaId == station.id)
+                val isStationPlaying = isCurrentStation && isPlayerPlaying
+                val isStationLoading = (loadingStationId == station.id) || (isCurrentStation && isPlayerBuffering && !isStationPlaying)
+                val isStationFailed = (failedStationId == station.id) && !isStationPlaying && !isStationLoading
                 val isFavorite = favorites.contains(station.id)
-                val statusText = when (status) {
-                    RadioStatus.LOADING -> "تحميل البث..."
-                    RadioStatus.LIVE -> "LIVE • شغال الآن"
-                    RadioStatus.FAILED -> "فشل التحميل"
-                    RadioStatus.IDLE -> "جاهزة للتشغيل"
+
+                val statusText = when {
+                    isStationLoading -> "تحميل البث..."
+                    isStationPlaying -> "LIVE • شغال الآن"
+                    isStationFailed -> "فشل التحميل"
+                    else -> "جاهزة للتشغيل"
                 }
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (current) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
+
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (isCurrentStation) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
                     Column(Modifier.padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(if (status == RadioStatus.LIVE) Icons.Filled.VolumeUp else Icons.Filled.Radio, null, tint = MaterialTheme.colorScheme.primary) }
+                            Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer), contentAlignment = Alignment.Center) { Icon(if (isStationPlaying) Icons.AutoMirrored.Filled.VolumeUp else Icons.Filled.Radio, null, tint = MaterialTheme.colorScheme.primary) }
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(station.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(buildString { if (station.tags.isNotBlank()) append(station.tags.take(45)); if (station.codec.isNotBlank()) { if (isNotEmpty()) append(" • "); append(station.codec) }; if (station.bitrate > 0) { append(" • "); append(station.bitrate); append(" kbps") } }.ifBlank { "بث مباشر" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (status == RadioStatus.FAILED) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
+                                Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isStationFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             }
-                            if (status == RadioStatus.LOADING) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
+                            if (isStationLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
                             IconButton(onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
                             IconButton(onClick = { deckPicker = station }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }
-                            FilledIconButton(onClick = { if (status == RadioStatus.LIVE && current) playerController.pause() else androidx.compose.runtime.LaunchedEffect(Unit) { playStation(station) } }) { Icon(if (status == RadioStatus.LIVE && current) Icons.Filled.Pause else Icons.Filled.PlayArrow, "تشغيل") }
+                            FilledIconButton(
+                                onClick = {
+                                    if (isStationPlaying) {
+                                        playerController.pause()
+                                    } else if (isCurrentStation) {
+                                        playerController.exoPlayer.play()
+                                    } else {
+                                        crScope.launch { playStation(station) }
+                                    }
+                                }
+                            ) {
+                                Icon(
+                                    imageVector = if (isStationPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                    contentDescription = if (isStationPlaying) "Pause" else "Play"
+                                )
+                            }
                         }
                     }
                 }
             }
         }
     }
-
     deckPicker?.let { station ->
         AlertDialog(
             onDismissRequest = { deckPicker = null },
@@ -288,7 +285,7 @@ fun MusicStudioScreen(@Suppress("UNUSED_PARAMETER") controller: MusicStudioContr
 }
 '''
 
-radio_path = ROOT / 'app/src/main/java/com/example/studio/MusicStudioScreen.kt'
+radio_path = ROOT / 'app/src/main/java/com/example/radio/RadioScreen.kt'
 radio_path.write_text(RADIO, encoding='utf-8')
 
 # Rename the navigation label from Studio to Radio without changing its route.

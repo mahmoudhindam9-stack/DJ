@@ -70,6 +70,8 @@ class AudioPlayerController(private val context: Context) {
         private set
     var isPlaying by mutableStateOf(false)
         private set
+    var isBuffering by mutableStateOf(false)
+        private set
     var currentPositionMs by mutableStateOf(0L)
         private set
     var durationMs by mutableStateOf(0L)
@@ -104,12 +106,18 @@ class AudioPlayerController(private val context: Context) {
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
+                isBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
                     durationMs = exoPlayer.duration.coerceAtLeast(0L)
                     persistSession(force = true)
                 } else if (playbackState == Player.STATE_ENDED) {
                     handleTrackEnded()
                 }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                isPlaying = false
+                isBuffering = false
             }
 
             override fun onPositionDiscontinuity(

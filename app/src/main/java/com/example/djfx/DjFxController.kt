@@ -53,9 +53,9 @@ class DjFxController(private val context: Context) {
             // though the sounds already exist in the library. Guarded by its
             // own flag (separate from the purge above) so it only ever runs
             // once and never re-fills a pad the user has cleared since.
-            if (true) { // Force seed
+            if (!prefs.getBoolean("default_pads_seeded_v2", false)) {
                 repository.seedDefaultPads(bankLabels)
-                prefs.edit().putBoolean("default_pads_seeded", true).apply()
+                prefs.edit().putBoolean("default_pads_seeded_v2", true).apply()
             }
 
             allFx = repository.getAllFx()

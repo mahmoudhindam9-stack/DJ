@@ -10,85 +10,84 @@ object FactoryFxCatalog {
         val sourceUrl: String? = null
     )
 
-    private fun cc0(id: String, name: String, category: String, path: String) =
-        Entry(id, name, category, path)
-
-    private fun cc0Remote(id: String, name: String, category: String, url: String) =
-        Entry(id, name, category, "", "CC0-1.0", url)
-
-    private fun kenney(id: String, name: String, file: String) = cc0Remote(
-        id, name, "DJ FX",
-        "https://raw.githubusercontent.com/danvanderboom/Aetherium/main/samples/unity/Aphelion/Assets/ThirdParty/Kenney/SciFiSounds/$file"
-    )
+    private fun localAsset(id: String, name: String, category: String, filename: String): Entry {
+        return Entry(
+            id = id,
+            name = name,
+            category = category,
+            assetPath = "asset:///factory_fx/$filename",
+            source = "CC0-1.0"
+        )
+    }
 
     val entries: List<Entry> = listOf(
-        // BANK A — DJ FX (professional Kenney Sci-Fi Sounds pack, CC0-1.0, streamed remotely)
-        kenney("dj_laser_big", "Big Laser Blast", "laserLarge_000.ogg"),
-        kenney("dj_laser_small1", "Laser Zap 1", "laserSmall_000.ogg"),
-        kenney("dj_laser_small2", "Laser Zap 2", "laserSmall_001.ogg"),
-        kenney("dj_scan", "Digital Scan", "computerNoise_000.ogg"),
-        kenney("dj_force1", "Force Field Pulse", "forceField_000.ogg"),
-        kenney("dj_force2", "Force Field Charge", "forceField_001.ogg"),
-        kenney("dj_engine", "Engine Rev", "engineCircular_000.ogg"),
-        kenney("dj_swoosh_open", "Door Swoosh Open", "doorOpen_000.ogg"),
-        kenney("dj_swoosh_close", "Door Swoosh Close", "doorClose_000.ogg"),
-        kenney("dj_crunch1", "Impact Crunch 1", "explosionCrunch_000.ogg"),
-        kenney("dj_crunch2", "Impact Crunch 2", "explosionCrunch_001.ogg"),
-        kenney("dj_metal_hit", "Metal Impact Hit", "impactMetal_000.ogg"),
-        kenney("dj_subboom", "Sub Bass Boom", "lowFrequency_explosion_000.ogg"),
+        // BANK A — DJ FX (professional Kenney Sci-Fi Sounds pack, CC0-1.0)
+        localAsset("dj_laser_big", "Big Laser Blast", "DJ FX", "laserLarge_000.ogg"),
+        localAsset("dj_laser_small1", "Laser Zap 1", "DJ FX", "laserSmall_000.ogg"),
+        localAsset("dj_laser_small2", "Laser Zap 2", "DJ FX", "laserSmall_001.ogg"),
+        localAsset("dj_scan", "Digital Scan", "DJ FX", "computerNoise_000.ogg"),
+        localAsset("dj_force1", "Force Field Pulse", "DJ FX", "forceField_000.ogg"),
+        localAsset("dj_force2", "Force Field Charge", "DJ FX", "forceField_001.ogg"),
+        localAsset("dj_engine", "Engine Rev", "DJ FX", "engineCircular_000.ogg"),
+        localAsset("dj_swoosh_open", "Door Swoosh Open", "DJ FX", "doorOpen_000.ogg"),
+        localAsset("dj_swoosh_close", "Door Swoosh Close", "DJ FX", "doorClose_000.ogg"),
+        localAsset("dj_crunch1", "Impact Crunch 1", "DJ FX", "explosionCrunch_000.ogg"),
+        localAsset("dj_crunch2", "Impact Crunch 2", "DJ FX", "explosionCrunch_001.ogg"),
+        localAsset("dj_metal_hit", "Metal Impact Hit", "DJ FX", "impactMetal_000.ogg"),
+        localAsset("dj_subboom", "Sub Bass Boom", "DJ FX", "lowFrequency_explosion_000.ogg"),
 
         // NEW BANK — ORIENTAL / ARABIC
-        cc0Remote("or_doom01", "Darbuka Doom 01", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_01.flac"),
-        cc0Remote("or_doom02", "Darbuka Doom 02", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_02.flac"),
-        cc0Remote("or_doom03", "Darbuka Doom 03", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_03.flac"),
-        cc0Remote("or_doom04", "Darbuka Doom 04", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_04.flac"),
-        cc0Remote("or_doom05", "Darbuka Doom 05", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_05.flac"),
-        cc0Remote("or_doom06", "Darbuka Doom 06", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_06.flac"),
-        cc0Remote("or_doom07", "Darbuka Doom 07", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_07.flac"),
-        cc0Remote("or_doom08", "Darbuka Doom 08", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_08.flac"),
-        cc0Remote("or_doom09", "Darbuka Doom 09", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_09.flac"),
-        cc0Remote("or_doom10", "Darbuka Doom 10", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_10.flac"),
-        cc0Remote("or_doom11", "Darbuka Doom 11", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_11.flac"),
-        cc0Remote("or_doom12", "Darbuka Doom 12", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Darbuka/doom_01_12.flac"),
-        cc0Remote("or_bongo01", "Bongo 01", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Bongos/1_01.flac"),
-        cc0Remote("or_bongo02", "Bongo 02", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Bongos/1_02.flac"),
-        cc0Remote("or_bongo03", "Bongo 03", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Bongos/1_03.flac"),
-        cc0Remote("or_bongo04", "Bongo 04", "Oriental", "https://raw.githubusercontent.com/freepats/world-percussion/main/samples/Bongos/1_04.flac"),
+        localAsset("or_doom01", "Darbuka Doom 01", "Oriental", "doom_01_01.flac"),
+        localAsset("or_doom02", "Darbuka Doom 02", "Oriental", "doom_01_02.flac"),
+        localAsset("or_doom03", "Darbuka Doom 03", "Oriental", "doom_01_03.flac"),
+        localAsset("or_doom04", "Darbuka Doom 04", "Oriental", "doom_01_04.flac"),
+        localAsset("or_doom05", "Darbuka Doom 05", "Oriental", "doom_01_05.flac"),
+        localAsset("or_doom06", "Darbuka Doom 06", "Oriental", "doom_01_06.flac"),
+        localAsset("or_doom07", "Darbuka Doom 07", "Oriental", "doom_01_07.flac"),
+        localAsset("or_doom08", "Darbuka Doom 08", "Oriental", "doom_01_08.flac"),
+        localAsset("or_doom09", "Darbuka Doom 09", "Oriental", "doom_01_09.flac"),
+        localAsset("or_doom10", "Darbuka Doom 10", "Oriental", "doom_01_10.flac"),
+        localAsset("or_doom11", "Darbuka Doom 11", "Oriental", "doom_01_11.flac"),
+        localAsset("or_doom12", "Darbuka Doom 12", "Oriental", "doom_01_12.flac"),
+        localAsset("or_bongo01", "Bongo 01", "Oriental", "1_01.flac"),
+        localAsset("or_bongo02", "Bongo 02", "Oriental", "1_02.flac"),
+        localAsset("or_bongo03", "Bongo 03", "Oriental", "1_03.flac"),
+        localAsset("or_bongo04", "Bongo 04", "Oriental", "1_04.flac"),
 
         // NEW BANK — COMEDY / MEME-STYLE (PUBLIC DOMAIN / CC0)
-        cc0Remote("co_boing", "Boing", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/boing%20cartoon.mp3"),
-        cc0Remote("co_bruh", "Bruh", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/bruh.mp3"),
-        cc0Remote("co_buzzer", "Buzzer", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/buzzer.mp3"),
-        cc0Remote("co_confused", "Ehhh?", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/confused%20ehhh.mp3"),
-        cc0Remote("co_crickets", "Bad Joke Crickets", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/crickets%20bad%20joke.mp3"),
-        cc0Remote("co_evil", "Evil Laughter", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/evil%20laughter.mp3"),
-        cc0Remote("co_fart_long", "Fart Long", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fart%20long.mp3"),
-        cc0Remote("co_fart_power", "Fart Powerful", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fart%20powerful.mp3"),
-        cc0Remote("co_fart_short", "Fart Short", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fart%20short.mp3"),
-        cc0Remote("co_fart_wet", "Fart Wet", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fart%20wet.mp3"),
-        cc0Remote("co_slide", "Cartoon Fall", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/flute%20slide%20cartoon%20falling.mp3"),
-        cc0Remote("co_golf", "Golf Clap", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/golf%20clap.mp3"),
-        cc0Remote("co_laugh_cute", "Cute Laugh", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/laughter%20cute.mp3"),
-        cc0Remote("co_laugh_sitcom", "Sitcom Laugh", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/laughter%20sitcom%20audience%20crowd.mp3"),
-        cc0Remote("co_quack", "Quack", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/quack%20duck.mp3"),
-        cc0Remote("co_nope", "Nope", "Comedy", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/nope.mp3"),
+        localAsset("co_boing", "Boing", "Comedy", "boing cartoon.mp3"),
+        localAsset("co_bruh", "Bruh", "Comedy", "bruh.mp3"),
+        localAsset("co_buzzer", "Buzzer", "Comedy", "buzzer.mp3"),
+        localAsset("co_confused", "Ehhh?", "Comedy", "confused ehhh.mp3"),
+        localAsset("co_crickets", "Bad Joke Crickets", "Comedy", "crickets bad joke.mp3"),
+        localAsset("co_evil", "Evil Laughter", "Comedy", "evil laughter.mp3"),
+        localAsset("co_fart_long", "Fart Long", "Comedy", "fart long.mp3"),
+        localAsset("co_fart_power", "Fart Powerful", "Comedy", "fart powerful.mp3"),
+        localAsset("co_fart_short", "Fart Short", "Comedy", "fart short.mp3"),
+        localAsset("co_fart_wet", "Fart Wet", "Comedy", "fart wet.mp3"),
+        localAsset("co_slide", "Cartoon Fall", "Comedy", "flute slide cartoon falling.mp3"),
+        localAsset("co_golf", "Golf Clap", "Comedy", "golf clap.mp3"),
+        localAsset("co_laugh_cute", "Cute Laugh", "Comedy", "laughter cute.mp3"),
+        localAsset("co_laugh_sitcom", "Sitcom Laugh", "Comedy", "laughter sitcom audience crowd.mp3"),
+        localAsset("co_quack", "Quack", "Comedy", "quack duck.mp3"),
+        localAsset("co_nope", "Nope", "Comedy", "nope.mp3"),
 
         // NEW BANK — VIRAL / TRENDS (PUBLIC DOMAIN / CC0)
-        cc0Remote("tr_access", "Air Horn", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/hype%20air%20horn.mp3"),
-        cc0Remote("tr_bye", "Bye Bye", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/bye%20bye.mp3"),
-        cc0Remote("tr_bruh", "Bruh", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/bruh.mp3"),
-        cc0Remote("tr_correct", "That's Correct", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/correct%20that's%20correct%20radio.mp3"),
-        cc0Remote("tr_danger", "Danger", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/danger.mp3"),
-        cc0Remote("tr_haters", "Haters Gonna Hate", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/haters%20gonna%20hate.mp3"),
-        cc0Remote("tr_money", "Money", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/money%20cash%20register%20purchase.mp3"),
-        cc0Remote("tr_nice", "Nice", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/nice%20mmm.mp3"),
-        cc0Remote("tr_what", "What?", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/what%20short.mp3"),
-        cc0Remote("tr_surprise", "What?!", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/what%20surprised.mp3"),
-        cc0Remote("tr_win", "Winning Jingle", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/winning%20jingle.mp3"),
-        cc0Remote("tr_yeah1", "Yeah Ohh Yeah", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/yeah%20ohh%20yeah.mp3"),
-        cc0Remote("tr_yeah2", "Yeah Song", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/yeah%20song.mp3"),
-        cc0Remote("tr_yeet", "Yeet", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/yeet.mp3"),
-        cc0Remote("tr_wow", "Wow", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/wow.mp3"),
-        cc0Remote("tr_fail", "Fail / Wah Wah", "Trends", "https://raw.githubusercontent.com/jonjonsson/SoundMonster/main/Public%20domain/fail%20game%20over%20wah%20wah%20sad%20trombone.mp3")
+        localAsset("tr_access", "Air Horn", "Trends", "hype air horn.mp3"),
+        localAsset("tr_bye", "Bye Bye", "Trends", "bye bye.mp3"),
+        localAsset("tr_bruh", "Bruh", "Trends", "bruh.mp3"),
+        localAsset("tr_correct", "That's Correct", "Trends", "correct that's correct radio.mp3"),
+        localAsset("tr_danger", "Danger", "Trends", "danger.mp3"),
+        localAsset("tr_haters", "Haters Gonna Hate", "Trends", "haters gonna hate.mp3"),
+        localAsset("tr_money", "Money", "Trends", "money cash register purchase.mp3"),
+        localAsset("tr_nice", "Nice", "Trends", "nice mmm.mp3"),
+        localAsset("tr_what", "What?", "Trends", "what short.mp3"),
+        localAsset("tr_surprise", "What?!", "Trends", "what surprised.mp3"),
+        localAsset("tr_win", "Winning Jingle", "Trends", "winning jingle.mp3"),
+        localAsset("tr_yeah1", "Yeah Ohh Yeah", "Trends", "yeah ohh yeah.mp3"),
+        localAsset("tr_yeah2", "Yeah Song", "Trends", "yeah song.mp3"),
+        localAsset("tr_yeet", "Yeet", "Trends", "yeet.mp3"),
+        localAsset("tr_wow", "Wow", "Trends", "wow.mp3"),
+        localAsset("tr_fail", "Fail / Wah Wah", "Trends", "fail game over wah wah sad trombone.mp3")
     )
 }

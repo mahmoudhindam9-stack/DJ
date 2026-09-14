@@ -134,9 +134,12 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             } else {
                 views.setViewVisibility(R.id.weather_warning, android.view.View.GONE)
             }
-            val zone = prefs.getString(TIMEZONE, java.util.TimeZone.getDefault().id) ?: java.util.TimeZone.getDefault().id
-            views.setString(R.id.weather_clock, "setTimeZone", zone)
-            views.setString(R.id.weather_date, "setTimeZone", zone)
+            val defaultZone = java.util.TimeZone.getDefault().id
+            val zone = prefs.getString(TIMEZONE, defaultZone)?.takeIf { it.isNotBlank() } ?: defaultZone
+            runCatching {
+                views.setString(R.id.weather_clock, "setTimeZone", zone)
+                views.setString(R.id.weather_date, "setTimeZone", zone)
+            }
 
             val refresh = PendingIntent.getActivity(
                 context, id * 41, Intent(context, LocationWeatherActivity::class.java),

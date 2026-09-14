@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -46,6 +47,13 @@ fun DjBottomNavBar(
             label = "EQ",
             selected = currentRoute == "equalizer",
             onClick = { onNavigate("equalizer") }
+        )
+        
+        DjNavItem(
+            icon = Icons.Filled.Radio,
+            label = "Radio",
+            selected = currentRoute == "radio",
+            onClick = { onNavigate("radio") }
         )
         DjNavItem(
             icon = Icons.Filled.Cloud,

@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.automirrored.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -229,6 +230,19 @@ fun MainApp() {
                         }
                     }
                 )
+                
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
+                    label = { Text("Radio") },
+                    selected = currentDestination?.route == "radio",
+                    onClick = {
+                        navController.navigate("radio") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
                     label = { Text("Online") },
@@ -278,6 +292,10 @@ fun MainApp() {
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
+            }
+            
+            composable("radio") {
+                com.example.radio.RadioScreen(playerController = playerController)
             }
             composable("online_music") {
                 val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }

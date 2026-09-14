@@ -140,8 +140,6 @@ jobs:
               'import com.example.model.Playlist\nimport com.example.onlinemusic.OnlineDjBridge\nimport com.example.onlinemusic.OnlineDeckTarget\n'
           )
           main_text = main_text.replace(
-              '    val musicStudioController = remember { MusicStudioController(context) }\n',
-              '    val musicStudioController = remember { MusicStudioController(context) }\n\n    LaunchedEffect(OnlineDjBridge.request?.id) {\n        val request = OnlineDjBridge.request ?: return@LaunchedEffect\n        playerController.pause()\n        when (request.deck) {\n            OnlineDeckTarget.A -> djMixerController.deckA.loadTrack(request.song)\n            OnlineDeckTarget.B -> djMixerController.deckB.loadTrack(request.song)\n        }\n        navController.navigate("dj") {\n            popUpTo(navController.graph.findStartDestination().id) { saveState = true }\n            launchSingleTop = true\n            restoreState = true\n        }\n        OnlineDjBridge.clear()\n    }\n'
           )
           main_text = main_text.replace(
               'com.example.onlinemusic.OnlineMusicScreen(vm)',

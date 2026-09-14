@@ -3,7 +3,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[1]
 MIXER = ROOT / 'app/src/main/java/com/example/player/DJDeckController.kt'
-STUDIO = ROOT / 'app/src/main/java/com/example/studio/MusicStudioController.kt'
+STUDIO = ROOT / 'app/src/main/java/com/example/radio/RadioScreen.kt'
 
 
 def replace_once(text: str, pattern: str, replacement: str, label: str, regex: bool = False) -> str:
@@ -60,6 +60,9 @@ def fix_mixer() -> None:
 
 
 def fix_studio() -> None:
+    if not STUDIO.exists():
+        print('Radio does not exist. Skipping.')
+        return
     text = STUDIO.read_text(encoding='utf-8')
     marker = '// STUDIO_FUNCTIONALITY_V1'
     if marker not in text:

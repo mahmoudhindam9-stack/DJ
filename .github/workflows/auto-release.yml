@@ -39,19 +39,29 @@ jobs:
       - name: Read Version Name
         id: version
         run: |
-          # Use the app's own versionName (from app/build.gradle.kts) as the
-          # release tag instead of a raw timestamp. A timestamp is always
-          # numerically "greater" than the installed app's static version,
-          # so the in-app update checker would think a new release is always
-          # available and keep re-downloading the same build forever.
-          # Bump versionName in app/build.gradle.kts before pushing a release
-          # you actually want users to be prompted to install.
           VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
           VERSION="v$VERSION_NAME"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "Generated version: $VERSION"
 
+      - name: Setup Production Keystore
+        run: |
+          KEYSTORE_PATH="${{ github.workspace }}/my-upload-key.jks"
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
+          elif [ -n "${{ secrets.SIGNING_KEY }}" ]; then
+            echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > "$KEYSTORE_PATH"
+          fi
+          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
+
       - name: Build Release APK
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD }}
         run: ./gradlew :app:assembleRelease
 
       - name: Prepare Release APKs

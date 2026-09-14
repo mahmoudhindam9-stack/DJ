@@ -21,7 +21,6 @@
             android:textColor="#2962FF"
             android:textSize="10sp"
             android:textStyle="bold"
-            android:letterSpacing="0.1"
             android:layout_marginBottom="4dp" />
 
         <TextView
@@ -61,35 +60,32 @@
         android:gravity="center_vertical"
         android:layout_marginStart="16dp"
         android:background="@drawable/widget_panel_bg"
-        android:paddingHorizontal="8dp"
-        android:paddingVertical="4dp">
+        android:paddingLeft="8dp" android:paddingRight="8dp"
+        android:paddingTop="4dp" android:paddingBottom="4dp">
 
-        <ImageButton android:scaleType="centerInside"
+        <ImageButton 
             android:id="@+id/quick_prev"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:background="@android:color/transparent"
             android:src="@drawable/ic_widget_prev"
-            android:tint="#FFFFFF"
             android:contentDescription="Previous" />
 
-        <ImageButton android:scaleType="centerInside"
+        <ImageButton 
             android:id="@+id/quick_play"
             android:layout_width="48dp"
             android:layout_height="48dp"
-            android:layout_marginHorizontal="8dp"
+            android:layout_marginLeft="8dp" android:layout_marginRight="8dp"
             android:background="@drawable/widget_play_btn_bg"
             android:src="@drawable/ic_widget_play"
-            android:tint="#FFFFFF"
             android:contentDescription="Play/Pause" />
 
-        <ImageButton android:scaleType="centerInside"
+        <ImageButton 
             android:id="@+id/quick_next"
             android:layout_width="40dp"
             android:layout_height="40dp"
-            android:background="?android:attr/selectableItemBackgroundBorderless"
+            android:background="@android:color/transparent"
             android:src="@drawable/ic_widget_next"
-            android:tint="#FFFFFF"
             android:contentDescription="Next" />
     </LinearLayout>
 </LinearLayout>
