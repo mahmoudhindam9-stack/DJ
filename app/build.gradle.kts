@@ -20,8 +20,8 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 10
-    versionName = "1.9" // Push triggered updates
+    versionCode = 11
+    versionName = "2.0" // Push triggered updates
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
