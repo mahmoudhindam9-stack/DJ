@@ -49,8 +49,8 @@ jobs:
           elif [ -n "${{ secrets.SIGNING_KEY }}" ]; then
             echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > "$KEYSTORE_PATH"
           else
-            echo "Secrets missing. Generating a temporary self-signed keystore for CI build validation."
-            keytool -genkeypair -v -keystore "$KEYSTORE_PATH" -keyalg RSA -keysize 2048 -validity 10000 -alias production-release-key -storepass dummy_store_pass -keypass dummy_store_pass -dname "CN=Production Release, O=AI Studio, C=US"
+            echo "Secrets missing. Using persistent self-signed keystore checked into the repository."
+            cp app/release-key.jks "$KEYSTORE_PATH"
           fi
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
 
