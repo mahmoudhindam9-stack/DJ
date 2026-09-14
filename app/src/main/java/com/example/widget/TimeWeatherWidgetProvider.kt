@@ -21,9 +21,11 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 3 -> R.drawable.ic_weather_cloudy
                 45, 48 -> R.drawable.ic_weather_fog
                 51, 53, 55, 56, 57 -> R.drawable.ic_weather_rain
-                61, 63, 65, 66, 67 -> R.drawable.ic_weather_rain
+                61, 63 -> R.drawable.ic_weather_rain
+                65, 66, 67 -> R.drawable.ic_weather_heavy_rain
                 71, 73, 75, 77, 85, 86 -> R.drawable.ic_weather_snow
-                80, 81, 82 -> R.drawable.ic_weather_rain
+                80, 81 -> R.drawable.ic_weather_rain
+                82 -> R.drawable.ic_weather_heavy_rain
                 95, 96, 99 -> R.drawable.ic_weather_thunderstorm
                 else -> R.drawable.ic_weather_unknown
             }
@@ -31,14 +33,15 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
 
         private fun mapConditionToDrawable(condition: String): Int {
             return when {
-                condition.contains("🌙") || condition.contains("Night") -> R.drawable.ic_weather_clear_night
-                condition.contains("☀️") || condition.contains("Sunny") || condition.contains("Clear") -> R.drawable.ic_weather_sunny
-                condition.contains("⛅") || condition.contains("Partly") -> R.drawable.ic_weather_partly_cloudy
-                condition.contains("☁") || condition.contains("Cloudy") -> R.drawable.ic_weather_cloudy
-                condition.contains("🌧") || condition.contains("Rain") -> R.drawable.ic_weather_rain
-                condition.contains("⛈") || condition.contains("Thunder") -> R.drawable.ic_weather_thunderstorm
-                condition.contains("❄") || condition.contains("Snow") -> R.drawable.ic_weather_snow
-                condition.contains("🌫") || condition.contains("Fog") -> R.drawable.ic_weather_fog
+                condition.contains("Heavy", ignoreCase = true) && (condition.contains("Rain", ignoreCase = true) || condition.contains("🌧")) -> R.drawable.ic_weather_heavy_rain
+                condition.contains("🌙") || condition.contains("Night", ignoreCase = true) -> R.drawable.ic_weather_clear_night
+                condition.contains("☀️") || condition.contains("Sunny", ignoreCase = true) || condition.contains("Clear", ignoreCase = true) -> R.drawable.ic_weather_sunny
+                condition.contains("⛅") || condition.contains("🌤") || condition.contains("Partly", ignoreCase = true) -> R.drawable.ic_weather_partly_cloudy
+                condition.contains("☁") || condition.contains("Cloudy", ignoreCase = true) || condition.contains("Overcast", ignoreCase = true) -> R.drawable.ic_weather_cloudy
+                condition.contains("⛈") || condition.contains("Thunder", ignoreCase = true) -> R.drawable.ic_weather_thunderstorm
+                condition.contains("❄") || condition.contains("Snow", ignoreCase = true) || condition.contains("Sleet", ignoreCase = true) -> R.drawable.ic_weather_snow
+                condition.contains("🌧") || condition.contains("🌦") || condition.contains("Rain", ignoreCase = true) || condition.contains("Drizzle", ignoreCase = true) || condition.contains("Shower", ignoreCase = true) -> R.drawable.ic_weather_rain
+                condition.contains("🌫") || condition.contains("Fog", ignoreCase = true) || condition.contains("Mist", ignoreCase = true) || condition.contains("Haze", ignoreCase = true) -> R.drawable.ic_weather_fog
                 else -> R.drawable.ic_weather_unknown
             }
         }
@@ -156,7 +159,9 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             val snapshot = PlaybackNotificationRouter.activeSnapshot(context)
             views.setTextViewText(R.id.widget_title, snapshot.first)
             views.setTextViewText(R.id.widget_artist, snapshot.second)
-            views.setImageViewResource(R.id.widget_btn_play, if (snapshot.third) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            views.setImageViewResource(R.id.widget_btn_prev, R.drawable.ic_widget_prev)
+            views.setImageViewResource(R.id.widget_btn_play, if (snapshot.third) R.drawable.ic_widget_pause else R.drawable.ic_widget_play)
+            views.setImageViewResource(R.id.widget_btn_next, R.drawable.ic_widget_next)
             
             val progress = PlaybackNotificationRouter.activeProgress(context)
             val positionMs = progress.first
@@ -238,12 +243,20 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
         }
     }
 
+    override fun onEnabled(context: Context) {
+        super.onEnabled(context)
+        WeatherSyncHelper.scheduleHourlySync(context)
+        WeatherSyncHelper.syncWeather(context)
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
         super.onReceive(context, intent)
 
         when (intent.action) {
             ACTION_REFRESH,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
+            Intent.ACTION_MY_PACKAGE_REPLACED,
+            Intent.ACTION_BOOT_COMPLETED -> {
+                WeatherSyncHelper.syncWeather(context)
                 updateAll(context)
             }
         }
@@ -253,5 +266,6 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
         ids.forEach { id ->
             updateOne(context, manager, id)
         }
+        WeatherSyncHelper.syncWeather(context)
     }
 }
