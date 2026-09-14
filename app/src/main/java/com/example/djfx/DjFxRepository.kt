@@ -98,8 +98,14 @@ class DjFxRepository(private val context: Context) {
         val existingPadBanks = dao.getAllPads().map { it.padKey.substringBefore('_') }.toSet()
         val fxByCategory = dao.getAllFx().map { it.toItem() }.groupBy { it.category }
         bankCategories.forEach { (bank, category) ->
-            if (bank in existingPadBanks) return@forEach
+            // if (bank in existingPadBanks) return@forEach
             val sounds = fxByCategory[category].orEmpty()
+            
+            // clear the bank first
+            for (i in 0..15) {
+                dao.deletePad("${bank}_$i")
+            }
+
             sounds.take(16).forEachIndexed { index, fx ->
                 dao.insertPad(DjFxPadEntity("${bank}_$index", fx.id))
             }

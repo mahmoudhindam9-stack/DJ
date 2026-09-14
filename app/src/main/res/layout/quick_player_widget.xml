@@ -64,31 +64,31 @@
         android:paddingHorizontal="8dp"
         android:paddingVertical="4dp">
 
-        <ImageButton
+        <ImageButton android:scaleType="centerInside"
             android:id="@+id/quick_prev"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_previous"
+            android:src="@drawable/ic_widget_prev"
             android:tint="#FFFFFF"
             android:contentDescription="Previous" />
 
-        <ImageButton
+        <ImageButton android:scaleType="centerInside"
             android:id="@+id/quick_play"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_marginHorizontal="8dp"
             android:background="@drawable/widget_play_btn_bg"
-            android:src="@android:drawable/ic_media_play"
+            android:src="@drawable/ic_widget_play"
             android:tint="#FFFFFF"
             android:contentDescription="Play/Pause" />
 
-        <ImageButton
+        <ImageButton android:scaleType="centerInside"
             android:id="@+id/quick_next"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:background="?android:attr/selectableItemBackgroundBorderless"
-            android:src="@android:drawable/ic_media_next"
+            android:src="@drawable/ic_widget_next"
             android:tint="#FFFFFF"
             android:contentDescription="Next" />
     </LinearLayout>

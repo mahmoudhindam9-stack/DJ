@@ -45,7 +45,7 @@ class MusicWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.widget_title, title)
             views.setTextViewText(R.id.widget_artist, artist)
             views.setTextViewText(R.id.widget_status, if (isPlaying) "▶ Playing" else "⏸ Paused")
-            views.setImageViewResource(R.id.widget_btn_play, if (isPlaying) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            views.setImageViewResource(R.id.widget_btn_play, if (isPlaying) R.drawable.ic_widget_pause else R.drawable.ic_widget_play)
             
             val progress = PlaybackNotificationRouter.activeProgress(context)
             val positionMs = progress.first

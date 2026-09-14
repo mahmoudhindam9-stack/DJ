@@ -83,7 +83,7 @@ class MusicService : Service() {
 
     private fun syncFromController() {
         val controller = playerController ?: return
-        PlaybackNotificationRouter.activate(this, "player", controller.currentSong?.title ?: "مشغل الموسيقى", controller.currentSong?.artist ?: "موسيقى", controller.isPlaying,
+        PlaybackNotificationRouter.activate(this, "player", controller.currentSong?.title ?: "Music Player", controller.currentSong?.artist ?: "Music", controller.isPlaying,
             playPause = { controller.togglePlayPause() }, next = { controller.playNext() }, previous = { controller.playPrevious() }, stop = { controller.pause() })
     }
 
@@ -167,7 +167,7 @@ class MusicService : Service() {
 
     private fun refreshWidgetFromStoredState() {
         val prefs = getSharedPreferences("dj_player_session", MODE_PRIVATE)
-        updateWidget(prefs.getString("title", "مشغل الموسيقى") ?: "مشغل الموسيقى", prefs.getString("artist", "موسيقى") ?: "موسيقى", prefs.getBoolean("playing", false))
+        updateWidget(prefs.getString("title", "Music Player") ?: "Music Player", prefs.getString("artist", "Music") ?: "Music", prefs.getBoolean("playing", false))
     }
 
     private fun createNotificationChannel() {

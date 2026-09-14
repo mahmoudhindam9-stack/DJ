@@ -33,15 +33,15 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
 
         private fun mapConditionToDrawable(condition: String): Int {
             return when {
-                condition.contains("Heavy", ignoreCase = true) && (condition.contains("Rain", ignoreCase = true) || condition.contains("🌧")) -> R.drawable.ic_weather_heavy_rain
-                condition.contains("🌙") || condition.contains("Night", ignoreCase = true) -> R.drawable.ic_weather_clear_night
-                condition.contains("☀️") || condition.contains("Sunny", ignoreCase = true) || condition.contains("Clear", ignoreCase = true) -> R.drawable.ic_weather_sunny
-                condition.contains("⛅") || condition.contains("🌤") || condition.contains("Partly", ignoreCase = true) -> R.drawable.ic_weather_partly_cloudy
-                condition.contains("☁") || condition.contains("Cloudy", ignoreCase = true) || condition.contains("Overcast", ignoreCase = true) -> R.drawable.ic_weather_cloudy
-                condition.contains("⛈") || condition.contains("Thunder", ignoreCase = true) -> R.drawable.ic_weather_thunderstorm
-                condition.contains("❄") || condition.contains("Snow", ignoreCase = true) || condition.contains("Sleet", ignoreCase = true) -> R.drawable.ic_weather_snow
-                condition.contains("🌧") || condition.contains("🌦") || condition.contains("Rain", ignoreCase = true) || condition.contains("Drizzle", ignoreCase = true) || condition.contains("Shower", ignoreCase = true) -> R.drawable.ic_weather_rain
-                condition.contains("🌫") || condition.contains("Fog", ignoreCase = true) || condition.contains("Mist", ignoreCase = true) || condition.contains("Haze", ignoreCase = true) -> R.drawable.ic_weather_fog
+                condition.contains("Thunderstorm", ignoreCase = true) || condition.contains("Thunder", ignoreCase = true) || condition.contains("⛈") -> R.drawable.ic_weather_thunderstorm
+                (condition.contains("Heavy", ignoreCase = true) && condition.contains("Rain", ignoreCase = true)) || condition.contains("Heavy Rain", ignoreCase = true) -> R.drawable.ic_weather_heavy_rain
+                condition.contains("Rain", ignoreCase = true) || condition.contains("Drizzle", ignoreCase = true) || condition.contains("Shower", ignoreCase = true) || condition.contains("🌧") || condition.contains("🌦") -> R.drawable.ic_weather_rain
+                condition.contains("Snow", ignoreCase = true) || condition.contains("Sleet", ignoreCase = true) || condition.contains("Blizzard", ignoreCase = true) || condition.contains("❄") -> R.drawable.ic_weather_snow
+                condition.contains("Fog", ignoreCase = true) || condition.contains("Mist", ignoreCase = true) || condition.contains("Haze", ignoreCase = true) || condition.contains("🌫") -> R.drawable.ic_weather_fog
+                condition.contains("Partly Cloudy", ignoreCase = true) || condition.contains("Partly", ignoreCase = true) || condition.contains("⛅") || condition.contains("🌤") -> R.drawable.ic_weather_partly_cloudy
+                condition.contains("Cloudy", ignoreCase = true) || condition.contains("Overcast", ignoreCase = true) || condition.contains("☁") -> R.drawable.ic_weather_cloudy
+                condition.contains("Clear Night", ignoreCase = true) || condition.contains("Night", ignoreCase = true) || condition.contains("🌙") -> R.drawable.ic_weather_clear_night
+                condition.contains("Sunny", ignoreCase = true) || condition.contains("Clear", ignoreCase = true) || condition.contains("☀️") -> R.drawable.ic_weather_sunny
                 else -> R.drawable.ic_weather_unknown
             }
         }
@@ -124,7 +124,7 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
                 emojiOrCondition = condString
                 views.setTextViewText(R.id.weather_condition, condString)
             }
-            views.setImageViewResource(R.id.weather_icon, mapConditionToDrawable(emojiOrCondition))
+            views.setImageViewResource(R.id.weather_icon, mapConditionToDrawable(condString))
                         views.setTextViewText(R.id.weather_status, prefs.getString(STATUS, "Location not set") ?: "Location not set")
             
             val warningTxt = prefs.getString(WARNING, "") ?: ""

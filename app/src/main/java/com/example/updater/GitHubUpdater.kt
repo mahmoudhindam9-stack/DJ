@@ -237,7 +237,7 @@ object GitHubUpdater {
         if (githubOwner == "YOUR_GITHUB_USERNAME" || githubOwner.isEmpty()) {
             if (showToast) {
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(context, "الرجاء إضافة اسم الحساب والمستودع في كود GitHubUpdater.kt", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Please configure GitHub account and repo GitHubUpdater.kt", Toast.LENGTH_LONG).show()
                 }
             }
             return
@@ -274,29 +274,29 @@ object GitHubUpdater {
                         val selected = selectReleaseApk(json)
                         if (selected != null) {
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "تحديث جديد متاح ($latestVersion)، جاري التحميل...", Toast.LENGTH_LONG).show()
+                                Toast.makeText(context, "New update available ($latestVersion), downloading...", Toast.LENGTH_LONG).show()
                                 downloadAndInstallUpdate(context, selected.apkUrl, "app-update-$latestVersion.apk", selected.expectedSha256)
                             }
                         } else if (showToast) {
                             withContext(Dispatchers.Main) {
-                                Toast.makeText(context, "لم يتم العثور على حزمة APK صالحة للإصدار $latestVersion", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "No valid APK found for release $latestVersion", Toast.LENGTH_SHORT).show()
                             }
                         }
                     } else if (!isNewer && showToast) {
                         withContext(Dispatchers.Main) {
-                            Toast.makeText(context, "التطبيق محدث لأخر إصدار ($currVer)", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(context, "App is up to date ($currVer)", Toast.LENGTH_SHORT).show()
                         }
                     }
                 } else if (showToast) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "لم يتم العثور على تحديثات في جيت هب", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "No updates found on GitHub", Toast.LENGTH_SHORT).show()
                     }
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
                 if (showToast) {
                     withContext(Dispatchers.Main) {
-                        Toast.makeText(context, "خطأ في الاتصال: ${e.message}", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "Connection error: ${e.message}", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
@@ -324,8 +324,8 @@ object GitHubUpdater {
             }
 
             val request = DownloadManager.Request(apkUrl.toUri())
-                .setTitle("تحديث التطبيق")
-                .setDescription("جاري تحميل التحديث الجديد...")
+                .setTitle("App Update")
+                .setDescription("Downloading new update...")
                 .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                 .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, fileName)
                 .setAllowedOverMetered(true)
@@ -333,7 +333,7 @@ object GitHubUpdater {
 
             val downloadManager = context.getSystemService(Context.DOWNLOAD_SERVICE) as? DownloadManager
             if (downloadManager == null) {
-                Toast.makeText(context, "خدمة التنزيل غير متوفرة في النظام", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Download manager not available on this device", Toast.LENGTH_SHORT).show()
                 return
             }
             val downloadId = downloadManager.enqueue(request)
@@ -362,12 +362,12 @@ object GitHubUpdater {
                                         installApk(context, file)
                                     } else {
                                         if (file.exists()) file.delete()
-                                        Toast.makeText(context, "ملف التحديث تالف أو غير موثوق، تم حذفه لأسباب أمنية.", Toast.LENGTH_LONG).show()
+                                        Toast.makeText(context, "Update file is corrupted or untrusted, deleted for security.", Toast.LENGTH_LONG).show()
                                     }
                                 }
                                 DownloadManager.STATUS_FAILED -> {
                                     if (file.exists()) file.delete()
-                                    Toast.makeText(context, "فشل تحميل التحديث، تم إلغاء العملية.", Toast.LENGTH_SHORT).show()
+                                    Toast.makeText(context, "Update download failed, operation cancelled.", Toast.LENGTH_SHORT).show()
                                 }
                                 else -> {
                                     // Interrupted or paused
@@ -389,7 +389,7 @@ object GitHubUpdater {
             )
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "فشل بدء التحميل: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Failed to start download: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -397,7 +397,7 @@ object GitHubUpdater {
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.packageManager.canRequestPackageInstalls()) {
-                    Toast.makeText(context, "الرجاء السماح بتثبيت التطبيقات المجهولة لإكمال التحديث", Toast.LENGTH_LONG).show()
+                    Toast.makeText(context, "Please allow installing unknown apps to complete the update", Toast.LENGTH_LONG).show()
                     val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
                         data = "package:${context.packageName}".toUri()
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -415,11 +415,11 @@ object GitHubUpdater {
                 }
                 context.startActivity(intent)
             } else {
-                Toast.makeText(context, "ملف التحديث غير موجود أو فارغ", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Update file is missing or empty", Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
             e.printStackTrace()
-            Toast.makeText(context, "فشل فتح التثبيت: ${e.message}", Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Failed to open installer: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 }

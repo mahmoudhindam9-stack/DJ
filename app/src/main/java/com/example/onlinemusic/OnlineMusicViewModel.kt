@@ -42,7 +42,7 @@ class OnlineMusicViewModel(
             errorMessage = null
             runCatching { repository.getHome() }
                 .onSuccess { home = it }
-                .onFailure { errorMessage = it.message ?: "تعذر تحميل ألبوماتي" }
+                .onFailure { errorMessage = it.message ?: "Failed to load Albumaty" }
             isLoading = false
         }
     }
@@ -55,7 +55,7 @@ class OnlineMusicViewModel(
             errorMessage = null
             runCatching { audiusRepository.getHome() }
                 .onSuccess { audiusHome = it }
-                .onFailure { errorMessage = it.message ?: "تعذر تحميل الموسيقى الأجنبية" }
+                .onFailure { errorMessage = it.message ?: "Failed to load online music" }
             isLoading = false
         }
     }
@@ -67,7 +67,7 @@ class OnlineMusicViewModel(
             errorMessage = null
             runCatching { audiusRepository.search(query) }
                 .onSuccess { audiusSearchResults = it }
-                .onFailure { errorMessage = it.message ?: "تعذر البحث" }
+                .onFailure { errorMessage = it.message ?: "Search failed" }
             isLoading = false
         }
     }
@@ -87,7 +87,7 @@ class OnlineMusicViewModel(
                     section = loaded
                     errorMessage = null
                 }
-                .onFailure { errorMessage = it.message ?: "تعذر تحميل محتوى القسم" }
+                .onFailure { errorMessage = it.message ?: "Failed to load section content" }
             isLoading = false
         }
     }
@@ -100,7 +100,7 @@ class OnlineMusicViewModel(
         viewModelScope.launch {
             runCatching { audiusRepository.getArtistTracks(artist.id) }
                 .onSuccess { audiusArtistDetail = it }
-                .onFailure { errorMessage = it.message ?: "تعذر تحميل أغاني الفنان" }
+                .onFailure { errorMessage = it.message ?: "Failed to load artist songs" }
             isLoading = false
         }
     }
@@ -113,7 +113,7 @@ class OnlineMusicViewModel(
         viewModelScope.launch {
             runCatching { audiusRepository.getGenreTracks(genre) }
                 .onSuccess { audiusGenreDetail = genre to it }
-                .onFailure { errorMessage = it.message ?: "تعذر تحميل هذا النوع" }
+                .onFailure { errorMessage = it.message ?: "Failed to load this genre" }
             isLoading = false
         }
     }

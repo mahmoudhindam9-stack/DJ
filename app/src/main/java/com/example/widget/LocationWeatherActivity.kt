@@ -22,6 +22,10 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 import java.util.TimeZone
 
@@ -206,18 +210,21 @@ class LocationWeatherActivity : ComponentActivity() {
             val temps = hourlyJsonObj.optJSONArray("temperature_2m")
             val codes = hourlyJsonObj.optJSONArray("weather_code")
             val isDays = hourlyJsonObj.optJSONArray("is_day")
-            val sdfIn = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
-            val sdfOut = SimpleDateFormat("h a", Locale.getDefault())
-            val nowMs = System.currentTimeMillis()
+            val zone = runCatching { ZoneId.of(timezone) }.getOrElse { ZoneId.systemDefault() }
+            val isoFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+            val outFormatter = DateTimeFormatter.ofPattern("h a", Locale.getDefault())
+            val nowInZone = ZonedDateTime.now(zone)
             if (times != null && temps != null && codes != null) {
                 for (i in 0 until times.length()) {
                     val tStr = times.optString(i, "")
-                    val parsedDate = runCatching { sdfIn.parse(tStr) }.getOrNull()
-                    if (parsedDate != null && parsedDate.time < nowMs - 3600_000L) {
+                    val forecastZoned = runCatching {
+                        LocalDateTime.parse(tStr, isoFormatter).atZone(zone)
+                    }.getOrNull()
+                    if (forecastZoned != null && forecastZoned.toInstant().isBefore(nowInZone.toInstant().minusSeconds(3600))) {
                         continue
                     }
                     val item = JSONObject().apply {
-                        put("time", if (hourlyArray.length() == 0) "Now" else (parsedDate?.let { sdfOut.format(it) } ?: tStr))
+                        put("time", if (hourlyArray.length() == 0) "Now" else (forecastZoned?.format(outFormatter) ?: tStr))
                         put("temp", String.format(Locale.getDefault(), "%.0f°", temps.optDouble(i, 0.0)))
                         put("code", codes.optInt(i, 0))
                         put("isDay", isDays?.optInt(i, 1) == 1)

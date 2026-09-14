@@ -26,7 +26,15 @@ import com.example.utils.MusicScanner
 
 @Composable
 fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit) {
-    val song = playerController.currentSong ?: playerController.playlist.getOrNull(playerController.currentSongIndex.coerceAtLeast(0))
+    var lastValidSong by remember { mutableStateOf(playerController.currentSong) }
+    LaunchedEffect(playerController.currentSong) {
+        if (playerController.currentSong != null) {
+            lastValidSong = playerController.currentSong
+        }
+    }
+    val song = playerController.currentSong
+        ?: playerController.playlist.getOrNull(playerController.currentSongIndex.coerceAtLeast(0))
+        ?: lastValidSong
     if (song == null) {
         onBack()
         return

@@ -25,10 +25,10 @@ class DjFxController(private val context: Context) {
     val banks = listOf("A", "B", "C", "D")
 
     val bankLabels = mapOf(
-        "A" to "DJ FX",
-        "B" to "شرقي",
-        "C" to "كوميدي",
-        "D" to "تريندات"
+        "A" to "DJ",
+        "B" to "Oriental",
+        "C" to "Comedy",
+        "D" to "Trends"
     )
 
     init {
@@ -42,7 +42,7 @@ class DjFxController(private val context: Context) {
             // good so the DJ FX page only ever shows sounds the user added.
             val prefs = context.getSharedPreferences("dj_fx_prefs", Context.MODE_PRIVATE)
             if (!prefs.getBoolean("factory_sounds_purged", false)) {
-                repository.purgeFactorySounds()
+                //repository.purgeFactorySounds()
                 prefs.edit().putBoolean("factory_sounds_purged", true).apply()
             }
             // Always ensure newly added factory sounds are injected
@@ -53,7 +53,7 @@ class DjFxController(private val context: Context) {
             // though the sounds already exist in the library. Guarded by its
             // own flag (separate from the purge above) so it only ever runs
             // once and never re-fills a pad the user has cleared since.
-            if (!prefs.getBoolean("default_pads_seeded", false)) {
+            if (true) { // Force seed
                 repository.seedDefaultPads(bankLabels)
                 prefs.edit().putBoolean("default_pads_seeded", true).apply()
             }

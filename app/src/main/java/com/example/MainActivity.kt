@@ -89,10 +89,6 @@ class MainActivity : ComponentActivity() {
 fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
-    val prefs = remember { context.getSharedPreferences("app_session", Context.MODE_PRIVATE) }
-    val activity = context as? android.app.Activity
-    val intentRoute = activity?.intent?.getStringExtra("open_route")
-    val initialRoute = remember { intentRoute ?: prefs.getString("last_route", "player") ?: "player" }
 
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController.obtain(context).apply { activityCount++ } }
@@ -100,14 +96,6 @@ fun MainApp() {
     val eqController = remember { EqualizerController(context) }
     val micController = remember { MicController(context) }
     val djFxController = remember { com.example.djfx.DjFxController(context) }
-
-    LaunchedEffect(navController) {
-        navController.currentBackStackEntryFlow.collect { entry ->
-            entry.destination.route?.let { route ->
-                prefs.edit().putString("last_route", route).apply()
-            }
-        }
-    }
 
     LaunchedEffect(OnlineDjBridge.request?.id) {
         val request = OnlineDjBridge.request ?: return@LaunchedEffect
@@ -258,7 +246,7 @@ fun MainApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = initialRoute,
+            startDestination = "player",
             modifier = Modifier.padding(innerPadding)
         ) {
             composable("weather") {

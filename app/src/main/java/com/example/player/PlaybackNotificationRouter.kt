@@ -47,7 +47,7 @@ object PlaybackNotificationRouter {
     fun clear(source: String) {
         if (active?.source == source) {
             active = null
-            appContext?.let { context -> persist(context, "", "مشغل الموسيقى", "موسيقى", false) }
+            appContext?.let { context -> persist(context, "", "Music Player", "Music", false) }
         }
     }
 
@@ -87,7 +87,7 @@ object PlaybackNotificationRouter {
 
     fun activeSnapshot(context: Context): Triple<String, String, Boolean> {
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        return Triple(prefs.getString(KEY_TITLE, "مشغل الموسيقى") ?: "مشغل الموسيقى", prefs.getString(KEY_ARTIST, "موسيقى") ?: "موسيقى", prefs.getBoolean(KEY_PLAYING, false))
+        return Triple(prefs.getString(KEY_TITLE, "Music Player") ?: "Music Player", prefs.getString(KEY_ARTIST, "Music") ?: "Music", prefs.getBoolean(KEY_PLAYING, false))
     }
 
     private fun ensureService(context: Context) {

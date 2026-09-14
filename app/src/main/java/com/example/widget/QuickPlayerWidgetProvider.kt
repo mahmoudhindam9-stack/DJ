@@ -34,7 +34,7 @@ class QuickPlayerWidgetProvider : AppWidgetProvider() {
             views.setTextViewText(R.id.quick_title, snapshot.first)
             views.setTextViewText(R.id.quick_artist, snapshot.second)
             views.setTextViewText(R.id.quick_status, if (snapshot.third) "▶ Playing" else "⏸ Paused")
-            views.setImageViewResource(R.id.quick_play, if (snapshot.third) android.R.drawable.ic_media_pause else android.R.drawable.ic_media_play)
+            views.setImageViewResource(R.id.quick_play, if (snapshot.third) R.drawable.ic_widget_pause else R.drawable.ic_widget_play)
             val base = id * 20
             val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             WidgetPlaybackIntents.wireButtons(context, views, id, R.id.quick_prev, R.id.quick_play, R.id.quick_next, base)

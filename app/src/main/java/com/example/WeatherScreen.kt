@@ -31,6 +31,10 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 import java.text.SimpleDateFormat
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 data class HourlyForecast(val time: String, val temp: Int, val weatherCode: Int, val isDay: Boolean)
@@ -277,15 +281,22 @@ private fun fetchFullWeather(latitude: Double, longitude: Double): FullWeatherDa
     val hourlyCodes = hourlyJson.getJSONArray("weather_code")
     val hourlyIsDay = hourlyJson.optJSONArray("is_day")
     
+    val apiTimezone = json.optString("timezone", java.util.TimeZone.getDefault().id)
+    val zone = runCatching { ZoneId.of(apiTimezone) }.getOrElse { ZoneId.systemDefault() }
+    val isoFormatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME
+    val outFormatter = DateTimeFormatter.ofPattern("h a", Locale.getDefault())
+    val nowInZone = ZonedDateTime.now(zone)
+
     val hourlyList = mutableListOf<HourlyForecast>()
-    val sdfIn = SimpleDateFormat("yyyy-MM-dd'T'HH:mm", Locale.getDefault())
-    val sdfOut = SimpleDateFormat("h a", Locale.getDefault())
-    
     for (i in 0 until minOf(72, hourlyTimes.length())) {
         val t = hourlyTimes.getString(i)
-        val d = sdfIn.parse(t)
-        if (d != null && d.time < System.currentTimeMillis() - 3600_000) continue 
-        val timeStr = if (d != null) sdfOut.format(d) else t
+        val forecastZoned = runCatching {
+            LocalDateTime.parse(t, isoFormatter).atZone(zone)
+        }.getOrNull()
+        if (forecastZoned != null && forecastZoned.toInstant().isBefore(nowInZone.toInstant().minusSeconds(3600))) {
+            continue
+        }
+        val timeStr = forecastZoned?.format(outFormatter) ?: t
         val hIsDay = hourlyIsDay?.optInt(i, 1) == 1
         hourlyList.add(HourlyForecast(timeStr, hourlyTemps.getDouble(i).toInt(), hourlyCodes.getInt(i), hIsDay))
         if (hourlyList.size >= 24) break

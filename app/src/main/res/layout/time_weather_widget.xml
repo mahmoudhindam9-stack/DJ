@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@drawable/widget_dj_bg"
+    android:fillViewport="true">
+<LinearLayout
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@drawable/widget_dj_bg"
@@ -183,7 +188,7 @@
                 android:gravity="center_vertical"
                 android:layout_marginStart="6dp">
 
-                <ImageButton
+                <ImageButton android:scaleType="centerInside"
                     android:id="@+id/widget_btn_prev"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
@@ -192,7 +197,7 @@
                     android:tint="#FFFFFF"
                     android:contentDescription="Previous" />
 
-                <ImageButton
+                <ImageButton android:scaleType="centerInside"
                     android:id="@+id/widget_btn_play"
                     android:layout_width="36dp"
                     android:layout_height="36dp"
@@ -202,7 +207,7 @@
                     android:tint="#FFFFFF"
                     android:contentDescription="Play/Pause" />
 
-                <ImageButton
+                <ImageButton android:scaleType="centerInside"
                     android:id="@+id/widget_btn_next"
                     android:layout_width="32dp"
                     android:layout_height="32dp"
@@ -720,3 +725,4 @@
         android:visibility="gone" />
 
 </LinearLayout>
+</ScrollView>

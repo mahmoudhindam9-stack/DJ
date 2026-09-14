@@ -83,8 +83,8 @@ class AudiusMusicRepository {
             .header("Accept", "audio/mpeg,audio/*;q=0.9,*/*;q=0.8")
             .build()
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) error("فشل تنزيل الملف: HTTP ${response.code}")
-            val body = response.body ?: error("ملف الصوت فارغ")
+            if (!response.isSuccessful) error("Failed to download file: HTTP ${response.code}")
+            val body = response.body ?: error("Audio file is empty")
             resolver.openOutputStream(destination)?.use { output ->
                 body.byteStream().use { input ->
                     val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
@@ -98,7 +98,7 @@ class AudiusMusicRepository {
                     output.flush()
                     total
                 }
-            } ?: error("تعذر فتح مكان الحفظ")
+            } ?: error("Failed to open save location")
         }
     }
 
@@ -123,7 +123,7 @@ class AudiusMusicRepository {
                 lastFailure = t
             }
         }
-        throw lastFailure ?: IllegalStateException("تعذر الاتصال بخدمة Audius")
+        throw lastFailure ?: IllegalStateException("Failed to connect to Audius service")
     }
 
     private fun isReachableStream(url: String): Boolean = runCatching {
@@ -153,7 +153,7 @@ class AudiusMusicRepository {
     }.distinctBy { it.id }
 
     private fun parseSingleUser(array: JSONArray): AudiusArtist {
-        val item = array.optJSONObject(0) ?: error("لم يتم العثور على الفنان")
+        val item = array.optJSONObject(0) ?: error("Artist not found")
         val id = item.optString("id")
         val name = item.optString("name").ifBlank { item.optString("handle") }.ifBlank { "Artist" }
         val image = item.optJSONObject("profile_picture")?.optString("_480x480") ?: item.optJSONObject("profile_picture")?.optString("_150x150")

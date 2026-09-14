@@ -179,7 +179,7 @@ class MicController(private val context: Context) {
             AudioPlayerController.updateGlobalPreferredAudioDevice(value)
         }
 
-    var routingStatus by mutableStateOf("جاهز لتوجيه الصوت")
+    var routingStatus by mutableStateOf("Ready for audio routing")
         private set
 
     private val sampleRate = 44100
@@ -242,7 +242,7 @@ class MicController(private val context: Context) {
                 context.checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
             ) {
                 requestBluetoothPermissionsIfNeeded()
-                routingStatus = "امنح إذن Bluetooth ثم شغّل الميكروفون مرة أخرى"
+                routingStatus = "Grant Bluetooth permission then start mic again"
                 return
             }
             startMic(coroutineScope)
@@ -394,7 +394,7 @@ class MicController(private val context: Context) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                 val accepted = record.setPreferredDevice(device)
                 if (!accepted && device != null) {
-                    routingStatus = "تعذر توجيه الميكروفون إلى ${device.displayName()}"
+                    routingStatus = "Failed to route mic to ${device.displayName()}"
                     return
                 }
             }
@@ -407,7 +407,7 @@ class MicController(private val context: Context) {
             applyOutputRouting()
             updateRoutingStatus()
         } catch (t: Exception) {
-            routingStatus = "تعذر تغيير مصدر الإدخال: ${t.message ?: "خطأ"}"
+            routingStatus = "Failed to change input source: ${t.message ?: "Error"}"
         }
     }
 
@@ -417,7 +417,7 @@ class MicController(private val context: Context) {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     val accepted = track.setPreferredDevice(selectedOutputDevice)
                     if (!accepted && selectedOutputDevice != null) {
-                        routingStatus = "تعذر توجيه الصوت إلى ${selectedOutputDevice?.displayName()}"
+                        routingStatus = "Failed to route audio to ${selectedOutputDevice?.displayName()}"
                         return
                     }
                 }
@@ -437,7 +437,7 @@ class MicController(private val context: Context) {
             }
             updateRoutingStatus()
         } catch (t: Exception) {
-            routingStatus = "تعذر تغيير مخرج الصوت: ${t.message ?: "خطأ"}"
+            routingStatus = "Failed to change audio output: ${t.message ?: "Error"}"
         }
     }
 
@@ -445,11 +445,11 @@ class MicController(private val context: Context) {
         if (!isMicEnabled) return
         val actualInput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioRecord?.routedDevice else null
         val actualOutput = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) audioTrack?.routedDevice else null
-        val inputName = actualInput?.displayName() ?: selectedInputDevice?.displayName() ?: "تلقائي"
-        val outputName = actualOutput?.displayName() ?: selectedOutputDevice?.displayName() ?: "تلقائي"
+        val inputName = actualInput?.displayName() ?: selectedInputDevice?.displayName() ?: "Auto"
+        val outputName = actualOutput?.displayName() ?: selectedOutputDevice?.displayName() ?: "Auto"
         val independent = selectedInputDevice != null && selectedOutputDevice != null && selectedInputDevice?.id != selectedOutputDevice?.id
-        val suffix = if (independent) "  •  مستقل" else ""
-        routingStatus = "الإدخال: $inputName  •  الإخراج: $outputName$suffix"
+        val suffix = if (independent) "  •  Independent" else ""
+        routingStatus = "Input: $inputName  •  Output: $outputName$suffix"
     }
 
     /** Apply an input selection immediately. If live monitoring is active, the recorder is restarted
@@ -507,7 +507,7 @@ class MicController(private val context: Context) {
         } else {
             audioManager.mode = AudioManager.MODE_NORMAL
         }
-        routingStatus = "تم إيقاف الميكروفون"
+        routingStatus = "Microphone stopped"
     }
 
     fun close() {
