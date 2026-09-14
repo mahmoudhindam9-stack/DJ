@@ -59,6 +59,9 @@ class AudioPlayerController(private val context: Context) {
     private var crossfadeStartTimeMs = 0L
     private var activeCrossfadeDurationMs = 2000L
     private var pendingStopPreview = false
+    private var isHandoverFading = false
+    private var handoverStartTimeMs = 0L
+    private val handoverDurationMs = 300L
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -756,14 +759,30 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun updateProgress() {
-        if (exoPlayer.isPlaying || durationMs == 0L || isCrossfading || pendingStopPreview) {
+        if (exoPlayer.isPlaying || durationMs == 0L || isCrossfading || pendingStopPreview || isHandoverFading) {
             currentPositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
             val realDuration = exoPlayer.duration
             if (realDuration > 0L) durationMs = realDuration
 
+            if (isHandoverFading) {
+                val elapsed = android.os.SystemClock.elapsedRealtime() - handoverStartTimeMs
+                if (elapsed >= handoverDurationMs) {
+                    stopCrossfadePreview()
+                    isHandoverFading = false
+                    try { exoPlayer.volume = volume } catch (e: Exception) {}
+                } else {
+                    val progress = (elapsed.toFloat() / handoverDurationMs.toFloat()).coerceIn(0f, 1f)
+                    val previewVol = volume * (1f - progress)
+                    val mainVol = volume * progress
+                    try { previewPlayerInstance?.volume = previewVol } catch (e: Exception) {}
+                    try { exoPlayer.volume = mainVol } catch (e: Exception) {}
+                }
+            }
+
             if (pendingStopPreview) {
                 if (exoPlayer.playbackState == Player.STATE_READY && exoPlayer.isPlaying) {
-                    stopCrossfadePreview()
+                    isHandoverFading = true
+                    handoverStartTimeMs = android.os.SystemClock.elapsedRealtime()
                     pendingStopPreview = false
                 }
             }
@@ -936,7 +955,7 @@ class AudioPlayerController(private val context: Context) {
                 currentSong = playlist[targetIndex]
             }
 
-            exoPlayer.volume = volume
+            exoPlayer.volume = 0f
             seekOrLoadMedia(currentSong, playlist.toList(), currentSongIndex, previewPosition)
             applyPreferredAudioDevice()
             exoPlayer.play()
@@ -956,6 +975,8 @@ class AudioPlayerController(private val context: Context) {
 
     private fun stopCrossfadePreview() {
         crossfadePreparedIndex = -1
+        isHandoverFading = false
+        pendingStopPreview = false
         try {
             previewPlayerInstance?.stop()
             previewPlayerInstance?.clearMediaItems()

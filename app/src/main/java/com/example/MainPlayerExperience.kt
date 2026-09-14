@@ -38,6 +38,7 @@ import com.example.room.AppDatabase
 import com.example.room.PlaylistEntity
 import com.example.room.PlaylistRepository
 import com.example.utils.MusicScanner
+import com.example.updater.GitHubUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -151,6 +152,22 @@ fun PlayerScreenV2(
                     DropdownMenuItem(text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
                     DropdownMenuItem(text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
                     DropdownMenuItem(text = { Text("Add music folder") }, onClick = { showLibraryMenu = false; folderPicker.launch(null) }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
+                    DropdownMenuItem(
+                        text = { Text("Check for updates") },
+                        onClick = {
+                            showLibraryMenu = false
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+                                    val version = pInfo.versionName ?: "1.0"
+                                    GitHubUpdater.checkForUpdates(context, version, showToast = true)
+                                } catch (e: Exception) {
+                                    e.printStackTrace()
+                                }
+                            }
+                        },
+                        leadingIcon = { Icon(Icons.Filled.SystemUpdate, null) }
+                    )
                 }
             }
             infoMessage?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }

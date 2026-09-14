@@ -265,7 +265,7 @@ object GitHubUpdater {
                     val lastPromptTime = updaterPrefs.getLong("last_prompt_time", 0L)
                     val currentTime = System.currentTimeMillis()
                     val oneDayMs = 24 * 60 * 60 * 1000L
-                    val shouldPrompt = showToast || (currentTime - lastPromptTime > oneDayMs)
+                    val shouldPrompt = true
 
                     if (isNewer && shouldPrompt) {
                         // Record prompt notification time only; NEVER mark version as installed here
