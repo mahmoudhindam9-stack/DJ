@@ -21,7 +21,7 @@ android {
     minSdk = 24
     targetSdk = 36
     versionCode = 13
-    versionName = "2.2" // Push triggered updates
+    versionName = "2.2" // Auto-release trigger
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
