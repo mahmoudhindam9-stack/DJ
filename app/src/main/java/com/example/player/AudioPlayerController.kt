@@ -457,7 +457,8 @@ class AudioPlayerController(private val context: Context) {
         currentPosition: Long,
         wasPlaying: Boolean
     ) {
-        val items = shuffleState.currentOrder.map {
+        val expectedSongs = if (isShuffle) shuffleState.currentOrder else baseQueue.toList()
+        val items = expectedSongs.map {
             MediaItem.Builder()
                 .setUri(it.uri)
                 .setMediaId(it.id.ifEmpty { it.uri.toString() })
@@ -466,22 +467,28 @@ class AudioPlayerController(private val context: Context) {
 
         if (items.isEmpty()) return
 
-        val currentIndex = currentMediaId?.let { id ->
-            items.indexOfFirst {
-                it.mediaId == id || it.localConfiguration?.uri?.toString() == id
-            }
-        } ?: -1
+        val currentIndex = if (isShuffle) {
+            currentSongIndex
+        } else {
+            val curSong = currentSong
+            expectedSongs.indexOfFirst {
+                val key = it.id.ifEmpty { it.uri.toString() }
+                val curKey = curSong?.let { s -> s.id.ifEmpty { s.uri.toString() } }
+                key == curKey || it.uri == curSong?.uri
+            }.coerceAtLeast(0)
+        }
 
-        if (currentIndex < 0) return
+        if (currentIndex < 0 || currentIndex >= items.size) return
 
         // Only update the queue when necessary.
-        // Avoid clearing and rebuilding the player unnecessarily.
-        val currentPlayerId = exoPlayer.currentMediaItem?.mediaId
-            ?: exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString()
+        val playerItems = (0 until exoPlayer.mediaItemCount).map { idx ->
+            val mi = exoPlayer.getMediaItemAt(idx)
+            mi.mediaId.ifBlank { mi.localConfiguration?.uri?.toString().orEmpty() }
+        }
+        val expectedIds = items.map { it.mediaId }
+        val isQueueMatch = playerItems == expectedIds
 
-        if (currentPlayerId != null && (currentPlayerId == currentMediaId || (currentMediaId != null && currentPlayerId.contains(currentMediaId)))) {
-            // Current item already exists in ExoPlayer.
-            // Do not reload/re-prepare it.
+        if (isQueueMatch) {
             return
         }
 
@@ -533,6 +540,12 @@ class AudioPlayerController(private val context: Context) {
             }
             persistSession(force = true)
             syncNotificationSafely()
+
+            syncShuffleQueuePreservingCurrent(
+                currentMediaId = currentMediaId,
+                currentPosition = currentPosition,
+                wasPlaying = wasPlaying
+            )
             return
         }
 

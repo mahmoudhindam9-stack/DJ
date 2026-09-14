@@ -266,7 +266,7 @@ fun PlayerScreenV2(
             }
         }
     }
-    if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.play(song, playerController.playlist); showQueue = false }
+    if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.play(song, null); showQueue = false }
     if (showMixPlaylists) MixPlaylistsDialog(playlists, audioLibrary, { showMixPlaylists = false }) { songs, shuffle ->
         if (songs.isNotEmpty()) {
             onPauseDJ()
