@@ -91,6 +91,7 @@ fun PlayerScreenV2(
         }
     }
 
+    var showMusicImport by remember { mutableStateOf(false) }
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         val target = addFolderPlaylistId
         addFolderPlaylistId = null
@@ -151,7 +152,7 @@ fun PlayerScreenV2(
                 DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
                     DropdownMenuItem(text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
                     DropdownMenuItem(text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
-                    DropdownMenuItem(text = { Text("Add music folder") }, onClick = { showLibraryMenu = false; folderPicker.launch(null) }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
+                    DropdownMenuItem(text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
                         text = { Text("Check for updates") },
                         onClick = {
@@ -267,6 +268,36 @@ fun PlayerScreenV2(
         }
     }
     if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.play(song, null); showQueue = false }
+    if (showMusicImport) {
+        MusicImportDialog(
+            onDismiss = { showMusicImport = false },
+            playlists = playlists,
+            onImportToPlaylist = { items, playlistId ->
+                scope.launch {
+                    addToLibrary(audioLibrary, items, context)
+                    playlists.firstOrNull { it.id == playlistId }?.let { playlist ->
+                        repo.updateSongs(playlistId, (playlist.songIds + items.map { it.id }).distinct().joinToString(","))
+                    }
+                    infoMessage = "Added ${items.size} song(s)"
+                }
+            },
+            onCreatePlaylistAndImport = { items, name ->
+                scope.launch {
+                    addToLibrary(audioLibrary, items, context)
+                    repo.insert(com.example.room.PlaylistEntity(playlistId = java.util.UUID.randomUUID().toString(), name = name, songIdsJson = items.map { it.id }.joinToString(",")))
+                    infoMessage = "Created playlist $name"
+                }
+            },
+            onPlayNow = { items ->
+                scope.launch {
+                    addToLibrary(audioLibrary, items, context)
+                    playerController.play(items.first(), items)
+                    showNowPlaying = true
+                }
+            }
+        )
+    }
+
     if (showMixPlaylists) MixPlaylistsDialog(playlists, audioLibrary, { showMixPlaylists = false }) { songs, shuffle ->
         if (songs.isNotEmpty()) {
             onPauseDJ()

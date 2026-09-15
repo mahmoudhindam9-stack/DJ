@@ -816,23 +816,19 @@ class AudioPlayerController(private val context: Context) {
                     val remaining = durationMs - currentPositionMs
 
                     val currentMediaId = exoPlayer.currentMediaItem?.mediaId
-                    val nextMediaItem: MediaItem? = when {
+                    val nextSong: AudioItem? = when {
                         isShuffle -> {
-                            resolveNextShuffleMediaItem()
+                            resolveNextShuffleSong()
                         }
-                        exoPlayer.hasNextMediaItem() -> {
-                            val nextIdx = exoPlayer.nextMediaItemIndex
-                            if (nextIdx != androidx.media3.common.C.INDEX_UNSET && nextIdx < exoPlayer.mediaItemCount) {
-                                exoPlayer.getMediaItemAt(nextIdx)
-                            } else {
-                                null
-                            }
+                        currentSongIndex + 1 < playlist.size -> {
+                            playlist[currentSongIndex + 1]
                         }
                         repeatOption == RepeatOption.ALL && playlist.isNotEmpty() -> {
-                            mediaItemFromSong(playlist.first())
+                            playlist.first()
                         }
                         else -> null
                     }
+                    val nextMediaItem = nextSong?.let { mediaItemFromSong(it) }
 
                     if (repeatOption != RepeatOption.ONE && remaining in 1 until crossfadeDurationMs && nextMediaItem != null) {
                         startCrossfade(nextMediaItem, remaining)
@@ -915,48 +911,22 @@ class AudioPlayerController(private val context: Context) {
 
         val previewMediaId = preview?.currentMediaItem?.mediaId
 
-        var targetIndex = -1
-        if (previewMediaId != null) {
-            targetIndex = playlist.indexOfFirst {
-                val key = it.id.ifEmpty { it.uri.toString() }
-                key == previewMediaId
-            }
+        if (previewMediaId == null) {
+            stopCrossfadePreview()
+            skipNextFadeIn = true
+            persistSession(force = true)
+            syncNotificationSafely()
+            return
         }
 
-        if (targetIndex < 0) {
-            targetIndex = if (isShuffle) {
-                val nextSong = resolveNextShuffleSong()
-                if (nextSong != null) {
-                    playlist.indexOfFirst { it.uri == nextSong.uri }
-                } else {
-                    -1
-                }
-            } else {
-                if (currentSongIndex + 1 < playlist.size) {
-                    currentSongIndex + 1
-                } else if (repeatOption == RepeatOption.ALL) {
-                    0
-                } else {
-                    -1
-                }
-            }
-        }
+        val curId = currentSong?.id?.ifEmpty { currentSong?.uri?.toString() }
+        val isAlreadyTarget = curId != null && (curId == previewMediaId || currentSong?.uri?.toString() == preview.currentMediaItem?.localConfiguration?.uri?.toString())
 
-        if (targetIndex in playlist.indices) {
+        if (!isAlreadyTarget) {
             if (isShuffle) {
-                val oldCycle = shuffleState.cycleNumber
                 val pool = if (baseQueue.isNotEmpty()) baseQueue else shuffleState.currentOrder
-
-                val nextIndexInCycle = shuffleState.currentOrder.indexOfFirst {
-                    (it.id.ifEmpty { it.uri.toString() }) == previewMediaId
-                }
-
-                if (nextIndexInCycle >= 0) {
-                    shuffleState = shuffleState.copy(currentIndex = nextIndexInCycle)
-                } else {
-                    shuffleState = ShuffleManager.next(shuffleState, pool)
-                }
-
+                val oldCycle = shuffleState.cycleNumber
+                shuffleState = ShuffleManager.next(shuffleState, pool)
                 if (shuffleState.cycleNumber != oldCycle) {
                     playlist.clear()
                     playlist.addAll(shuffleState.currentOrder)
@@ -964,22 +934,29 @@ class AudioPlayerController(private val context: Context) {
                 currentSongIndex = shuffleState.currentIndex
                 currentSong = shuffleState.currentSong
             } else {
-                currentSongIndex = targetIndex
-                currentSong = playlist[targetIndex]
+                val nextIdx = (currentSongIndex + 1).takeIf { it < playlist.size } ?: if (repeatOption == RepeatOption.ALL) 0 else -1
+                if (nextIdx >= 0) {
+                    currentSongIndex = nextIdx
+                    currentSong = playlist.getOrNull(currentSongIndex)
+                } else {
+                    isPlaying = false
+                    exoPlayer.volume = volume
+                    exoPlayer.pause()
+                    stopCrossfadePreview()
+                    pendingStopPreview = false
+                    skipNextFadeIn = true
+                    persistSession(force = true)
+                    syncNotificationSafely()
+                    return
+                }
             }
-
-            exoPlayer.volume = 0f
-            seekOrLoadMedia(currentSong, playlist.toList(), currentSongIndex, previewPosition)
-            applyPreferredAudioDevice()
-            exoPlayer.play()
-            pendingStopPreview = true
-        } else {
-            isPlaying = false
-            exoPlayer.volume = volume
-            exoPlayer.pause()
-            stopCrossfadePreview()
-            pendingStopPreview = false
         }
+
+        exoPlayer.volume = 0f
+        seekOrLoadMedia(currentSong, playlist.toList(), currentSongIndex, previewPosition)
+        applyPreferredAudioDevice()
+        exoPlayer.play()
+        pendingStopPreview = true
 
         skipNextFadeIn = true
         persistSession(force = true)
