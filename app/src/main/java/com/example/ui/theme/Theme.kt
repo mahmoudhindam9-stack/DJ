@@ -282,108 +282,14 @@ private val LightCyberCyanColorScheme = lightColorScheme(
     error = DjError
 )
 
+
+
 @Composable
 fun MyApplicationTheme(
     appTheme: AppThemeOption = AppThemeOption.SYSTEM,
     // We disable dynamic color to maintain the strict DJ aesthetic (neon/dark)
     dynamicColor: Boolean = false,
-    content: private val LightDjBlueColorScheme = lightColorScheme(
-    primary = Color(0xFF2962FF),
-    secondary = Color(0xFF00B0FF),
-    tertiary = Color(0xFF00E5FF),
-    background = Color(0xFFF0F4F8),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE1E8F0),
-    outline = Color(0xFFB0BEC5),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-private val LightMidnightPurpleColorScheme = lightColorScheme(
-    primary = Color(0xFFAA00FF),
-    secondary = Color(0xFFD500F9),
-    tertiary = Color(0xFFFF00FF),
-    background = Color(0xFFF8F0FA),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFF0E1F5),
-    outline = Color(0xFFD1B3E0),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-private val LightGoldPremiumColorScheme = lightColorScheme(
-    primary = Color(0xFFD4AF37),
-    secondary = Color(0xFFFFC400),
-    tertiary = Color(0xFFFFEA00),
-    background = Color(0xFFFCFAF2),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFF7F1D7),
-    outline = Color(0xFFD6C881),
-    onPrimary = Color.White,
-    onSecondary = Color.Black,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-private val LightNeonGreenColorScheme = lightColorScheme(
-    primary = Color(0xFF00C853),
-    secondary = Color(0xFF00E676),
-    tertiary = Color(0xFF69F0AE),
-    background = Color(0xFFF0FAF2),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE1F5E6),
-    outline = Color(0xFF9CCC65),
-    onPrimary = Color.White,
-    onSecondary = Color.Black,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-private val LightCrimsonRedColorScheme = lightColorScheme(
-    primary = Color(0xFFD50000),
-    secondary = Color(0xFFFF1744),
-    tertiary = Color(0xFFFF5252),
-    background = Color(0xFFFAF0F0),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFF5E1E1),
-    outline = Color(0xFFE57373),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-private val LightCyberCyanColorScheme = lightColorScheme(
-    primary = Color(0xFF00B8D4),
-    secondary = Color(0xFF00E5FF),
-    tertiary = Color(0xFF18FFFF),
-    background = Color(0xFFF0FAFA),
-    surface = Color(0xFFFFFFFF),
-    surfaceVariant = Color(0xFFE1F5F5),
-    outline = Color(0xFF4DD0E1),
-    onPrimary = Color.White,
-    onSecondary = Color.Black,
-    onBackground = Color(0xFF1A1A1A),
-    onSurface = Color(0xFF222222),
-    onSurfaceVariant = Color(0xFF555555),
-    error = DjError
-)
-
-@Composable () -> Unit
+    content: @Composable () -> Unit
 ) {
     val isSystemDark = isSystemInDarkTheme()
     val darkTheme = when (appTheme) {

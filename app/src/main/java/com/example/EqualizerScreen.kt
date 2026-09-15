@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.tutorial.*
 import com.example.player.EqualizerController
 import com.example.ui.components.CustomVerticalSlider
 import com.example.ui.components.DjSurfaceCard
@@ -69,7 +68,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
         // Presets
         Text(
             "PRESETS",
-            modifier = Modifier.tutorialTarget(TutorialStep.EQ_PRESETS),
+            modifier = Modifier,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             letterSpacing = 1.sp,
@@ -113,7 +112,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
                     "FREQUENCIES",
-                    modifier = Modifier.tutorialTarget(TutorialStep.EQ_FREQUENCIES),
+                    modifier = Modifier,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 1.sp,
@@ -188,7 +187,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 ) {
                     Text(
                         "BASS BOOST",
-                        modifier = Modifier.tutorialTarget(TutorialStep.EQ_BASS_TREBLE),
+                        modifier = Modifier,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -266,7 +265,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 ) {
                     Text(
                         "PREAMP GAIN",
-                        modifier = Modifier.tutorialTarget(TutorialStep.EQ_PREAMP),
+                        modifier = Modifier,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,

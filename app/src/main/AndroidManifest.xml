@@ -79,5 +79,11 @@
                 android:resource="@xml/file_paths" />
         </provider>
         <receiver android:name=".widget.WidgetActionReceiver" android:exported="false" />
+    
+        <activity android:name=".widget.TimeWeatherWidgetConfigActivity" android:exported="true">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

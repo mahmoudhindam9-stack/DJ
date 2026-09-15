@@ -23,13 +23,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
-import com.example.tutorial.*
 import com.example.model.AudioItem
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
 import com.example.player.AudioPlayerController
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import java.net.HttpURLConnection
@@ -123,7 +123,13 @@ object RadioBrowserRepository {
 
 enum class RadioStatus { IDLE, LOADING, LIVE, FAILED }
 
+
+object StationValidator {
+    val validStations = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+}
+
 private suspend fun resolvePlaylistUrl(url: String): String = withContext(Dispatchers.IO) {
+
     val lower = url.lowercase()
     if (!lower.substringBefore('?').endsWith(".m3u") && !lower.substringBefore('?').endsWith(".pls")) return@withContext url
     runCatching {
@@ -167,6 +173,7 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
 
     var stations by remember { mutableStateOf<List<RadioStation>>(emptyList()) }
     var loading by remember { mutableStateOf(false) }
+    var validating by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
     var deckPicker by remember { mutableStateOf<RadioStation?>(null) }
     var favorites by remember { mutableStateOf<Set<String>>(emptySet()) }
@@ -181,17 +188,71 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
 
     val isPlayerBuffering = playerController.isBuffering
 
+
     LaunchedEffect(country, search, refreshToken) {
         loading = true
         error = null
         try {
-            stations = RadioBrowserRepository.stations(country.ifBlank { null }, search)
+            val rawStations = RadioBrowserRepository.stations(country.ifBlank { null }, search)
+            loading = false
+            validating = true
+            val validList = mutableListOf<RadioStation>()
+            
+            withContext(Dispatchers.IO) {
+                // Test concurrently with limited parallelism
+                val parallelism = 10
+                for (chunk in rawStations.chunked(parallelism)) {
+                    kotlinx.coroutines.coroutineScope {
+                        chunk.map { station ->
+                            async {
+                            if (StationValidator.validStations.containsKey(station.id)) {
+                                if (StationValidator.validStations[station.id] == true) {
+                                    synchronized(validList) { validList.add(station) }
+                                }
+                                return@async
+                            }
+                            
+                            var isValid = false
+                            for (urlStr in station.streamUrls) {
+                                val resolvedUrl = resolvePlaylistUrl(urlStr)
+                                try {
+                                    val conn = URL(resolvedUrl).openConnection() as HttpURLConnection
+                                    conn.connectTimeout = 5000
+                                    conn.readTimeout = 5000
+                                    conn.requestMethod = "GET"
+                                    conn.setRequestProperty("User-Agent", "DJ-Music-Player/1.0")
+                                    val code = conn.responseCode
+                                    if (code in 200..299) {
+                                        val contentType = conn.contentType?.lowercase() ?: ""
+                                        if (contentType.contains("audio") || contentType.contains("mpeg") || contentType.contains("ogg") || contentType.contains("aac") || contentType.contains("flac") || contentType.contains("application") || contentType.contains("video/ogg")) {
+                                            isValid = true
+                                        }
+                                    }
+                                    conn.disconnect()
+                                    if (isValid) break
+                                } catch (e: Exception) {}
+                            }
+                            StationValidator.validStations[station.id] = isValid
+                            if (isValid) {
+                                synchronized(validList) { validList.add(station) }
+                            }
+                        }
+                    }.forEach { it.await() }
+                    }
+                    
+                    // Update UI incrementally
+                    stations = validList.toList()
+                }
+            }
+            stations = validList
         } catch (e: Exception) {
             error = e.localizedMessage ?: "فشل الاتصال بالخادم"
         } finally {
             loading = false
+            validating = false
         }
     }
+
 
     suspend fun playStation(station: RadioStation, requestedIndex: Int = 0) {
         var index = requestedIndex.coerceIn(0, station.streamUrls.lastIndex)
@@ -262,7 +323,17 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
         Spacer(Modifier.height(8.dp))
         OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(24.dp), placeholder = { Text(if (country == "EG") "ابحث في الإذاعات المصرية..." else "ابحث عن محطة...") }, leadingIcon = { Icon(Icons.Filled.Search, null) }, trailingIcon = if (search.isNotEmpty()) ({ IconButton(onClick = { search = "" }) { Icon(Icons.Filled.Close, "مسح") } }) else null)
         Spacer(Modifier.height(10.dp))
+
         if (loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp)) }
+        if (validating) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
+                CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+                Text("Checking World Radio...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Spacer(Modifier.height(10.dp))
+        }
+
         error?.let {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
                 Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WifiOff, null); Spacer(Modifier.width(8.dp)); Text(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { refreshToken++ }) { Text("إعادة المحاولة") } }
@@ -295,9 +366,9 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                                 Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isStationFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             }
                             if (isStationLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                            IconButton(modifier = Modifier.run { if (index == 0) tutorialTarget(TutorialStep.RADIO_FAVORITES) else this }, onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
+                            IconButton(modifier = Modifier, onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
                             IconButton(onClick = { deckPicker = station }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }
-                            FilledIconButton(modifier = Modifier.run { if (index == 0) tutorialTarget(TutorialStep.RADIO_PLAY) else this },
+                            FilledIconButton(modifier = Modifier,
                                 onClick = {
                                     if (isStationPlaying) {
                                         playerController.pause()

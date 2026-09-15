@@ -53,8 +53,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
-import com.example.tutorial.*
-import com.example.tutorial.TutorialOverlay
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.onlinemusic.OnlineDjBridge
@@ -103,7 +101,7 @@ fun MainApp() {
         try {
             val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             appVersion = pInfo.versionName ?: "1.0"
-            TutorialManager.init(context, appVersion)
+            
         } catch (e: Exception) {}
     }
 
@@ -321,13 +319,7 @@ fun MainApp() {
             }
         }
     }
-    TutorialOverlay(onNavigate = { route ->
-        navController.navigate(route) {
-            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
-        }
-    })
+    
     }
 }
 // KARAOKE_MIC_PAGE_V5

@@ -109,9 +109,13 @@ class TimeWeatherWidgetProvider : AppWidgetProvider() {
             manager.getAppWidgetIds(component).forEach { updateOne(context, manager, it) }
         }
 
-        private fun updateOne(context: Context, manager: AppWidgetManager, id: Int) {
+        fun updateOne(context: Context, manager: AppWidgetManager, id: Int) {
             val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
             val views = RemoteViews(context.packageName, R.layout.time_weather_widget)
+            
+            val alpha = prefs.getInt("bg_alpha_$id", 255)
+            views.setInt(R.id.widget_bg_image, "setImageAlpha", alpha)
+
             views.setTextViewText(R.id.weather_city, prefs.getString(CITY, "Current location") ?: "Current location")
             views.setTextViewText(R.id.weather_temp, prefs.getString(TEMP, "--°C") ?: "--°C")
             val condString = prefs.getString(CONDITION, "Tap refresh") ?: "Tap refresh"

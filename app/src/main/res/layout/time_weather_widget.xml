@@ -1,11 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/widget_dj_bg"
-    android:orientation="vertical"
-    android:paddingLeft="10dp" android:paddingRight="10dp"
-    android:paddingTop="6dp" android:paddingBottom="6dp">
+    android:id="@+id/widget_root">
+    
+    <ImageView
+        android:id="@+id/widget_bg_image"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/widget_dj_bg"
+        android:scaleType="fitXY" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingLeft="10dp" android:paddingRight="10dp"
+        android:paddingTop="6dp" android:paddingBottom="6dp">
 
     <!-- Top: Weather & Time Row -->
     <LinearLayout
@@ -692,3 +703,4 @@
         android:layout_height="wrap_content"
         android:visibility="gone" />
 </LinearLayout>
+</FrameLayout>

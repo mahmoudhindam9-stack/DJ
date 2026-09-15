@@ -30,7 +30,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.example.tutorial.*
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.boundsInRoot
 import com.example.model.AudioItem
@@ -76,17 +75,8 @@ fun PlayerScreenV2(
     var showLibraryMenu by remember { mutableStateOf(false) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
     
-    val tutorialStep by TutorialManager.currentStep.collectAsState()
-    LaunchedEffect(tutorialStep) {
-        if (tutorialStep == TutorialStep.MENU_SCAN || 
-            tutorialStep == TutorialStep.MENU_ADD || 
-            tutorialStep == TutorialStep.MENU_IMPORT || 
-            tutorialStep == TutorialStep.MENU_UPDATE) {
-            showLibraryMenu = true
-        } else if (tutorialStep == TutorialStep.NONE) {
-            showLibraryMenu = false
-        }
-    }
+    
+     
 
     LaunchedEffect(playerController.currentSong?.id) {
         if (playerController.currentSong != null) showNowPlaying = true
@@ -165,7 +155,7 @@ fun PlayerScreenV2(
                 }
                 var showThemeMenu by remember { mutableStateOf(false) }
                 Box {
-                    IconButton(onClick = { showThemeMenu = true }, modifier = Modifier.tutorialTarget(TutorialStep.UPDATE_NEW_THEMES)) {
+                    IconButton(onClick = { showThemeMenu = true }, modifier = Modifier) {
                         Icon(androidx.compose.material.icons.Icons.Filled.Palette, contentDescription = "Themes")
                     }
                     DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
@@ -181,13 +171,13 @@ fun PlayerScreenV2(
                     }
                 }
                 Box {
-                    IconButton(onClick = { showLibraryMenu = true }, modifier = Modifier.tutorialTarget(TutorialStep.MAIN_MENU_BUTTON)) { Icon(Icons.Filled.MoreVert, "Library menu") }
+                    IconButton(onClick = { showLibraryMenu = true }, modifier = Modifier) { Icon(Icons.Filled.MoreVert, "Library menu") }
                     DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
-                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_SCAN), text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
-                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_ADD), text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
-                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_IMPORT), text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
+                    DropdownMenuItem(modifier = Modifier, text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
+                    DropdownMenuItem(modifier = Modifier, text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
+                    DropdownMenuItem(modifier = Modifier, text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
-                        modifier = Modifier.tutorialTarget(TutorialStep.MENU_UPDATE),
+                        modifier = Modifier,
                         text = { Text("Check for updates") },
                         onClick = {
                             showLibraryMenu = false
