@@ -250,6 +250,27 @@ class AudioPlayerController(private val context: Context) {
         DJDeckController.activeDecks.forEach { it.pause() }
     }
 
+    fun playRadio(song: AudioItem, mediaItem: MediaItem) {
+        pauseOthers()
+        stopCrossfadePreview()
+        
+        baseQueue.clear()
+        baseQueue.add(song)
+        playlist.clear()
+        playlist.add(song)
+        currentSongIndex = 0
+        currentSong = song
+        
+        exoPlayer.setMediaItem(mediaItem)
+        exoPlayer.prepare()
+        applyPreferredAudioDevice()
+        exoPlayer.play()
+        
+        skipNextFadeIn = true
+        persistSession(force = true)
+        syncNotificationSafely()
+    }
+
     fun play(song: AudioItem, newQueue: List<AudioItem>? = null) {
         pauseOthers()
 
@@ -812,7 +833,7 @@ class AudioPlayerController(private val context: Context) {
                         try { previewPlayerInstance?.volume = inVol } catch (e: Exception) {}
                         try { exoPlayer.volume = outVol } catch (e: Exception) {}
                     }
-                } else if (exoPlayer.isPlaying) {
+                } else if (exoPlayer.isPlaying && !exoPlayer.isCurrentMediaItemLive && currentSong?.album != "Live Radio") {
                     val remaining = durationMs - currentPositionMs
 
                     val currentMediaId = exoPlayer.currentMediaItem?.mediaId

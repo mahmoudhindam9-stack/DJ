@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tutorial.*
 import com.example.player.EqualizerController
 import com.example.ui.components.CustomVerticalSlider
 import com.example.ui.components.DjSurfaceCard
@@ -63,6 +64,114 @@ fun EqualizerScreen(eqController: EqualizerController) {
             )
         }
 
+
+
+        // Presets
+        Text(
+            "PRESETS",
+            modifier = Modifier.tutorialTarget(TutorialStep.EQ_PRESETS),
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            letterSpacing = 1.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            items(eqController.presets) { preset ->
+                val isSelected = eqController.selectedPreset == preset
+                FilterChip(
+                    selected = isSelected,
+                    onClick = { eqController.applyPreset(preset) },
+                    label = { 
+                        Text(
+                            preset, 
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                        ) 
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
+                    ),
+                    enabled = eqController.isEnabled,
+                    shape = RoundedCornerShape(16.dp)
+                )
+            }
+        }
+        
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // EQ Bands
+        DjSurfaceCard(
+            modifier = Modifier.fillMaxWidth(),
+            color = MaterialTheme.colorScheme.surface,
+            borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    "FREQUENCIES",
+                    modifier = Modifier.tutorialTarget(TutorialStep.EQ_FREQUENCIES),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                Row(
+                    modifier = Modifier.fillMaxWidth().height(250.dp),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    eqController.bands.forEach { band ->
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(
+                                text = "${band.currentLevelDb} dB",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 4.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CustomVerticalSlider(
+                                    value = band.currentLevelDb.toFloat(),
+                                    onValueChange = {
+                                        eqController.updateBandLevel(band.id, it.roundToInt())
+                                    },
+                                    valueRange = band.minLevelDb.toFloat()..band.maxLevelDb.toFloat(),
+                                    enabled = eqController.isEnabled,
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .width(48.dp)
+                                )
+                            }
+                            
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = band.name.replace(" ", "\n"),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                fontSize = 9.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
         // Bass Boost & Treble Boost
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -79,6 +188,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 ) {
                     Text(
                         "BASS BOOST",
+                        modifier = Modifier.tutorialTarget(TutorialStep.EQ_BASS_TREBLE),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -139,6 +249,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
             }
         }
 
+
         Spacer(modifier = Modifier.height(24.dp))
 
         // Preamp
@@ -155,6 +266,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 ) {
                     Text(
                         "PREAMP GAIN",
+                        modifier = Modifier.tutorialTarget(TutorialStep.EQ_PREAMP),
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp,
@@ -180,111 +292,6 @@ fun EqualizerScreen(eqController: EqualizerController) {
             }
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // EQ Bands
-        DjSurfaceCard(
-            modifier = Modifier.fillMaxWidth(),
-            color = MaterialTheme.colorScheme.surface,
-            borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
-        ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    "FREQUENCIES",
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Row(
-                    modifier = Modifier.fillMaxWidth().height(250.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
-                ) {
-                    eqController.bands.forEach { band ->
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
-                        ) {
-                            Text(
-                                text = "${band.currentLevelDb} dB",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Bold
-                            )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(horizontal = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CustomVerticalSlider(
-                                    value = band.currentLevelDb.toFloat(),
-                                    onValueChange = {
-                                        eqController.updateBandLevel(band.id, it.roundToInt())
-                                    },
-                                    valueRange = band.minLevelDb.toFloat()..band.maxLevelDb.toFloat(),
-                                    enabled = eqController.isEnabled,
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(48.dp)
-                                )
-                            }
-                            
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = band.name.replace(" ", "\n"),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                fontSize = 9.sp,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Presets
-        Text(
-            "PRESETS",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            letterSpacing = 1.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            items(eqController.presets) { preset ->
-                val isSelected = eqController.selectedPreset == preset
-                FilterChip(
-                    selected = isSelected,
-                    onClick = { eqController.applyPreset(preset) },
-                    label = { 
-                        Text(
-                            preset, 
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                        ) 
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                    ),
-                    enabled = eqController.isEnabled,
-                    shape = RoundedCornerShape(16.dp)
-                )
-            }
-        }
-        
         Spacer(modifier = Modifier.height(24.dp))
     }
 }

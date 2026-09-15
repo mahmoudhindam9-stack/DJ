@@ -35,6 +35,7 @@ import android.widget.Toast
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.ui.layout.ContentScale
+import com.example.tutorial.*
 import com.example.model.*
 import com.example.player.*
 import kotlinx.coroutines.*
@@ -62,7 +63,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Karaoke Studio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+        Text("Karaoke Studio", modifier = Modifier.tutorialTarget(TutorialStep.MIC_CONTROLS), style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text("Live vocal monitor with DJ-style effects", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(14.dp))
 

@@ -29,7 +29,7 @@ class DeckFxAudioProcessor : AudioProcessor {
 
     // EQ stuff
     private var eqEnabled = false
-    private val activeEqFilters = Array(2) { Array(10) { BiquadFilter() } }
+    private val activeEqFilters = Array(2) { Array(12) { BiquadFilter() } }
     private var appliedEqVersion = -1L
     
     fun initContext(context: android.content.Context) {
@@ -84,8 +84,10 @@ class DeckFxAudioProcessor : AudioProcessor {
         eqEnabled = GlobalEqualizerState.enabled
         for (ch in 0 until channelCount) {
             for (i in 0 until 10) {
-                activeEqFilters[ch][i].setPeakingEQ(EQ_FREQUENCIES[i], levels.getOrElse(i) { 0f }, 1.2f, sampleRate.toFloat())
+                activeEqFilters[ch][i].setPeakingEQ(EQ_FREQUENCIES[i], levels.getOrElse(i) { 0f }, 1.0f, sampleRate.toFloat())
             }
+            activeEqFilters[ch][10].setLowShelf(80f, GlobalEqualizerState.bassBoostDb, sampleRate.toFloat())
+            activeEqFilters[ch][11].setHighShelf(10000f, GlobalEqualizerState.trebleBoostDb, sampleRate.toFloat())
         }
         appliedEqVersion = version
     }
@@ -101,7 +103,7 @@ class DeckFxAudioProcessor : AudioProcessor {
 
     private fun applyEq(sample: Float, ch: Int): Float {
         var s = sample
-        for (i in 0 until 10) {
+        for (i in 0 until 12) {
             s = activeEqFilters[ch][i].process(s)
         }
         return s
@@ -118,7 +120,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         
         appliedEqVersion = -1L
         for (ch in 0 until 2) {
-            for (i in 0 until 10) {
+            for (i in 0 until 12) {
                 activeEqFilters[ch][i].resetState()
             }
         }
@@ -127,6 +129,15 @@ class DeckFxAudioProcessor : AudioProcessor {
 
     override fun isActive(): Boolean = inputFormat != AudioProcessor.AudioFormat.NOT_SET
 
+    private fun softLimit(sample: Float): Float {
+        val LIMITER_THRESHOLD = 0.82f
+        val magnitude = abs(sample)
+        if (magnitude <= LIMITER_THRESHOLD) return sample
+        val excess = (magnitude - LIMITER_THRESHOLD) / (1f - LIMITER_THRESHOLD)
+        val compressed = LIMITER_THRESHOLD + (1f - LIMITER_THRESHOLD) * tanh(excess)
+        return if (sample < 0f) -compressed else compressed
+    }
+
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!isActive()) {
             inputBuffer.position(inputBuffer.limit())
@@ -134,35 +145,31 @@ class DeckFxAudioProcessor : AudioProcessor {
         }
         val bytes = inputBuffer.remaining()
         if (bytes <= 0) return
-
+        
         syncGlobalState()
-
-        // EQUALIZER_FUNCTIONALITY_V1
-        // EQ is itself an audio effect. Never bypass the PCM processing path
-        // merely because no DJ FX button is active. Otherwise the equalizer
-        // has no audible effect during normal playback.
+        
         if (activeEffects.isEmpty() && !eqEnabled) {
             val output = replaceOutputBuffer(bytes)
             output.put(inputBuffer)
             output.flip()
             return
         }
-
+        
         val output = replaceOutputBuffer(bytes)
         val frames = bytes / (2 * channelCount)
         val fxAmount = amount.coerceIn(0.01f, 1f)
-
+        val gain = if (eqEnabled) Math.pow(10.0, GlobalEqualizerState.preampDb.toDouble() / 20.0).toFloat() else 1f
+        
         for (f in 0 until frames) {
             for (ch in 0 until channelCount) {
                 if (!inputBuffer.hasRemaining()) break
                 val inputShort = inputBuffer.short
                 var sample = inputShort.toFloat() / 32768.0f
-
+                
                 if (eqEnabled) {
                     sample = applyEq(sample, ch)
                 }
-
-                // Apply Modular FX Engine
+                
                 for (plugin in pluginChain) {
                     if (fxAmount > 0.01f) {
                         if (!plugin.enabled) plugin.enabled = true
@@ -176,7 +183,12 @@ class DeckFxAudioProcessor : AudioProcessor {
                         }
                     }
                 }
-
+                
+                if (eqEnabled) {
+                    sample *= gain
+                }
+                sample = softLimit(sample)
+                
                 val outSample = sample.coerceIn(-1f, 1f)
                 output.putShort((outSample * 32767.0f).roundToInt().toShort())
             }
@@ -195,7 +207,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         outputBuffer = AudioProcessor.EMPTY_BUFFER
         inputEnded = false
         for (ch in 0 until 2) {
-            for (i in 0 until 10) activeEqFilters[ch][i].resetState()
+            for (i in 0 until 12) activeEqFilters[ch][i].resetState()
         }
         val currentPlugins = pluginChain
         currentPlugins.forEach { it.reset() }
@@ -211,6 +223,6 @@ class DeckFxAudioProcessor : AudioProcessor {
     }
 
     companion object {
-        val EQ_FREQUENCIES = floatArrayOf(32f, 64f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
+        val EQ_FREQUENCIES = floatArrayOf(60f, 170f, 310f, 600f, 1000f, 3000f, 6000f, 12000f, 14000f, 16000f)
     }
 }

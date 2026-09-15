@@ -91,12 +91,14 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBassBoost(level: Float) {
         bassBoostLevel = level.coerceIn(0f, 1f)
-        updateBandLevel(0, (-6 + bassBoostLevel * 12f).toInt())
+        persistState()
+        broadcastState()
     }
 
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
-        updateBandLevel(9, (-6 + trebleBoostLevel * 12f).toInt())
+        persistState()
+        broadcastState()
     }
 
     // Named updatePreampDb to avoid the JVM setter clash with the preampDb property.
@@ -140,7 +142,9 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         levels: FloatArray,
         enabled: Boolean,
         preset: String,
-        sharedPreampDb: Float
+        sharedPreampDb: Float,
+        sharedBassBoost: Float,
+        sharedTrebleBoost: Float
     ) {
         for (i in bands.indices) {
             bands[i].currentLevelDb = levels.getOrElse(i) { 0f }.toInt().coerceIn(-12, 12)
@@ -148,6 +152,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         isEnabled = enabled
         selectedPreset = preset
         preampDb = sharedPreampDb.coerceIn(0f, 12f)
+        bassBoostLevel = sharedBassBoost.coerceIn(0f, 1f)
+        trebleBoostLevel = sharedTrebleBoost.coerceIn(0f, 1f)
         syncQuickFromBands()
         onUpdate()
     }
@@ -158,10 +164,12 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         val enabled = isEnabled
         val preset = selectedPreset
         val sharedPreamp = if (enabled) preampDb else 0f
-        //DeckFxAudioProcessor.setGlobalPreampDb(sharedPreamp)
-        GlobalEqualizerState.update(levels, enabled, sharedPreamp)
+        val sharedBassBoost = if (enabled) bassBoostLevel * 12f else 0f
+        val sharedTrebleBoost = if (enabled) trebleBoostLevel * 12f else 0f
+        
+        GlobalEqualizerState.update(levels, enabled, sharedPreamp, sharedBassBoost, sharedTrebleBoost)
         for (controller in instanceRegistry) {
-            controller.applySharedSnapshot(levels, enabled, preset, sharedPreamp)
+            controller.applySharedSnapshot(levels, enabled, preset, sharedPreamp, bassBoostLevel, trebleBoostLevel)
         }
     }
 
@@ -174,6 +182,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 .putString("preset", selectedPreset)
                 .putBoolean("enabled", isEnabled)
                 .putFloat("preamp", preampDb)
+                .putFloat("bassBoost", bassBoostLevel)
+                .putFloat("trebleBoost", trebleBoostLevel)
             for (i in bands.indices) {
                 editor.putInt("band_$i", bands[i].currentLevelDb)
             }
@@ -195,10 +205,14 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             selectedPreset = prefs.getString("preset", "Flat") ?: "Flat"
             isEnabled = prefs.getBoolean("enabled", false)
             preampDb = prefs.getFloat("preamp", 0f).coerceIn(0f, 12f)
+            bassBoostLevel = prefs.getFloat("bassBoost", 0f).coerceIn(0f, 1f)
+            trebleBoostLevel = prefs.getFloat("trebleBoost", 0f).coerceIn(0f, 1f)
             GlobalEqualizerState.update(
                 bands.map { it.currentLevelDb.toFloat() }.toFloatArray(),
                 isEnabled,
-                if (isEnabled) preampDb else 0f
+                if (isEnabled) preampDb else 0f,
+                if (isEnabled) bassBoostLevel * 12f else 0f,
+                if (isEnabled) trebleBoostLevel * 12f else 0f
             )
             syncQuickFromBands()
             onUpdate()

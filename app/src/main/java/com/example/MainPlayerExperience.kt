@@ -30,6 +30,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import com.example.tutorial.*
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.boundsInRoot
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.player.AudioPlayerController
@@ -72,6 +75,18 @@ fun PlayerScreenV2(
     var showMixPlaylists by remember { mutableStateOf(false) }
     var showLibraryMenu by remember { mutableStateOf(false) }
     var infoMessage by remember { mutableStateOf<String?>(null) }
+    
+    val tutorialStep by TutorialManager.currentStep.collectAsState()
+    LaunchedEffect(tutorialStep) {
+        if (tutorialStep == TutorialStep.MENU_SCAN || 
+            tutorialStep == TutorialStep.MENU_ADD || 
+            tutorialStep == TutorialStep.MENU_IMPORT || 
+            tutorialStep == TutorialStep.MENU_UPDATE) {
+            showLibraryMenu = true
+        } else if (tutorialStep == TutorialStep.NONE) {
+            showLibraryMenu = false
+        }
+    }
 
     LaunchedEffect(playerController.currentSong?.id) {
         if (playerController.currentSong != null) showNowPlaying = true
@@ -148,12 +163,31 @@ fun PlayerScreenV2(
                     Text("MUSIC LIBRARY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
                     Text("Local audio and playlists", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                IconButton(onClick = { showLibraryMenu = true }) { Icon(Icons.Filled.MoreVert, "Library menu") }
-                DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
-                    DropdownMenuItem(text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
-                    DropdownMenuItem(text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
-                    DropdownMenuItem(text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
+                var showThemeMenu by remember { mutableStateOf(false) }
+                Box {
+                    IconButton(onClick = { showThemeMenu = true }, modifier = Modifier.tutorialTarget(TutorialStep.UPDATE_NEW_THEMES)) {
+                        Icon(androidx.compose.material.icons.Icons.Filled.Palette, contentDescription = "Themes")
+                    }
+                    DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
+                        com.example.ui.theme.AppThemeOption.values().forEach { themeOpt ->
+                            DropdownMenuItem(
+                                text = { Text(themeOpt.displayName) },
+                                onClick = {
+                                    showThemeMenu = false
+                                    com.example.ui.theme.ThemeManager.setTheme(context, themeOpt)
+                                }
+                            )
+                        }
+                    }
+                }
+                Box {
+                    IconButton(onClick = { showLibraryMenu = true }, modifier = Modifier.tutorialTarget(TutorialStep.MAIN_MENU_BUTTON)) { Icon(Icons.Filled.MoreVert, "Library menu") }
+                    DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
+                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_SCAN), text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
+                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_ADD), text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
+                    DropdownMenuItem(modifier = Modifier.tutorialTarget(TutorialStep.MENU_IMPORT), text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
+                        modifier = Modifier.tutorialTarget(TutorialStep.MENU_UPDATE),
                         text = { Text("Check for updates") },
                         onClick = {
                             showLibraryMenu = false
@@ -169,6 +203,7 @@ fun PlayerScreenV2(
                         },
                         leadingIcon = { Icon(Icons.Filled.SystemUpdate, null) }
                     )
+                    }
                 }
             }
             infoMessage?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
@@ -369,13 +404,21 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
     var downloading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
+    val onlineSongs = remember(controller.playlist.toList()) {
+        controller.playlist.filter {
+            val source = it.uri.toString()
+            (source.startsWith("http://") || source.startsWith("https://")) && it.album != "Live Radio"
+        }
+    }
+    val hasOnlineSongs = onlineSongs.isNotEmpty()
+
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         showFolderPicker = false
         if (uri == null) return@rememberLauncherForActivityResult
         downloading = true
         message = "Downloading queue..."
         scope.launch {
-            val result = OnlineQueueDownloader.download(context, uri, controller.playlist.toList())
+            val result = OnlineQueueDownloader.download(context, uri, onlineSongs)
             downloading = false
             message = "Downloaded ${result.downloaded}; skipped ${result.skipped}; failed ${result.failed}"
         }
@@ -388,10 +431,12 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
                     Text("UPCOMING QUEUE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
                     Text("${controller.playlist.size} song(s)", style = MaterialTheme.typography.bodySmall)
                 }
-                Button(onClick = { if (!downloading && controller.playlist.isNotEmpty()) folderPicker.launch(null) }, enabled = !downloading && controller.playlist.isNotEmpty()) {
-                    Icon(Icons.Filled.Download, null)
-                    Spacer(Modifier.width(5.dp))
-                    Text(if (downloading) "Downloading..." else "Download List")
+                if (hasOnlineSongs || downloading) {
+                    Button(onClick = { if (!downloading) folderPicker.launch(null) }, enabled = !downloading) {
+                        Icon(Icons.Filled.Download, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text(if (downloading) "Downloading..." else "Download List")
+                    }
                 }
             }
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }

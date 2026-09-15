@@ -53,6 +53,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.*
+import com.example.tutorial.*
+import com.example.tutorial.TutorialOverlay
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.onlinemusic.OnlineDjBridge
@@ -62,10 +64,14 @@ import com.example.ui.theme.MyApplicationTheme
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.delay
 
+import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.example.ui.theme.ThemeManager.init(this)
         enableEdgeToEdge()
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -78,7 +84,8 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
-            MyApplicationTheme {
+            val appTheme by com.example.ui.theme.ThemeManager.currentTheme.collectAsState()
+            MyApplicationTheme(appTheme = appTheme) {
                 MainApp()
             }
         }
@@ -90,6 +97,15 @@ class MainActivity : ComponentActivity() {
 fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
+
+    var appVersion by remember { mutableStateOf("1.0") }
+    LaunchedEffect(Unit) {
+        try {
+            val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+            appVersion = pInfo.versionName ?: "1.0"
+            TutorialManager.init(context, appVersion)
+        } catch (e: Exception) {}
+    }
 
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController.obtain(context).apply { activityCount++ } }
@@ -167,6 +183,7 @@ fun MainApp() {
         }
     }
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         bottomBar = {
             NavigationBar(
@@ -304,8 +321,15 @@ fun MainApp() {
             }
         }
     }
+    TutorialOverlay(onNavigate = { route ->
+        navController.navigate(route) {
+            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    })
+    }
 }
-
 // KARAOKE_MIC_PAGE_V5
 // MIC_RECORDING_FORMAT_V1
 

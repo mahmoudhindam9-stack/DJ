@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import com.example.tutorial.*
 import com.example.model.AudioItem
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
@@ -46,9 +48,10 @@ data class RadioStation(
 
 object RadioBrowserRepository {
     private val HOSTS = listOf(
-        "at1.api.radio-browser.info",
+        "all.api.radio-browser.info",
         "de1.api.radio-browser.info",
-        "nl1.api.radio-browser.info"
+        "nl1.api.radio-browser.info",
+        "at1.api.radio-browser.info"
     )
 
     suspend fun stations(countryCode: String?, query: String): List<RadioStation> = withContext(Dispatchers.IO) {
@@ -107,7 +110,7 @@ object RadioBrowserRepository {
                 }
             } catch (e: Exception) {
                 lastException = e
-                android.util.Log.e("RadioBrowserRepository", "Error fetching from $host", e)
+                android.util.Log.w("RadioBrowserRepository", "Warning: Could not fetch from $host")
             }
         }
         
@@ -171,8 +174,11 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
     var failedStationId by remember { mutableStateOf<String?>(null) }
     val attempts = remember { mutableStateMapOf<String, Int>() }
 
-    val currentMediaId = playerController.currentSong?.id
-    val isPlayerPlaying = playerController.isPlaying
+    // Trigger recomposition on state changes
+    val isPlayingTrigger = playerController.isPlaying
+    val currentMediaId = playerController.exoPlayer.currentMediaItem?.mediaId
+    val isPlayerPlaying = playerController.exoPlayer.isPlaying
+
     val isPlayerBuffering = playerController.isBuffering
 
     LaunchedEffect(country, search, refreshToken) {
@@ -195,16 +201,41 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
         while (index < station.streamUrls.size) {
             val resolvedUrl = resolvePlaylistUrl(station.streamUrls[index])
             val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(resolvedUrl))
-            runCatching {
-                playerController.play(item, listOf(item))
-                val media = MediaItem.Builder().setUri(resolvedUrl).apply { radioMime(station.codec, resolvedUrl)?.let(::setMimeType) }.build()
-                playerController.exoPlayer.setMediaItem(media)
-                playerController.exoPlayer.prepare()
-                playerController.exoPlayer.play()
-            }.onSuccess {
-                loadingStationId = null
-                return
-            }.onFailure {
+            
+            try {
+                val media = MediaItem.Builder()
+                    .setMediaId(station.id)
+                    .setUri(resolvedUrl)
+                    .apply {
+                        radioMime(station.codec, resolvedUrl)?.let(::setMimeType)
+                    }
+                    .build()
+                playerController.playRadio(item, media)
+                
+                var success = false
+                for (i in 0 until 100) { // wait up to 20 seconds
+                    kotlinx.coroutines.delay(200)
+                    if (loadingStationId != station.id) return // User selected another station
+                    
+                    val error = playerController.exoPlayer.playerError
+                    if (error != null) {
+                        break // Failed, try next stream url
+                    }
+                    val state = playerController.exoPlayer.playbackState
+                    if (state == androidx.media3.common.Player.STATE_READY) {
+                        success = true
+                        break
+                    }
+                }
+                
+                if (success) {
+                    loadingStationId = null
+                    return
+                } else {
+                    index++
+                    attempts[station.id] = index
+                }
+            } catch (e: Exception) {
                 index++
                 attempts[station.id] = index
             }
@@ -239,7 +270,7 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
             Spacer(Modifier.height(8.dp))
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
-            items(visibleStations, key = { it.id }) { station ->
+            items(visibleStations.size, key = { visibleStations[it].id }) { index -> val station = visibleStations[index]
                 val isCurrentStation = (currentMediaId == station.id)
                 val isStationPlaying = isCurrentStation && isPlayerPlaying
                 val isStationLoading = (loadingStationId == station.id) || (isCurrentStation && isPlayerBuffering && !isStationPlaying)
@@ -264,9 +295,9 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                                 Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isStationFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             }
                             if (isStationLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                            IconButton(onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
+                            IconButton(modifier = Modifier.run { if (index == 0) tutorialTarget(TutorialStep.RADIO_FAVORITES) else this }, onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
                             IconButton(onClick = { deckPicker = station }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }
-                            FilledIconButton(
+                            FilledIconButton(modifier = Modifier.run { if (index == 0) tutorialTarget(TutorialStep.RADIO_PLAY) else this },
                                 onClick = {
                                     if (isStationPlaying) {
                                         playerController.pause()

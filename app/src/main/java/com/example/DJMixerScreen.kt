@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.tutorial.*
 import com.example.model.AudioItem
 import com.example.player.DJDeckController
 import com.example.player.DJMixerController
@@ -160,7 +161,7 @@ fun DJMixerScreen(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Box(modifier = Modifier.weight(1f)) {
-                DJFxRack(deckA)
+                Box(modifier = Modifier.tutorialTarget(TutorialStep.DJ_FX)) { DJFxRack(deckA) }
             }
             Box(modifier = Modifier.weight(1f)) {
                 DJFxRack(deckB)
@@ -171,7 +172,7 @@ fun DJMixerScreen(
         
         // Sounds / Sound FX
         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
-            com.example.djfx.DjFxBoard(controller = djFxController)
+            Box(modifier = Modifier.tutorialTarget(TutorialStep.DJ_SAMPLER)) { com.example.djfx.DjFxBoard(controller = djFxController) }
         }
     }
 }
@@ -212,7 +213,7 @@ fun DJDeck(
                     .fillMaxWidth()
                     .clip(RoundedCornerShape(8.dp))
                     .background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { showTrackSelector = true }
+                    .clickable { showTrackSelector = true }.run { if (deck.deckName == "DECK A") tutorialTarget(TutorialStep.DJ_LOAD) else this }
                     .padding(16.dp),
                 contentAlignment = Alignment.Center
             ) {

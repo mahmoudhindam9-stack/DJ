@@ -1,0 +1,5 @@
+content = open("app/src/main/java/com/example/tutorial/TutorialOverlay.kt").read()
+content = content.replace("op(fullScreenPath, cutoutPath, PathOperation.Difference)", "op(fullScreenPath, cutoutPath, PathOperation.Difference)")
+# Wait, op() is a method on Path instance. path.op(path1, path2, operation)
+content = content.replace("op(fullScreenPath, cutoutPath, PathOperation.Difference)", "this.op(fullScreenPath, cutoutPath, PathOperation.Difference)")
+open("app/src/main/java/com/example/tutorial/TutorialOverlay.kt", "w").write(content)

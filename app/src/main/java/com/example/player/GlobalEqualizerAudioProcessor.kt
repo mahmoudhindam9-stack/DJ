@@ -24,7 +24,7 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
         private const val LIMITER_THRESHOLD = 0.82f
     }
 
-    private fun createBank() = Array(2) { Array(10) { BiquadFilter() } }
+    private fun createBank() = Array(2) { Array(12) { BiquadFilter() } }
     private var active = createBank()
     private var target = createBank()
     private var inputFormat = AudioProcessor.AudioFormat.NOT_SET
@@ -47,7 +47,7 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
         return buffer
     }
 
-    private fun configureBank(bank: Array<Array<BiquadFilter>>, levels: FloatArray) {
+    private fun configureBank(bank: Array<Array<BiquadFilter>>, levels: FloatArray, bassBoostDb: Float, trebleBoostDb: Float) {
         for (ch in 0 until channelCount) {
             for (i in 0 until 10) {
                 bank[ch][i].setPeakingEQ(
@@ -58,13 +58,17 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
                 )
                 bank[ch][i].resetState()
             }
+            bank[ch][10].setLowShelf(80f, bassBoostDb, sampleRate.toFloat())
+            bank[ch][10].resetState()
+            bank[ch][11].setHighShelf(10000f, trebleBoostDb, sampleRate.toFloat())
+            bank[ch][11].resetState()
         }
     }
 
     private fun syncGlobalState() {
         val version = GlobalEqualizerState.version
         if (version == appliedVersion) return
-        configureBank(target, GlobalEqualizerState.levelsDb)
+        configureBank(target, GlobalEqualizerState.levelsDb, GlobalEqualizerState.bassBoostDb, GlobalEqualizerState.trebleBoostDb)
         transitionPosition = 0
         transitionActive = true
         appliedVersion = version
@@ -73,7 +77,7 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
     private fun applyEq(sample: Float, ch: Int, amount: Float): Float {
         var current = sample
         var next = sample
-        for (i in 0 until 10) {
+        for (i in 0 until 12) {
             current = active[ch][i].process(current)
             next = target[ch][i].process(next)
         }
@@ -108,6 +112,10 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
                     bank[ch][i].setPeakingEQ(FREQUENCIES[i], 0f, Q, sampleRate.toFloat())
                     bank[ch][i].resetState()
                 }
+                bank[ch][10].setLowShelf(80f, 0f, sampleRate.toFloat())
+                bank[ch][10].resetState()
+                bank[ch][11].setHighShelf(10000f, 0f, sampleRate.toFloat())
+                bank[ch][11].resetState()
             }
         }
         appliedVersion = -1L
@@ -181,7 +189,7 @@ class GlobalEqualizerAudioProcessor : AudioProcessor {
         inputEnded = false
         for (bank in arrayOf(active, target)) {
             for (ch in 0 until channelCount) {
-                for (i in 0 until 10) bank[ch][i].resetState()
+                for (i in 0 until 12) bank[ch][i].resetState()
             }
         }
         appliedVersion = -1L
