@@ -1,7 +1,10 @@
 package com.example.diagnostics
 
+import android.content.ContentValues
 import android.content.Context
+import android.content.Intent
 import android.os.Build
+import android.os.Environment
 import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,6 +24,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
+import android.provider.MediaStore
+import androidx.core.content.FileProvider
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -213,10 +219,43 @@ object RuntimeDiagnostics {
         appContext?.getSharedPreferences(PREFS, Context.MODE_PRIVATE)?.edit()?.remove(EVENTS_KEY)?.apply()
     }
 
-    fun exportReport(): File? {
+    fun exportReport(): Uri? {
         val ctx = appContext ?: return null
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val file = File(ctx.cacheDir, "runtime_diagnostics_${stamp}.json")
+        val fileName = "runtime_diagnostics_${stamp}.json"
+        val json = buildReportJson(ctx).toString(2)
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val resolver = ctx.contentResolver
+            val values = ContentValues().apply {
+                put(MediaStore.Downloads.DISPLAY_NAME, fileName)
+                put(MediaStore.Downloads.MIME_TYPE, "application/json")
+                put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                put(MediaStore.Downloads.IS_PENDING, 1)
+            }
+            val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values) ?: return null
+            return runCatching {
+                resolver.openOutputStream(uri)?.use { out ->
+                    out.write(json.toByteArray(Charsets.UTF_8))
+                } ?: error("Unable to open report output stream")
+                resolver.update(uri, ContentValues().apply {
+                    put(MediaStore.Downloads.IS_PENDING, 0)
+                }, null, null)
+                uri
+            }.getOrElse {
+                resolver.delete(uri, null, null)
+                null
+            }
+        }
+
+        return runCatching {
+            val file = File(ctx.cacheDir, fileName)
+            file.writeText(json)
+            FileProvider.getUriForFile(ctx, "${ctx.packageName}.fileprovider", file)
+        }.getOrNull()
+    }
+
+    private fun buildReportJson(ctx: Context): JSONObject {
         val root = JSONObject()
             .put("appVersion", runCatching {
                 ctx.packageManager.getPackageInfo(ctx.packageName, 0).versionName ?: "unknown"
@@ -242,10 +281,8 @@ object RuntimeDiagnostics {
                 .put("activePlugins", s.activePlugins).put("updatedAt", s.updatedAt))
         }
         root.put("audioStages", audio)
-        file.writeText(root.toString(2))
-        return file
+        return root
     }
-
     fun time(t: Long): String = SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(t))
 
     private fun loadPersistedEvents() {
@@ -302,8 +339,19 @@ fun TemporaryDiagnosticsScreen(onBack: () -> Unit) {
                         Icon(Icons.Filled.Refresh, null)
                     }
                     IconButton(onClick = {
-                        val file = RuntimeDiagnostics.exportReport()
-                        Toast.makeText(context, file?.name ?: "Export failed", Toast.LENGTH_SHORT).show()
+                        val uri = RuntimeDiagnostics.exportReport()
+                        if (uri != null) {
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "application/json"
+                                putExtra(Intent.EXTRA_STREAM, uri)
+                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                            }
+                            context.startActivity(
+                                Intent.createChooser(shareIntent, "Share runtime diagnostics")
+                            )
+                        } else {
+                            Toast.makeText(context, "Export failed", Toast.LENGTH_SHORT).show()
+                        }
                     }) { Icon(Icons.Filled.BugReport, null) }
                     IconButton(onClick = {
                         RuntimeDiagnostics.clear()
