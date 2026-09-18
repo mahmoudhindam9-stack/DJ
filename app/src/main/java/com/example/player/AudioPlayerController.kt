@@ -611,73 +611,6 @@ class AudioPlayerController(private val context: Context) {
         persistSession(force = true)
     }
 
-    private fun syncShuffleQueuePreservingCurrent(
-        currentMediaId: String?,
-        currentPosition: Long,
-        wasPlaying: Boolean
-    ) {
-        val expectedSongs = if (isShuffle) shuffleState.currentOrder else baseQueue.toList()
-        val items = expectedSongs.map {
-            MediaItem.Builder()
-                .setUri(it.uri)
-                .setMediaId(it.id.ifEmpty { it.uri.toString() })
-                .build()
-        }
-
-        if (items.isEmpty()) return
-
-        val currentIndex = if (isShuffle) {
-            currentSongIndex
-        } else {
-            val curSong = currentSong
-            expectedSongs.indexOfFirst {
-                val key = it.id.ifEmpty { it.uri.toString() }
-                val curKey = curSong?.let { s -> s.id.ifEmpty { s.uri.toString() } }
-                key == curKey || it.uri == curSong?.uri
-            }.coerceAtLeast(0)
-        }
-
-        if (currentIndex < 0 || currentIndex >= items.size) return
-
-        val playerItems = (0 until exoPlayer.mediaItemCount).map { idx ->
-            val mi = exoPlayer.getMediaItemAt(idx)
-            mi.mediaId.ifBlank { mi.localConfiguration?.uri?.toString().orEmpty() }
-        }
-        val expectedIds = items.map { it.mediaId }
-        if (playerItems == expectedIds) {
-            return
-        }
-
-        val currentExoIndex = exoPlayer.currentMediaItemIndex
-        if (exoPlayer.playbackState != androidx.media3.common.Player.STATE_IDLE && currentExoIndex in 0 until exoPlayer.mediaItemCount) {
-            val playingMediaId = exoPlayer.getMediaItemAt(currentExoIndex).mediaId.ifBlank { exoPlayer.getMediaItemAt(currentExoIndex).localConfiguration?.uri?.toString().orEmpty() }
-            val expectedPlayingId = items[currentIndex].mediaId
-            if (playingMediaId == expectedPlayingId) {
-                // We are playing the right track, just modify the queue around it smoothly!
-                if (exoPlayer.mediaItemCount > currentExoIndex + 1) {
-                    exoPlayer.removeMediaItems(currentExoIndex + 1, exoPlayer.mediaItemCount)
-                }
-                if (currentExoIndex > 0) {
-                    exoPlayer.removeMediaItems(0, currentExoIndex)
-                }
-                // exoPlayer now only has 1 item at index 0.
-                if (currentIndex + 1 < items.size) {
-                    exoPlayer.addMediaItems(items.subList(currentIndex + 1, items.size))
-                }
-                if (currentIndex > 0) {
-                    exoPlayer.addMediaItems(0, items.subList(0, currentIndex))
-                }
-                return
-            }
-        }
-
-        val safePosition = currentPosition.coerceAtLeast(0L)
-        exoPlayer.setMediaItems(items, currentIndex, safePosition)
-        exoPlayer.prepare()
-        if (wasPlaying) {
-            exoPlayer.play()
-        }
-    }
 
     private fun applyShuffleOrderToPlayer(order: List<AudioItem>) {
         if (order.isEmpty() || exoPlayer.mediaItemCount != order.size) return
@@ -827,44 +760,53 @@ class AudioPlayerController(private val context: Context) {
         if (repeatOption == RepeatOption.ONE) {
             return
         }
+
         if (isShuffle) {
-            val pool = if (baseQueue.isNotEmpty()) baseQueue else shuffleState.currentOrder
-            val oldCycle = shuffleState.cycleNumber
-            shuffleState = ShuffleManager.next(shuffleState, pool)
-            if (shuffleState.cycleNumber != oldCycle) {
+            val pool = if (baseQueue.isNotEmpty()) baseQueue.toList() else playlist.toList()
+            if (pool.size > 1) {
+                shuffleState = ShuffleManager.next(shuffleState, pool)
                 playlist.clear()
-                playlist.addAll(shuffleState.currentOrder)
-            }
-            currentSongIndex = shuffleState.currentIndex
-            currentSong = shuffleState.currentSong
-            currentPositionMs = 0L
-            seekOrLoadMedia(currentSong, shuffleState.currentOrder, currentSongIndex)
-            applyPreferredAudioDevice()
-            exoPlayer.play()
-            persistSession(force = true)
-            syncNotificationSafely()
-        } else {
-            if (repeatOption == RepeatOption.ALL) {
-                val nextIdx = (currentSongIndex + 1).takeIf { it < playlist.size } ?: 0
-                currentSongIndex = nextIdx
-                currentSong = playlist.getOrNull(nextIdx)
-                seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
+                playlist.addAll(pool)
+                applyShuffleOrderToPlayer(shuffleState.currentOrder)
+
+                val nextSong = shuffleState.currentSong
+                val nextKey = nextSong?.let { it.id.ifEmpty { it.uri.toString() } }
+                val nextOriginalIndex = playlist.indexOfFirst {
+                    it.id.ifEmpty { it.uri.toString() } == nextKey
+                }.coerceAtLeast(0)
+                currentSongIndex = nextOriginalIndex
+                currentSong = nextSong
+                currentPositionMs = 0L
+                exoPlayer.seekTo(nextOriginalIndex, 0L)
+                applyPreferredAudioDevice()
                 exoPlayer.play()
             } else {
-                if (currentSongIndex + 1 < playlist.size) {
-                    val nextIdx = currentSongIndex + 1
-                    currentSongIndex = nextIdx
-                    currentSong = playlist.getOrNull(nextIdx)
-                    seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
-                    exoPlayer.play()
-                } else {
-                    isPlaying = false
-                    exoPlayer.seekToDefaultPosition(0)
-                }
+                isPlaying = false
             }
             persistSession(force = true)
             syncNotificationSafely()
+            return
         }
+
+        if (repeatOption == RepeatOption.ALL) {
+            val nextIdx = (currentSongIndex + 1).takeIf { it < playlist.size } ?: 0
+            currentSongIndex = nextIdx
+            currentSong = playlist.getOrNull(nextIdx)
+            seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
+            exoPlayer.play()
+        } else if (currentSongIndex + 1 < playlist.size) {
+            val nextIdx = currentSongIndex + 1
+            currentSongIndex = nextIdx
+            currentSong = playlist.getOrNull(nextIdx)
+            seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
+            exoPlayer.play()
+        } else {
+            isPlaying = false
+            exoPlayer.seekToDefaultPosition(0)
+        }
+
+        persistSession(force = true)
+        syncNotificationSafely()
     }
 
     fun onLibraryUpdated(newLibrary: List<AudioItem>) {
