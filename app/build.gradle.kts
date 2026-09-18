@@ -21,7 +21,7 @@ android {
     minSdk = 24
     targetSdk = 36
     versionCode = 35
-    versionName = "3.5.8" // Auto-release trigger
+    versionName = "3.5.8" // Stable build verification
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
