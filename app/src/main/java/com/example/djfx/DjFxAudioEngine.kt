@@ -1,5 +1,7 @@
 package com.example.djfx
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.SoundPool
@@ -40,19 +42,25 @@ class DjFxAudioEngine(private val context: Context) {
                 loaded.remove(key)
                 loading.remove(key)
                 Log.w(TAG, "Unable to load FX sample: $key (status=$status)")
+                RuntimeDiagnostics.record("ERROR", "DJ_FX", "FX sample failed to load", "key=$key, status=$status")
                 return@setOnLoadCompleteListener
             }
             loaded[key] = sampleId
+            RuntimeDiagnostics.record("INFO", "DJ_FX", "FX sample loaded", "key=$key, sampleId=$sampleId")
             val volumes = loading.remove(key).orEmpty()
             volumes.forEach { volume -> soundPool.play(sampleId, volume, volume, 1, 0, 1f) }
         }
     }
 
     fun play(uri: String?) {
-        if (uri.isNullOrBlank()) return
+        if (uri.isNullOrBlank()) {
+            RuntimeDiagnostics.record("ERROR", "DJ_FX", "FX playback requested with empty URI")
+            return
+        }
         val normalized = normalizeUri(uri)
         loaded[normalized]?.let { sampleId ->
-            soundPool.play(sampleId, 1f, 1f, 1, 0, 1f)
+            val streamId = soundPool.play(sampleId, 1f, 1f, 1, 0, 1f)
+            RuntimeDiagnostics.record(if (streamId == 0) "ERROR" else "INFO", "DJ_FX", if (streamId == 0) "FX trigger produced no playback stream" else "FX playback triggered", "key=$normalized, sampleId=$sampleId, streamId=$streamId")
             return
         }
         synchronized(loading) {

@@ -1,5 +1,8 @@
 package com.example
 
+import com.example.diagnostics.RuntimeDiagnostics
+import com.example.diagnostics.TemporaryDiagnosticsScreen
+
 import android.Manifest
 import android.content.Context
 import android.os.Build
@@ -69,6 +72,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        RuntimeDiagnostics.initialize(applicationContext)
         com.example.ui.theme.ThemeManager.init(this)
         enableEdgeToEdge()
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
@@ -95,6 +99,10 @@ class MainActivity : ComponentActivity() {
 fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    LaunchedEffect(navBackStackEntry?.destination?.route) {
+        RuntimeDiagnostics.setScreen(navBackStackEntry?.destination?.route)
+    }
 
     var appVersion by remember { mutableStateOf("1.0") }
     LaunchedEffect(Unit) {
@@ -271,6 +279,12 @@ fun MainApp() {
                     }
                 )
             }
+        },
+        floatingActionButton = {
+            FloatingActionButton(onClick = {
+                RuntimeDiagnostics.recordAction("open_diagnostics")
+                navController.navigate("diagnostics") { launchSingleTop = true }
+            }) { Icon(Icons.Filled.BugReport, contentDescription = "Runtime QA") }
         }
     ) { innerPadding ->
         NavHost(
@@ -280,6 +294,9 @@ fun MainApp() {
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)
+            }
+            composable("diagnostics") {
+                TemporaryDiagnosticsScreen(onBack = { navController.popBackStack() })
             }
             composable("player") {
                 PlayerScreenV2(

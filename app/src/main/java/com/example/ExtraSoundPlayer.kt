@@ -1,5 +1,7 @@
 package com.example
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioTrack
@@ -80,10 +82,13 @@ object ExtraSoundPlayer {
                     .build()
                 track.write(pcm, 0, pcm.size)
                 track.play()
+                RuntimeDiagnostics.record("INFO", "DJ_FX", "Generated extra sound started", "sound=" + sound.title + ", samples=" + pcm.size)
                 Thread.sleep((seconds * 1000).toLong() + 40L)
                 track.release()
             } catch (e: Exception) {
-            android.util.Log.w("ExtraSoundPlayer", "Caught throwable", e) }
+                RuntimeDiagnostics.recordException(e, "DJ_FX", "Extra sound playback failed")
+                android.util.Log.w("ExtraSoundPlayer", "Caught throwable", e)
+            }
         }.start()
     }
 }

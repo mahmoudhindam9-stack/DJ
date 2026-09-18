@@ -1,5 +1,7 @@
 package com.example.player
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.C
 import java.nio.ByteBuffer
@@ -10,7 +12,14 @@ import com.example.fx.AudioPlugin
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class DeckFxAudioProcessor : AudioProcessor {
+    var diagnosticsLabel: String = "DSP"
     private var sampleRate = 44_100
+    private var diagnosticsLastReportAt = 0L
+    private var diagnosticsInputSquares = 0.0
+    private var diagnosticsOutputSquares = 0.0
+    private var diagnosticsInputPeak = 0f
+    private var diagnosticsOutputPeak = 0f
+    private var diagnosticsSamples = 0L
     private var channelCount = 2
     private var inputFormat = AudioProcessor.AudioFormat.NOT_SET
     
@@ -164,7 +173,8 @@ class DeckFxAudioProcessor : AudioProcessor {
             for (ch in 0 until channelCount) {
                 if (!inputBuffer.hasRemaining()) break
                 val inputShort = inputBuffer.short
-                var sample = inputShort.toFloat() / 32768.0f
+                val originalSample = inputShort.toFloat() / 32768.0f
+                var sample = originalSample
                 
                 if (eqEnabled) {
                     sample = applyEq(sample, ch)
@@ -188,10 +198,42 @@ class DeckFxAudioProcessor : AudioProcessor {
                     sample *= gain
                 }
                 sample = softLimit(sample)
+                diagnosticsInputSquares += (originalSample * originalSample).toDouble()
+                diagnosticsOutputSquares += (sample * sample).toDouble()
+                diagnosticsInputPeak = maxOf(diagnosticsInputPeak, kotlin.math.abs(originalSample))
+                diagnosticsOutputPeak = maxOf(diagnosticsOutputPeak, kotlin.math.abs(sample))
+                diagnosticsSamples++
                 
                 val outSample = sample.coerceIn(-1f, 1f)
                 output.putShort((outSample * 32767.0f).roundToInt().toShort())
             }
+        }
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (diagnosticsSamples > 0L && now - diagnosticsLastReportAt >= 1000L) {
+            val count = diagnosticsSamples.toDouble()
+            val eqDemand = maxOf(
+                GlobalEqualizerState.levelsDb.maxOfOrNull { kotlin.math.abs(it) } ?: 0f,
+                kotlin.math.abs(GlobalEqualizerState.preampDb),
+                GlobalEqualizerState.bassBoostDb,
+                GlobalEqualizerState.trebleBoostDb
+            )
+            RuntimeDiagnostics.updateAudioDspMetrics(
+                diagnosticsLabel,
+                kotlin.math.sqrt(diagnosticsInputSquares / count).toFloat(),
+                kotlin.math.sqrt(diagnosticsOutputSquares / count).toFloat(),
+                diagnosticsInputPeak,
+                diagnosticsOutputPeak,
+                diagnosticsSamples,
+                GlobalEqualizerState.enabled,
+                eqDemand,
+                pluginChain.size
+            )
+            diagnosticsLastReportAt = now
+            diagnosticsInputSquares = 0.0
+            diagnosticsOutputSquares = 0.0
+            diagnosticsInputPeak = 0f
+            diagnosticsOutputPeak = 0f
+            diagnosticsSamples = 0L
         }
         output.flip()
     }

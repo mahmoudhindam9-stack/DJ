@@ -1,5 +1,7 @@
 package com.example.player
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import android.content.Context
 import android.media.AudioDeviceInfo
 import androidx.annotation.OptIn
@@ -19,7 +21,7 @@ enum class RepeatOption { OFF, ALL, ONE }
 
 @OptIn(UnstableApi::class)
 class AudioPlayerController(private val context: Context) {
-    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
+    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "PLAYER" }
     var crossfadeDurationMs by mutableLongStateOf(2000L)
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
@@ -38,7 +40,7 @@ class AudioPlayerController(private val context: Context) {
     // A second, hidden player used only to pre-roll the upcoming track underneath
     // the tail of the current one so the transition between songs overlaps
     // instead of just fading the current track to silence.
-    private val previewFxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
+    private val previewFxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "CROSSFADE_PREVIEW" }
     private val previewRenderersFactory = object : DefaultRenderersFactory(context) {
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
             return DefaultAudioSink.Builder(context)
@@ -100,6 +102,7 @@ class AudioPlayerController(private val context: Context) {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                RuntimeDiagnostics.recordAction(if (playing) "player_play" else "player_pause")
                 if (isCrossfading) {
                     if (playing) {
                         try { previewPlayerInstance?.play() } catch (e: Exception) {}
@@ -114,9 +117,11 @@ class AudioPlayerController(private val context: Context) {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
+                    RuntimeDiagnostics.recordPlaybackState("READY", exoPlayer.isPlaying, isBuffering)
                     durationMs = exoPlayer.duration.coerceAtLeast(0L)
                     persistSession(force = true)
                 } else if (playbackState == Player.STATE_ENDED) {
+                    RuntimeDiagnostics.recordPlaybackState("ENDED", false, false)
                     handleTrackEnded()
                 }
             }
@@ -124,6 +129,7 @@ class AudioPlayerController(private val context: Context) {
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                 isPlaying = false
                 isBuffering = false
+                RuntimeDiagnostics.recordPlayerError(error.message ?: error.errorCodeName, error.stackTraceToString())
             }
 
             override fun onPositionDiscontinuity(
@@ -377,6 +383,7 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun pause() {
+        RuntimeDiagnostics.recordAction("player_pause")
         exoPlayer.pause()
         try { previewPlayerInstance?.pause() } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
         persistSession(force = true)
@@ -949,6 +956,7 @@ class AudioPlayerController(private val context: Context) {
         val nextItem = mediaItemFromSong(nextSong)
         val nextId = nextItem.mediaId
         crossfadeTargetSong = nextSong
+        RuntimeDiagnostics.recordCrossfadeStarted(currentSong?.title ?: "unknown", nextSong.title, if (customDurationMs > 0L) customDurationMs else crossfadeDurationMs)
 
         if (currentMediaId == null || nextId == null || currentMediaId == nextId) {
             return
@@ -972,11 +980,14 @@ class AudioPlayerController(private val context: Context) {
             preview.play()
         } catch (e: Exception) {
             android.util.Log.w("AudioPlayerController", "Caught exception", e)
+            RuntimeDiagnostics.recordCrossfadeFailure(e.stackTraceToString())
             isCrossfading = false
         }
     }
 
     private fun completeCrossfade() {
+        val actualDuration = if (crossfadeStartTimeMs > 0L) android.os.SystemClock.elapsedRealtime() - crossfadeStartTimeMs else 0L
+        RuntimeDiagnostics.recordCrossfadeCompleted(currentSong?.title ?: "unknown", crossfadeTargetSong?.title ?: "unknown", activeCrossfadeDurationMs, actualDuration)
         isCrossfading = false
         val preview = previewPlayerInstance
         val previewPosition = preview?.currentPosition ?: 0L

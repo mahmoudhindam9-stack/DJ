@@ -1,5 +1,7 @@
 package com.example.player
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import android.content.Context
 import androidx.compose.runtime.*
 import androidx.media3.common.MediaItem
@@ -16,7 +18,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
     // Wires the DSP plugin library into this deck's audio path. Without this,
     // the plugin chain stays empty and every effect toggle is a no-op even
     // though the UI shows it as "on".
-    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context) }
+    val fxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "DJ_" + deckName }
     val eqController = EqualizerController(context)
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
@@ -68,6 +70,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
     fun isEffectActive(fxId: String): Boolean = activeEffects[fxId] == true
 
     fun toggleEffect(fxId: String) {
+        RuntimeDiagnostics.recordAction(deckName + "_fx_" + fxId)
         val currentlyActive = activeEffects[fxId] ?: false
         
         if (!currentlyActive && fxId.startsWith("voice_")) {
@@ -88,6 +91,7 @@ class DJDeckController(private val context: Context, val deckName: String) {
         
         setPlaybackPitch(newPitch)
         updateProcessorEffects()
+        RuntimeDiagnostics.record("INFO", "DJ_FX", deckName + ": FX state changed", "fx=" + fxId + ", active=" + activeEffects.filterValues { it }.keys.joinToString())
     }
 
     fun setEffectAmount(amount: Float) {
@@ -106,6 +110,8 @@ class DJDeckController(private val context: Context, val deckName: String) {
     }
 
     fun loadTrack(song: AudioItem) {
+        RuntimeDiagnostics.recordAction(deckName + "_load_track")
+        RuntimeDiagnostics.record("INFO", "DJ_DECK", deckName + ": track loaded", song.title)
         currentSong = song
         exoPlayer.setMediaItem(MediaItem.fromUri(song.uri))
         exoPlayer.prepare()
@@ -113,11 +119,13 @@ class DJDeckController(private val context: Context, val deckName: String) {
     }
 
     fun play() {
+        RuntimeDiagnostics.recordAction(deckName + "_play")
         pauseOthers()
         exoPlayer.play()
     }
 
     fun pause() {
+        RuntimeDiagnostics.recordAction(deckName + "_pause")
         exoPlayer.pause()
     }
 
@@ -179,6 +187,7 @@ class DJMixerController(context: Context) {
         val volB = kotlin.math.sin(crossfader * (kotlin.math.PI / 2)).toFloat().coerceIn(0f, 1f)
         deckA.setVolumeLevel(volA)
         deckB.setVolumeLevel(volB)
+        RuntimeDiagnostics.recordMixer(crossfader, deckA.volume, deckB.volume)
     }
 
     

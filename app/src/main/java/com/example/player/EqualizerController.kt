@@ -1,5 +1,7 @@
 package com.example.player
 
+import com.example.diagnostics.RuntimeDiagnostics
+
 import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -74,6 +76,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         }
         persistState()
         broadcastState()
+        recordDiagnosticsState()
     }
 
     fun updateBandLevel(bandIndex: Int, levelDb: Int) {
@@ -83,6 +86,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         syncQuickFromBands()
         persistState()
         broadcastState()
+        recordDiagnosticsState()
     }
 
     fun setQuickBass(value: Int) = updateBandLevel(0, value)
@@ -93,12 +97,14 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         bassBoostLevel = level.coerceIn(0f, 1f)
         persistState()
         broadcastState()
+        recordDiagnosticsState()
     }
 
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
         persistState()
         broadcastState()
+        recordDiagnosticsState()
     }
 
     // Named updatePreampDb to avoid the JVM setter clash with the preampDb property.
@@ -106,6 +112,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         preampDb = value.coerceIn(0f, 12f)
         persistState()
         broadcastState()
+        recordDiagnosticsState()
     }
 
     fun applyPreset(presetName: String) {
@@ -130,6 +137,18 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         isEnabled = true
         persistState()
         broadcastState()
+        recordDiagnosticsState()
+    }
+
+    private fun recordDiagnosticsState() {
+        RuntimeDiagnostics.recordEqState(
+            isEnabled,
+            bands.map { it.currentLevelDb.toFloat() }.toFloatArray(),
+            preampDb,
+            bassBoostLevel * 12f,
+            trebleBoostLevel * 12f,
+            selectedPreset
+        )
     }
 
     private fun syncQuickFromBands() {
