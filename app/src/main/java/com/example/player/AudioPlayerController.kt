@@ -67,6 +67,7 @@ class AudioPlayerController(private val context: Context) {
     private val handoverDurationMs = 300L
     private var crossfadeTargetSong: AudioItem? = null
     private var crossfadeSourceSong: AudioItem? = null
+    private var crossfadeSourceDurationMs: Long = 0L
 
     var playlist = mutableStateListOf<AudioItem>()
         private set
@@ -922,10 +923,27 @@ class AudioPlayerController(private val context: Context) {
             if (crossfadeDurationMs > 0L) {
                 if (isCrossfading) {
                     val elapsed = android.os.SystemClock.elapsedRealtime() - crossfadeStartTimeMs
-                    if (elapsed >= activeCrossfadeDurationMs) {
+                    val preview = previewPlayerInstance
+                    val previewDuration = preview?.duration?.takeIf { it > 0L } ?: crossfadeSourceDurationMs
+                    val sourceRemaining = if (preview != null && previewDuration > 0L) {
+                        (previewDuration - preview.currentPosition).coerceAtLeast(0L)
+                    } else {
+                        (activeCrossfadeDurationMs - elapsed).coerceAtLeast(0L)
+                    }
+
+                    // Follow the real source-player position instead of a wall-clock-only
+                    // timer so decoder/startup latency cannot cause a tiny cut at source end.
+                    if (sourceRemaining <= 30L ||
+                        (previewDuration <= 0L && elapsed >= activeCrossfadeDurationMs + 750L)
+                    ) {
                         completeCrossfade()
                     } else {
-                        val progress = (elapsed.toFloat() / activeCrossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
+                        if (previewDuration > 0L) {
+                            crossfadeSourceDurationMs = previewDuration
+                        }
+                        val fadeWindow = activeCrossfadeDurationMs.coerceAtLeast(1L)
+                        val progress = ((fadeWindow - sourceRemaining).toFloat() / fadeWindow.toFloat())
+                            .coerceIn(0f, 1f)
                         val sourceVol = volume * (1f - progress)
                         val targetVol = volume * progress
                         try { previewPlayerInstance?.volume = sourceVol } catch (e: Exception) {}
@@ -1047,6 +1065,7 @@ class AudioPlayerController(private val context: Context) {
         crossfadeSourceSong = sourceSong
         crossfadeTargetSong = nextSong
         activeCrossfadeDurationMs = duration
+        crossfadeSourceDurationMs = sourceSong.durationMs.coerceAtLeast(0L)
         isCrossfading = true
         crossfadeStartTimeMs = android.os.SystemClock.elapsedRealtime()
         skipNextFadeIn = true
@@ -1071,6 +1090,9 @@ class AudioPlayerController(private val context: Context) {
                 if (preview.playbackState != Player.STATE_READY) {
                     preview.prepare()
                 }
+            }
+            if (preview.duration > 0L) {
+                crossfadeSourceDurationMs = preview.duration
             }
             preview.volume = volume
             preview.play()
@@ -1141,6 +1163,7 @@ class AudioPlayerController(private val context: Context) {
 
         crossfadeSourceSong = null
         crossfadeTargetSong = null
+        crossfadeSourceDurationMs = 0L
         skipNextFadeIn = true
 
         persistSession(force = true)
