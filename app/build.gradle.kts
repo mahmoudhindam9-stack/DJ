@@ -20,8 +20,8 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 42
-    versionName = "3.6.5" // Auto-release trigger
+    versionCode = 43
+    versionName = "3.6.6" // Auto-release trigger
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
