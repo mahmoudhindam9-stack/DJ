@@ -387,43 +387,7 @@ fun PlayerScreenV2(
                 }
             }
             Spacer(Modifier.height(8.dp))
-            if (audioLibrary.isEmpty()) {
-                Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Filled.LibraryMusic, null, Modifier.size(48.dp)); Spacer(Modifier.height(8.dp))
-                        Text("Your library is empty", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(8.dp))
-                        Button(onClick = { filePicker.launch(arrayOf("audio/*")) }) { Text("Add songs") }
-                    }
-                }
-            } else {
-                LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(visibleTracks, key = { it.id }) { song ->
-                        val isCurrentSong = playerController.currentSong?.id == song.id
-                        val showPause = isCurrentSong && playerController.isPlaying
-                        com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
-                            Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Filled.MusicNote, null); Spacer(Modifier.width(8.dp))
-                                Column(Modifier.weight(1f)) { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                IconButton(onClick = { addSongToPlaylist = song }) { Icon(Icons.Filled.Add, "Add to playlist") }
-                                FilledIconButton(onClick = {
-                                    if (isCurrentSong) {
-                                        playerController.togglePlayPause()
-                                    } else {
-                                        onPauseDJ()
-                                        playerController.play(song, audioLibrary)
-                                    }
-                                    showNowPlaying = true
-                                }) {
-                                    Icon(
-                                        if (showPause) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                        if (showPause) "Pause" else "Play"
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
         }
     }
 
