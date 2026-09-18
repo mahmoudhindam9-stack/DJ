@@ -14,6 +14,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -45,12 +47,42 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
+import java.util.Locale
+import java.text.Normalizer
 
 private fun addToLibrary(library: SnapshotStateList<AudioItem>, songs: List<AudioItem>, context: Context) {
     val existing = library.map { it.uri }.toHashSet()
     songs.forEach { song ->
         if (existing.add(song.uri)) library.add(song)
     }
+}
+private fun normalizeSmartSearch(value: String): String {
+    val withoutMarks = Normalizer.normalize(value, Normalizer.Form.NFD)
+        .replace(Regex("\\p{Mn}+"), "")
+    return withoutMarks.lowercase(Locale.ROOT)
+        .replace("أ", "ا")
+        .replace("إ", "ا")
+        .replace("آ", "ا")
+        .replace("ٱ", "ا")
+        .replace("ى", "ي")
+        .replace("ة", "ه")
+        .replace("ؤ", "و")
+        .replace("ئ", "ي")
+        .replace("ـ", "")
+        .replace(Regex("[\\u064B-\\u065F\\u0670]"), "")
+        .replace(Regex("\\s+"), " ")
+        .trim()
+}
+
+private fun smartTrackMatches(song: AudioItem, query: String): Boolean {
+    val normalizedQuery = normalizeSmartSearch(query)
+    if (normalizedQuery.isBlank()) return true
+    val haystack = normalizeSmartSearch(
+        listOf(song.title, song.artist, song.album, song.uri.toString()).joinToString(" ")
+    )
+    return normalizedQuery.split(" ")
+        .filter { it.isNotBlank() }
+        .all { token -> haystack.contains(token) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -206,32 +238,111 @@ fun PlayerScreenV2(
             if (playlists.isNotEmpty()) {
                 com.example.ui.components.DjSectionHeader("PLAYLISTS")
                 Spacer(Modifier.height(5.dp))
-                LazyColumn(Modifier.weight(0.75f), verticalArrangement = Arrangement.spacedBy(7.dp)) {
-                    items(playlists, key = { it.id }) { playlist ->
-                        val songs = playlist.songIds.mapNotNull { id -> audioLibrary.firstOrNull { it.id == id } }
-                        com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(9.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, Modifier.size(28.dp)); Spacer(Modifier.width(8.dp))
-                                    Column(Modifier.weight(1f)) {
-                                        Text(playlist.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                        Text("${songs.size} song(s)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(0.72f)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(7.dp)
+                ) {
+                    playlists.chunked(3).forEach { rowPlaylists ->
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                            rowPlaylists.forEach { playlist ->
+                                val songs = playlist.songIds.mapNotNull { id -> audioLibrary.firstOrNull { it.id == id } }
+                                Box(Modifier.weight(1f)) {
+                                    com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
+                                        Column(Modifier.padding(7.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Icon(Icons.AutoMirrored.Filled.PlaylistPlay, null, Modifier.size(25.dp))
+                                            Spacer(Modifier.height(3.dp))
+                                            Text(
+                                                playlist.name,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                            Text(
+                                                "${songs.size} song(s)",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                                IconButton(
+                                                    onClick = {
+                                                        if (songs.isNotEmpty()) {
+                                                            onPauseDJ()
+                                                            playerController.play(songs.first(), songs)
+                                                            showNowPlaying = true
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) { Icon(Icons.Filled.PlayArrow, "Play", Modifier.size(20.dp)) }
+                                                IconButton(
+                                                    onClick = {
+                                                        if (songs.isNotEmpty()) {
+                                                            onPauseDJ()
+                                                            playerController.startShuffle(songs)
+                                                            showNowPlaying = true
+                                                        }
+                                                    },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) { Icon(Icons.Filled.Shuffle, "Shuffle", Modifier.size(20.dp)) }
+                                                IconButton(
+                                                    onClick = { addSongsPlaylistId = playlist.id },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) { Icon(Icons.Filled.Add, "Add songs", Modifier.size(20.dp)) }
+                                            }
+                                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                                                IconButton(
+                                                    onClick = { addFolderPlaylistId = playlist.id; folderPicker.launch(null) },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) { Icon(Icons.Filled.Folder, "Add folder", Modifier.size(20.dp)) }
+                                                IconButton(
+                                                    onClick = { scope.launch { repo.delete(playlist.id) } },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) { Icon(Icons.Filled.Delete, "Delete", Modifier.size(20.dp)) }
+                                            }
+                                        }
                                     }
-                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); playerController.play(songs.first(), songs); showNowPlaying = true } }) { Icon(Icons.Filled.PlayArrow, "Play") }
-                                    IconButton(onClick = { if (songs.isNotEmpty()) { onPauseDJ(); playerController.startShuffle(songs); showNowPlaying = true } }) { Icon(Icons.Filled.Shuffle, "Shuffle") }
-                                    IconButton(onClick = { scope.launch { repo.delete(playlist.id) } }) { Icon(Icons.Filled.Delete, "Delete") }
-                                }
-                                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                                    OutlinedButton(onClick = { addSongsPlaylistId = playlist.id }) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(4.dp)); Text("Add songs") }
-                                    OutlinedButton(onClick = { addFolderPlaylistId = playlist.id; folderPicker.launch(null) }) { Icon(Icons.Filled.Folder, null); Spacer(Modifier.width(4.dp)); Text("Add folder") }
                                 }
                             }
+                            repeat(3 - rowPlaylists.size) { Spacer(Modifier.weight(1f)) }
                         }
                     }
                 }
             }
             Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(5.dp))
+            var trackSearchQuery by rememberSaveable { mutableStateOf("") }
+            val visibleTracks = remember(audioLibrary.toList(), trackSearchQuery) {
+                audioLibrary.filter { smartTrackMatches(it, trackSearchQuery) }
+            }
             com.example.ui.components.DjSectionHeader("ALL TRACKS")
+            Spacer(Modifier.height(3.dp))
+            OutlinedTextField(
+                value = trackSearchQuery,
+                onValueChange = { trackSearchQuery = it },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+                trailingIcon = {
+                    if (trackSearchQuery.isNotBlank()) {
+                        IconButton(onClick = { trackSearchQuery = "" }) {
+                            Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                        }
+                    }
+                },
+                label = { Text("Smart Search") },
+                placeholder = { Text("Song, artist, album, or location") }
+            )
+            if (trackSearchQuery.isNotBlank()) {
+                Text(
+                    "${visibleTracks.size} result(s)",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(start = 4.dp, top = 3.dp)
+                )
+            }
             Spacer(Modifier.height(5.dp))
             if (audioLibrary.isEmpty()) {
                 Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
@@ -243,7 +354,7 @@ fun PlayerScreenV2(
                 }
             } else {
                 LazyColumn(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(audioLibrary, key = { it.id }) { song ->
+                    items(visibleTracks, key = { it.id }) { song ->
                         val isCurrentSong = playerController.currentSong?.id == song.id
                         val showPause = isCurrentSong && playerController.isPlaying
                         com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
