@@ -14,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,9 +25,13 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.example.model.AudioItem
+import com.example.model.Playlist
+import com.example.PlayerLibraryStore
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
 import com.example.player.AudioPlayerController
+import com.example.room.PlaylistEntity
+import com.example.room.PlaylistRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
@@ -35,6 +40,7 @@ import org.json.JSONArray
 import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
+import java.util.UUID
 
 data class RadioStation(
     val id: String,
@@ -46,6 +52,23 @@ data class RadioStation(
     val countryCode: String
 )
 
+private fun RadioStation.toAudioItem(): AudioItem =
+    AudioItem(
+        id = id,
+        title = "📻 " + name,
+        artist = if (countryCode == "EG") "إذاعة مصرية" else "Internet Radio",
+        album = "Live Radio",
+        durationMs = 0L,
+        uri = Uri.parse(streamUrls.first())
+    )
+
+private fun radioMediaItem(station: RadioStation): MediaItem =
+    MediaItem.Builder()
+        .setMediaId(station.id)
+        .setUri(station.streamUrls.first())
+        .apply { radioMime(station.codec, station.streamUrls.first())?.let(::setMimeType) }
+        .build()
+
 object RadioBrowserRepository {
     private val HOSTS = listOf(
         "all.api.radio-browser.info",
@@ -55,16 +78,18 @@ object RadioBrowserRepository {
     )
 
     suspend fun stations(countryCode: String?, query: String): List<RadioStation> = withContext(Dispatchers.IO) {
-        val isGlobalNoSearch = countryCode.isNullOrBlank() && query.isBlank()
-        
-        val path = if (isGlobalNoSearch) "/json/stations/topvote" else "/json/stations/search"
+        val isWorld = countryCode.isNullOrBlank()
+        val useWorldTopVotes = isWorld && query.isBlank()
+
+        // The global endpoint is used only after the user explicitly selects World.
+        val path = if (useWorldTopVotes) "/json/stations/topvote" else "/json/stations/search"
         val params = buildString {
-            if (isGlobalNoSearch) {
-                append("limit=100&hidebroken=true&lastcheckok=1")
-            } else {
-                append("hidebroken=true&lastcheckok=1&order=votes&reverse=true&limit=100")
-                if (!countryCode.isNullOrBlank()) append("&countrycode=").append(URLEncoder.encode(countryCode, "UTF-8"))
-                if (query.isNotBlank()) append("&name=").append(URLEncoder.encode(query, "UTF-8"))
+            append("hidebroken=true&lastcheckok=1&order=votes&reverse=true&limit=100")
+            if (!isWorld) {
+                append("&countrycode=").append(URLEncoder.encode(countryCode, "UTF-8"))
+            }
+            if (query.isNotBlank()) {
+                append("&name=").append(URLEncoder.encode(query, "UTF-8"))
             }
         }
 
@@ -181,6 +206,87 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
     var failedStationId by remember { mutableStateOf<String?>(null) }
     val attempts = remember { mutableStateMapOf<String, Int>() }
 
+    val prefs = remember { context.getSharedPreferences("radio_preferences", android.content.Context.MODE_PRIVATE) }
+    var favorites by remember {
+        mutableStateOf(
+            prefs.getStringSet("favorite_station_ids", emptySet())?.toSet() ?: emptySet()
+        )
+    }
+    var radioQueue by remember { mutableStateOf<List<RadioStation>>(emptyList()) }
+    var showQueue by remember { mutableStateOf(false) }
+    var showSavePlaylistDialog by remember { mutableStateOf(false) }
+    var showExistingPlaylistDialog by remember { mutableStateOf(false) }
+    var newPlaylistName by remember { mutableStateOf("") }
+
+    fun stationAudioItems(queue: List<RadioStation>): List<AudioItem> = queue.map { it.toAudioItem() }
+    fun stationMediaItems(queue: List<RadioStation>): List<MediaItem> = queue.map { radioMediaItem(it) }
+
+    fun syncRadioQueueWithPlayer(queue: List<RadioStation>, preserveCurrent: Boolean = true) {
+        if (queue.isEmpty()) return
+        val currentId = playerController.currentSong?.id
+        if (!preserveCurrent || queue.any { it.id == currentId }) {
+            val startIndex = queue.indexOfFirst { it.id == currentId }.takeIf { it >= 0 } ?: 0
+            playerController.setRadioQueue(
+                stationAudioItems(queue),
+                stationMediaItems(queue),
+                startIndex,
+                preserveCurrent
+            )
+        }
+    }
+
+    fun addStationToQueue(station: RadioStation) {
+        if (radioQueue.any { it.id == station.id }) return
+        val activeRadio = stations.firstOrNull { it.id == playerController.currentSong?.id }
+        val base = if (radioQueue.isEmpty() && activeRadio != null) listOf(activeRadio) else radioQueue
+        val updated = (base + station).distinctBy { it.id }
+        radioQueue = updated
+        syncRadioQueueWithPlayer(updated, preserveCurrent = true)
+    }
+
+    fun playQueuedOrStation(station: RadioStation) {
+        val index = radioQueue.indexOfFirst { it.id == station.id }
+        if (index >= 0) {
+            syncRadioQueueWithPlayer(radioQueue, preserveCurrent = false)
+            playerController.exoPlayer.play()
+        } else {
+            crScope.launch { playStation(station) }
+        }
+    }
+
+    suspend fun persistRadioStations(items: List<AudioItem>) {
+        if (items.isEmpty()) return
+        val existingIds = audioLibrary.map { it.id }.toHashSet()
+        items.forEach { item ->
+            if (existingIds.add(item.id)) audioLibrary.add(item)
+        }
+        PlayerLibraryStore.save(context, items)
+    }
+
+    suspend fun saveQueueAsPlaylist(name: String) {
+        val cleaned = name.trim()
+        if (cleaned.isBlank() || radioQueue.isEmpty()) return
+        val items = stationAudioItems(radioQueue)
+        persistRadioStations(items)
+        playlistRepo.insert(
+            PlaylistEntity(
+                playlistId = UUID.randomUUID().toString(),
+                name = cleaned,
+                songIdsJson = items.map { it.id }.joinToString(",")
+            )
+        )
+    }
+
+    suspend fun addQueueToExistingPlaylist(playlist: Playlist) {
+        if (radioQueue.isEmpty()) return
+        val items = stationAudioItems(radioQueue)
+        persistRadioStations(items)
+        playlistRepo.updateSongs(
+            playlist.id,
+            (playlist.songIds + items.map { it.id }).distinct().joinToString(",")
+        )
+    }
+
     // Trigger recomposition on state changes
     val isPlayingTrigger = playerController.isPlaying
     val currentMediaId = playerController.exoPlayer.currentMediaItem?.mediaId
@@ -261,7 +367,7 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
         attempts[station.id] = index
         while (index < station.streamUrls.size) {
             val resolvedUrl = resolvePlaylistUrl(station.streamUrls[index])
-            val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(resolvedUrl))
+            val item = station.toAudioItem().copy(uri = Uri.parse(resolvedUrl))
             
             try {
                 val media = MediaItem.Builder()
@@ -313,7 +419,20 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                 Text("📻 Radio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(if (country == "EG") "الإذاعات المصرية — Live" else "إذاعات من حول العالم — Live", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            IconButton(onClick = { refreshToken++ }) { Icon(Icons.Filled.Refresh, "تحديث") }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box {
+                    IconButton(onClick = { showQueue = true }) {
+                        Icon(Icons.Filled.QueueMusic, "الكيو")
+                    }
+                    if (radioQueue.isNotEmpty()) {
+                        Badge(
+                            modifier = Modifier.align(Alignment.TopEnd),
+                            containerColor = MaterialTheme.colorScheme.primary
+                        ) { Text(radioQueue.size.toString()) }
+                    }
+                }
+                IconButton(onClick = { refreshToken++ }) { Icon(Icons.Filled.Refresh, "تحديث") }
+            }
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -329,7 +448,11 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
-                Text("Checking World Radio...", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+    if (country == "EG") "جاري التحقق من المحطات المصرية..." else "جاري التحقق من المحطات العالمية...",
+    style = MaterialTheme.typography.bodySmall,
+    color = MaterialTheme.colorScheme.onSurfaceVariant
+)
             }
             Spacer(Modifier.height(10.dp))
         }
@@ -366,7 +489,19 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                                 Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isStationFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             }
                             if (isStationLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
-                            IconButton(modifier = Modifier, onClick = { favorites = if (isFavorite) favorites - station.id else favorites + station.id }) { Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة") }
+                            IconButton(
+                                modifier = Modifier,
+                                onClick = {
+                                    val updated = if (isFavorite) favorites - station.id else favorites + station.id
+                                    favorites = updated
+                                    prefs.edit().putStringSet("favorite_station_ids", updated).apply()
+                                }
+                            ) {
+                                Icon(if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder, "المفضلة")
+                            }
+                            IconButton(onClick = { addStationToQueue(station) }) {
+                                Icon(Icons.Filled.QueueMusic, "إضافة للكيو")
+                            }
                             IconButton(onClick = { deckPicker = station }) { Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck") }
                             FilledIconButton(modifier = Modifier,
                                 onClick = {
@@ -375,7 +510,7 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                                     } else if (isCurrentStation) {
                                         playerController.exoPlayer.play()
                                     } else {
-                                        crScope.launch { playStation(station) }
+                                        playQueuedOrStation(station)
                                     }
                                 }
                             ) {
@@ -390,6 +525,84 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
             }
         }
     }
+    if (showQueue) {
+        RadioQueueSheet(
+            queue = radioQueue,
+            onDismiss = { showQueue = false },
+            onRemove = { id -> radioQueue = radioQueue.filterNot { it.id == id } },
+            onClear = { radioQueue = emptyList() },
+            onSavePlaylist = {
+                showQueue = false
+                newPlaylistName = ""
+                showSavePlaylistDialog = true
+            },
+            onAddToExistingPlaylist = {
+                showQueue = false
+                showExistingPlaylistDialog = true
+            }
+        )
+    }
+
+    if (showSavePlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showSavePlaylistDialog = false },
+            title = { Text("Save Playlist") },
+            text = {
+                OutlinedTextField(
+                    value = newPlaylistName,
+                    onValueChange = { newPlaylistName = it },
+                    label = { Text("Playlist name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = newPlaylistName.isNotBlank() && radioQueue.isNotEmpty(),
+                    onClick = {
+                        val name = newPlaylistName
+                        showSavePlaylistDialog = false
+                        crScope.launch { saveQueueAsPlaylist(name) }
+                    }
+                ) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showSavePlaylistDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showExistingPlaylistDialog) {
+        AlertDialog(
+            onDismissRequest = { showExistingPlaylistDialog = false },
+            title = { Text("Add to Existing Playlist") },
+            text = {
+                if (playlists.isEmpty()) {
+                    Text("No playlists yet. Save the queue as a new playlist first.")
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                        items(playlists, key = { it.id }) { playlist ->
+                            TextButton(
+                                onClick = {
+                                    showExistingPlaylistDialog = false
+                                    crScope.launch { addQueueToExistingPlaylist(playlist) }
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    playlist.name,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showExistingPlaylistDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     deckPicker?.let { station ->
         AlertDialog(
             onDismissRequest = { deckPicker = null },
@@ -399,7 +612,7 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
                         deckPicker = null
-                        val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(station.streamUrls.first()))
+                        val item = station.toAudioItem()
                         OnlineDjBridge.send(item, OnlineDeckTarget.A)
                     }) { Text("Deck A") }
                     TextButton(onClick = {
@@ -410,5 +623,79 @@ fun RadioScreen(playerController: AudioPlayerController = AudioPlayerController.
                 }
             }
         )
+    }@Composable
+private fun RadioQueueSheet(
+    queue: List<RadioStation>,
+    onDismiss: () -> Unit,
+    onRemove: (String) -> Unit,
+    onClear: () -> Unit,
+    onSavePlaylist: () -> Unit,
+    onAddToExistingPlaylist: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)) {
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("RADIO QUEUE", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black)
+                    Text(queue.size.toString() + " station(s)", style = MaterialTheme.typography.bodySmall)
+                }
+                if (queue.isNotEmpty()) {
+                    TextButton(onClick = onClear) { Text("Clear") }
+                }
+            }
+
+            if (queue.isEmpty()) {
+                Box(Modifier.fillMaxWidth().height(180.dp), contentAlignment = Alignment.Center) {
+                    Text("الكيو فارغ — أضف محطات من زر QueueMusic")
+                }
+            } else {
+                LazyColumn(
+                    Modifier.fillMaxWidth().heightIn(max = 460.dp),
+                    verticalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    itemsIndexed(queue, key = { _, station -> station.id }) { index, station ->
+                        Card(
+                            Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        ) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text((index + 1).toString(), fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(station.name, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(
+                                        if (station.countryCode == "EG") "مصرية" else "عالمية",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                IconButton(onClick = { onRemove(station.id) }) {
+                                    Icon(Icons.Filled.Delete, "Remove from queue")
+                                }
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onSavePlaylist, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.Save, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Save Playlist")
+                    }
+                    OutlinedButton(onClick = onAddToExistingPlaylist, Modifier.weight(1f)) {
+                        Icon(Icons.Filled.PlaylistAdd, null)
+                        Spacer(Modifier.width(5.dp))
+                        Text("Add to Existing")
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+        }
     }
+}
+
 }
