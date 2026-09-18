@@ -26,7 +26,6 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import com.example.model.AudioItem
 import com.example.model.Playlist
-import com.example.PlayerLibraryStore
 import com.example.QueueSheet
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
@@ -529,8 +528,7 @@ fun RadioScreen(
     if (showQueue) {
         QueueSheet(
             controller = playerController,
-            playlists = playlists as? androidx.compose.runtime.snapshots.SnapshotStateList<Playlist>
-                ?: androidx.compose.runtime.mutableStateListOf<Playlist>().also { it.addAll(playlists) },
+            playlists = playlists,
             library = audioLibrary,
             playlistRepo = playlistRepo,
             onDismiss = { showQueue = false },
