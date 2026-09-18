@@ -91,7 +91,7 @@ private fun smartTrackMatches(song: AudioItem, query: String): Boolean {
 fun PlayerScreenV2(
     playerController: AudioPlayerController,
     audioLibrary: SnapshotStateList<AudioItem>,
-    playlists: SnapshotStateList<Playlist>,
+    playlists: List<Playlist>,
     onPauseDJ: () -> Unit,
     navController: NavHostController
 ) {
