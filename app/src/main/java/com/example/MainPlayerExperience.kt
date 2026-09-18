@@ -507,7 +507,7 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
 @Composable
 fun QueueSheet(
     controller: AudioPlayerController,
-    playlists: SnapshotStateList<Playlist>,
+    playlists: List<Playlist>,
     library: SnapshotStateList<AudioItem>,
     playlistRepo: PlaylistRepository,
     onDismiss: () -> Unit,
