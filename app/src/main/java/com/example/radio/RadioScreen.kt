@@ -52,6 +52,17 @@ data class RadioStation(
     val countryCode: String
 )
 
+private const val EGYPT_QURAN_STATION_ID = "builtin-eg-quran-cairo"
+private val EGYPT_QURAN_STATION = RadioStation(
+    id = EGYPT_QURAN_STATION_ID,
+    name = "إذاعة القرآن الكريم من القاهرة",
+    streamUrls = listOf("https://stream.radiojar.com/8s5u5tpdtwzuv"),
+    tags = "اسلامي • دين • قرآن",
+    codec = "MP3",
+    bitrate = 0,
+    countryCode = "EG"
+)
+
 object RadioBrowserRepository {
     private val HOSTS = listOf(
         "all.api.radio-browser.info",
@@ -113,6 +124,14 @@ object RadioBrowserRepository {
                                 )
                             )
                         }
+
+                        if (countryCode == "EG" &&
+                            (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
+                        ) {
+                            if (none { it.id == EGYPT_QURAN_STATION_ID || it.name.contains("القرآن الكريم من القاهرة", ignoreCase = true) }) {
+                                add(EGYPT_QURAN_STATION)
+                            }
+                        }
                     }
                 } else {
                     connection.disconnect()
@@ -124,9 +143,18 @@ object RadioBrowserRepository {
         }
         
         if (lastException != null) {
+            if (countryCode == "EG" &&
+                (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
+            ) {
+                return@withContext listOf(EGYPT_QURAN_STATION)
+            }
             throw lastException
         }
-        emptyList()
+        if (countryCode == "EG" && query.isBlank()) {
+            listOf(EGYPT_QURAN_STATION)
+        } else {
+            emptyList()
+        }
     }
 }
 
@@ -293,6 +321,12 @@ fun RadioScreen(
                     kotlinx.coroutines.coroutineScope {
                         chunk.map { station ->
                             async {
+                            if (station.id == EGYPT_QURAN_STATION_ID) {
+                                StationValidator.validStations[station.id] = true
+                                synchronized(validList) { validList.add(station) }
+                                return@async
+                            }
+
                             if (StationValidator.validStations.containsKey(station.id)) {
                                 if (StationValidator.validStations[station.id] == true) {
                                     synchronized(validList) { validList.add(station) }
