@@ -331,7 +331,13 @@ fun MainApp() {
             composable("online_music") {
                 val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }
                 val vm = remember { com.example.onlinemusic.OnlineMusicViewModel(repo) }
-                com.example.onlinemusic.OnlineMusicScreen(vm, playerController)
+                com.example.onlinemusic.OnlineMusicScreen(
+                    viewModel = vm,
+                    playerController = playerController,
+                    playlists = playlists,
+                    audioLibrary = audioLibrary,
+                    playlistRepo = playlistRepo
+                )
             }
         }
     }
