@@ -114,8 +114,9 @@ fun DjSurfaceCard(
                 shadowElevation = if (pressed) 18f else 9f
             },
         shape = RoundedCornerShape(22.dp),
-        color = color.copy(alpha = if (pressed) 0.98f else 0.93f),
-        border = BorderStroke(1.dp, borderColor.copy(alpha = if (pressed) 0.46f else 0.20f)),
+        color = color.copy(alpha = if (pressed) 0.98f else 0.97f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, borderColor.copy(alpha = if (pressed) 0.46f else 0.32f)),
         tonalElevation = 3.dp,
         shadowElevation = if (pressed) 18.dp else 9.dp
     ) {
@@ -200,7 +201,7 @@ fun DjIconButton(
         shape = RoundedCornerShape(17.dp),
         color = containerColor.copy(alpha = 0.92f),
         contentColor = contentColor,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.30f)),
         shadowElevation = if (pressed) 14.dp else 6.dp
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
