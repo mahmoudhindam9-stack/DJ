@@ -27,6 +27,7 @@ import androidx.media3.common.Player
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.PlayerLibraryStore
+import com.example.QueueSheet
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
 import com.example.player.AudioPlayerController
@@ -199,11 +200,7 @@ fun RadioScreen(
             radioPrefs.getStringSet("favorite_station_ids", emptySet()).orEmpty().toSet()
         )
     }
-    var radioQueue by remember { mutableStateOf<List<RadioStation>>(emptyList()) }
     var showQueue by remember { mutableStateOf(false) }
-    var showSavePlaylistDialog by remember { mutableStateOf(false) }
-    var showExistingPlaylistDialog by remember { mutableStateOf(false) }
-    var newPlaylistName by remember { mutableStateOf("") }
     var loadingStationId by remember { mutableStateOf<String?>(null) }
     var failedStationId by remember { mutableStateOf<String?>(null) }
     val attempts = remember { mutableStateMapOf<String, Int>() }
@@ -245,66 +242,32 @@ fun RadioScreen(
         )
     }
 
-    fun applyRadioQueue(
-        queue: List<RadioStation>,
-        preserveCurrent: Boolean = true,
-        requestedIndex: Int = 0
-    ) {
-        if (queue.isEmpty()) return
-        playerController.setRadioQueue(
-            songs = toRadioAudioItems(queue),
-            mediaItems = toRadioMediaItems(queue),
-            startIndex = requestedIndex.coerceIn(0, queue.lastIndex),
-            preserveCurrent = preserveCurrent
-        )
-    }
-
     fun addStationToQueue(station: RadioStation) {
-        if (radioQueue.any { it.id == station.id }) return
-        val currentStation = currentRadioStation()
-        val updated = buildList {
-            if (radioQueue.isEmpty() && currentStation != null && currentStation.id != station.id) {
-                add(currentStation)
-            }
-            addAll(radioQueue)
-            add(station)
-        }.distinctBy { it.id }
-        radioQueue = updated
-        applyRadioQueue(
-            updated,
-            preserveCurrent = currentStation != null || updated.size > 1
-        )
-    }
+        val current = playerController.currentSong
+        if (current?.album != "Live Radio") return
 
-    suspend fun persistRadioStations(items: List<AudioItem>) {
-        val existingIds = audioLibrary.map { it.id }.toHashSet()
-        val newItems = items.filter { existingIds.add(it.id) }
-        if (newItems.isNotEmpty()) {
-            audioLibrary.addAll(newItems)
-            PlayerLibraryStore.save(context, newItems)
-        }
-    }
+        val currentQueue = playerController.playlist.toList()
+        if (currentQueue.any { it.id == station.id }) return
 
-    suspend fun saveQueueAsPlaylist(name: String) {
-        val cleaned = name.trim()
-        if (cleaned.isBlank() || radioQueue.isEmpty()) return
-        val items = toRadioAudioItems(radioQueue)
-        persistRadioStations(items)
-        playlistRepo.insert(
-            PlaylistEntity(
-                playlistId = UUID.randomUUID().toString(),
-                name = cleaned,
-                songIdsJson = items.joinToString(",") { it.id }
+        val existingStations = currentQueue.map {
+            RadioStation(
+                id = it.id,
+                name = it.title.removePrefix("📻 ").trim(),
+                streamUrls = listOf(it.uri.toString()),
+                tags = "",
+                codec = "",
+                bitrate = 0,
+                countryCode = if (it.artist == "إذاعة مصرية") "EG" else ""
             )
-        )
-    }
+        }
 
-    suspend fun addQueueToExistingPlaylist(playlist: Playlist) {
-        if (radioQueue.isEmpty()) return
-        val items = toRadioAudioItems(radioQueue)
-        persistRadioStations(items)
-        val merged = (playlist.songIds + items.map { it.id }).distinct().joinToString(",")
-        playlistRepo.updateSongs(playlist.id, merged)
+        val updated = (existingStations + station).distinctBy { it.id }
+        playerController.setRadioQueue(
+            songs = toRadioAudioItems(updated),
+            mediaItems = toRadioMediaItems(updated),
+            startIndex = currentQueue.indexOfFirst { it.id == current.id }.coerceAtLeast(0),
+            preserveCurrent = true
+        )
     }
 
     // Trigger recomposition on state changes
@@ -444,12 +407,12 @@ fun RadioScreen(
                     IconButton(onClick = { showQueue = true }) {
                         Icon(Icons.Filled.QueueMusic, "الكيو")
                     }
-                    if (radioQueue.isNotEmpty()) {
+                    if (playerController.playlist.isNotEmpty()) {
                         Badge(
                             modifier = Modifier.align(Alignment.TopEnd),
                             containerColor = MaterialTheme.colorScheme.primary
                         ) {
-                            Text(radioQueue.size.toString())
+                            Text(playerController.playlist.size.toString())
                         }
                     }
                 }
@@ -541,14 +504,11 @@ fun RadioScreen(
                                     } else if (isCurrentStation) {
                                         playerController.exoPlayer.play()
                                     } else {
-                                        val queueIndex = radioQueue.indexOfFirst { it.id == station.id }
+                                        val queueIndex = playerController.playlist.indexOfFirst {
+                                            it.album == "Live Radio" && it.id == station.id
+                                        }
                                         if (queueIndex >= 0) {
-                                            applyRadioQueue(
-                                                radioQueue,
-                                                preserveCurrent = false,
-                                                requestedIndex = queueIndex
-                                            )
-                                            playerController.exoPlayer.play()
+                                            playerController.play(playerController.playlist[queueIndex], null)
                                         } else {
                                             crScope.launch { playStation(station) }
                                         }
@@ -567,89 +527,16 @@ fun RadioScreen(
         }
     }
     if (showQueue) {
-        RadioQueueSheet(
-            queue = radioQueue,
+        QueueSheet(
+            controller = playerController,
+            playlists = playlists as? androidx.compose.runtime.snapshots.SnapshotStateList<Playlist>
+                ?: androidx.compose.runtime.mutableStateListOf<Playlist>().also { it.addAll(playlists) },
+            library = audioLibrary,
+            playlistRepo = playlistRepo,
             onDismiss = { showQueue = false },
-            onRemove = { stationId ->
-                val updated = radioQueue.filterNot { it.id == stationId }
-                radioQueue = updated
-                if (updated.isNotEmpty()) {
-                    applyRadioQueue(updated, preserveCurrent = true)
-                }
-            },
-            onClear = {
-                radioQueue = emptyList()
-            },
-            onSavePlaylist = {
+            onSelect = { song ->
+                playerController.play(song, null)
                 showQueue = false
-                newPlaylistName = ""
-                showSavePlaylistDialog = true
-            },
-            onAddToExistingPlaylist = {
-                showQueue = false
-                showExistingPlaylistDialog = true
-            }
-        )
-    }
-
-    if (showSavePlaylistDialog) {
-        AlertDialog(
-            onDismissRequest = { showSavePlaylistDialog = false },
-            title = { Text("Save Playlist") },
-            text = {
-                OutlinedTextField(
-                    value = newPlaylistName,
-                    onValueChange = { newPlaylistName = it },
-                    label = { Text("Playlist name") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    enabled = newPlaylistName.isNotBlank() && radioQueue.isNotEmpty(),
-                    onClick = {
-                        val name = newPlaylistName.trim()
-                        showSavePlaylistDialog = false
-                        crScope.launch { saveQueueAsPlaylist(name) }
-                    }
-                ) { Text("Save") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showSavePlaylistDialog = false }) { Text("Cancel") }
-            }
-        )
-    }
-
-    if (showExistingPlaylistDialog) {
-        AlertDialog(
-            onDismissRequest = { showExistingPlaylistDialog = false },
-            title = { Text("Add to Existing Playlist") },
-            text = {
-                if (playlists.isEmpty()) {
-                    Text("No playlists yet. Create one from Player first.")
-                } else {
-                    LazyColumn(Modifier.heightIn(max = 420.dp)) {
-                        items(playlists, key = { it.id }) { playlist ->
-                            TextButton(
-                                onClick = {
-                                    showExistingPlaylistDialog = false
-                                    crScope.launch { addQueueToExistingPlaylist(playlist) }
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Text(
-                                    playlist.name,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showExistingPlaylistDialog = false }) { Text("Cancel") }
             }
         )
     }
