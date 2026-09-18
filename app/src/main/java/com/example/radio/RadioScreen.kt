@@ -105,13 +105,16 @@ object RadioBrowserRepository {
                 if (responseCode in 200..299) {
                     val json = JSONArray(connection.inputStream.bufferedReader().use { it.readText() })
                     connection.disconnect()
-                    return@withContext buildList {
+                    val parsedStations = buildList {
                         for (i in 0 until json.length()) {
                             val item = json.optJSONObject(i) ?: continue
                             val resolved = item.optString("url_resolved").trim()
                             val raw = item.optString("url").trim()
-                            val urls = listOf(resolved, raw).filter { it.startsWith("http://") || it.startsWith("https://") }.distinct()
+                            val urls = listOf(resolved, raw)
+                                .filter { it.startsWith("http://") || it.startsWith("https://") }
+                                .distinct()
                             if (urls.isEmpty()) continue
+
                             add(
                                 RadioStation(
                                     id = item.optString("stationuuid").ifBlank { urls.first() },
@@ -124,15 +127,25 @@ object RadioBrowserRepository {
                                 )
                             )
                         }
+                    }
 
-                        if (countryCode == "EG" &&
-                            (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
-                        ) {
-                            if (none { it.id == EGYPT_QURAN_STATION_ID || it.name.contains("القرآن الكريم من القاهرة", ignoreCase = true) }) {
-                                add(EGYPT_QURAN_STATION)
-                            }
+                    if (countryCode.equals("EG", ignoreCase = true) &&
+                        (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
+                    ) {
+                        // Always use the built-in Cairo Quran station as the canonical entry.
+                        // RadioBrowser may return another record for the same station which can
+                        // later fail stream validation and disappear from the UI.
+                        val withoutQuranDuplicate = parsedStations.filterNot { station ->
+                            station.name.contains("القرآن الكريم من القاهرة", ignoreCase = true) ||
+                                station.name.contains("إذاعة القرآن الكريم", ignoreCase = true)
+                        }
+                        return@withContext buildList {
+                            add(EGYPT_QURAN_STATION)
+                            addAll(withoutQuranDuplicate)
                         }
                     }
+
+                    return@withContext parsedStations
                 } else {
                     connection.disconnect()
                 }
@@ -143,14 +156,14 @@ object RadioBrowserRepository {
         }
         
         if (lastException != null) {
-            if (countryCode == "EG" &&
+            if (countryCode.equals("EG", ignoreCase = true) &&
                 (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
             ) {
                 return@withContext listOf(EGYPT_QURAN_STATION)
             }
             throw lastException
         }
-        if (countryCode == "EG" && query.isBlank()) {
+        if (countryCode.equals("EG", ignoreCase = true) && query.isBlank()) {
             listOf(EGYPT_QURAN_STATION)
         } else {
             emptyList()
@@ -237,7 +250,7 @@ fun RadioScreen(
             AudioItem(
                 id = station.id,
                 title = "📻 " + station.name,
-                artist = if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio",
+                artist = if (station.countryCode.equals("EG", ignoreCase = true)) "إذاعة مصرية" else "Internet Radio",
                 album = "Live Radio",
                 durationMs = 0L,
                 uri = Uri.parse(station.streamUrls.first())
@@ -383,7 +396,7 @@ fun RadioScreen(
         attempts[station.id] = index
         while (index < station.streamUrls.size) {
             val resolvedUrl = resolvePlaylistUrl(station.streamUrls[index])
-            val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(resolvedUrl))
+            val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode.equals("EG", ignoreCase = true)) "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(resolvedUrl))
             
             try {
                 val media = MediaItem.Builder()
@@ -582,12 +595,12 @@ fun RadioScreen(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
                         deckPicker = null
-                        val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(station.streamUrls.first()))
+                        val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode.equals("EG", ignoreCase = true)) "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(station.streamUrls.first()))
                         OnlineDjBridge.send(item, OnlineDeckTarget.A)
                     }) { Text("Deck A") }
                     TextButton(onClick = {
                         deckPicker = null
-                        val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode == "EG") "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(station.streamUrls.first()))
+                        val item = AudioItem(station.id, "📻 ${station.name}", if (station.countryCode.equals("EG", ignoreCase = true)) "إذاعة مصرية" else "Internet Radio", "Live Radio", 0L, Uri.parse(station.streamUrls.first()))
                         OnlineDjBridge.send(item, OnlineDeckTarget.B)
                     }) { Text("Deck B") }
                 }
@@ -672,7 +685,7 @@ private fun RadioQueueSheet(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        if (station.countryCode == "EG") "مصرية" else "عالمية",
+                                        if (station.countryCode.equals("EG", ignoreCase = true)) "مصرية" else "عالمية",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
