@@ -56,7 +56,11 @@ private const val EGYPT_QURAN_STATION_ID = "builtin-eg-quran-cairo"
 private val EGYPT_QURAN_STATION = RadioStation(
     id = EGYPT_QURAN_STATION_ID,
     name = "إذاعة القرآن الكريم من القاهرة",
-    streamUrls = listOf("https://stream.radiojar.com/8s5u5tpdtwzuv"),
+    streamUrls = listOf(
+        "https://stream.radiojar.com/8s5u5tpdtwzuv",
+        "https://n0e.radiojar.com/8s5u5tpdtwzuv",
+        "https://n05.radiojar.com/8s5u5tpdtwzuv"
+    ),
     tags = "اسلامي • دين • قرآن",
     codec = "MP3",
     bitrate = 0,
@@ -436,6 +440,7 @@ fun RadioScreen(
                 attempts[station.id] = index
             }
         }
+        playerController.recoverFromRadioFailure()
         loadingStationId = null
         failedStationId = station.id
     }
