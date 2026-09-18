@@ -21,6 +21,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,26 +33,50 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.model.AudioItem
+import com.example.model.Playlist
+import com.example.QueueSheet
+import com.example.room.PlaylistRepository
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import com.example.player.AudioPlayerController
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
 
 @Composable
-fun OnlineMusicScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController) {
+fun OnlineMusicScreen(
+    viewModel: OnlineMusicViewModel,
+    playerController: AudioPlayerController,
+    playlists: List<Playlist>,
+    audioLibrary: SnapshotStateList<AudioItem>,
+    playlistRepo: PlaylistRepository
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var foreign by rememberSaveable { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(selected = !foreign, onClick = { foreign = false }, label = { Text("🇦🇪 Arabic") }, modifier = Modifier.weight(1f))
             FilterChip(selected = foreign, onClick = { foreign = true }, label = { Text("🌎 Foreign") }, modifier = Modifier.weight(1f))
         }
-        if (foreign) AudiusOnlineScreen(viewModel, playerController, scope) else AlbumatyOnlineScreen(viewModel, playerController, scope)
+        if (foreign) AudiusOnlineScreen(viewModel, playerController, scope) { showQueue = true } else AlbumatyOnlineScreen(viewModel, playerController, scope) { showQueue = true }
+    }
+    if (showQueue) {
+        QueueSheet(
+            controller = playerController,
+            playlists = playlists,
+            library = audioLibrary,
+            playlistRepo = playlistRepo,
+            onDismiss = { showQueue = false },
+            onSelect = { song ->
+                playerController.play(song, null)
+                showQueue = false
+            }
+        )
     }
 }
 
 @Composable
-private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController, scope: CoroutineScope) {
+private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController, scope: CoroutineScope, onShowQueue: () -> Unit) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
@@ -96,7 +121,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
     val artists = viewModel.home.artists.filter { normalized.isBlank() || it.title.contains(normalized, true) }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Albumaty", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }
+            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Albumaty", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }; IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") }
         }
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("ابحث في Albumaty") })
         if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
@@ -112,7 +137,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
 }
 
 @Composable
-private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController, scope: CoroutineScope) {
+private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController, scope: CoroutineScope, onShowQueue: () -> Unit) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
@@ -152,7 +177,7 @@ private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController
     val latest = if (query.isBlank()) viewModel.audiusHome.latest else searchResults
     val trending = if (query.isBlank()) viewModel.audiusHome.trending else searchResults
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Foreign • Audius", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadAudiusHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") } }
+        Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Foreign • Audius", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadAudiusHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }; IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") } }
         OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("Search foreign music") })
         LaunchedEffect(query) { if (query.trim().length >= 2) { kotlinx.coroutines.delay(350); viewModel.searchAudius(query.trim()) } else if (query.isBlank()) viewModel.clearAudiusSearch() }
         if (viewModel.isLoading && viewModel.audiusHome.trending.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
