@@ -229,6 +229,62 @@ class AudioPlayerController(private val context: Context) {
         persistSession(force = true)
     }
 
+    /**
+     * Replaces the active queue with radio streams and can preserve the
+     * currently playing station and position while new stations are added.
+     */
+    fun setRadioQueue(
+        songs: List<AudioItem>,
+        mediaItems: List<MediaItem>,
+        startIndex: Int = 0,
+        preserveCurrent: Boolean = true
+    ) {
+        if (songs.isEmpty() || songs.size != mediaItems.size) return
+
+        stopCrossfadePreview()
+
+        val currentMediaId = exoPlayer.currentMediaItem?.mediaId
+        val currentPosition = exoPlayer.currentPosition
+        val wasPlaying = exoPlayer.isPlaying
+
+        isShuffle = false
+        baseQueue.clear()
+        baseQueue.addAll(songs)
+        playlist.clear()
+        playlist.addAll(songs)
+
+        val preservedIndex = if (preserveCurrent && !currentMediaId.isNullOrBlank()) {
+            songs.indexOfFirst {
+                it.id.ifEmpty { it.uri.toString() } == currentMediaId
+            }.takeIf { it >= 0 }
+        } else {
+            null
+        }
+
+        val safeIndex = (preservedIndex ?: startIndex).coerceIn(0, songs.lastIndex)
+        currentSongIndex = safeIndex
+        currentSong = songs[safeIndex]
+        currentPositionMs = if (preservedIndex != null) currentPosition else 0L
+
+        exoPlayer.setMediaItems(
+            mediaItems,
+            safeIndex,
+            if (preservedIndex != null) currentPosition else 0L
+        )
+        exoPlayer.repeatMode = when (repeatOption) {
+            RepeatOption.OFF -> Player.REPEAT_MODE_OFF
+            RepeatOption.ALL -> Player.REPEAT_MODE_OFF
+            RepeatOption.ONE -> Player.REPEAT_MODE_ONE
+        }
+        exoPlayer.prepare()
+        applyPreferredAudioDevice()
+        if (wasPlaying || !preserveCurrent) {
+            exoPlayer.play()
+        }
+        persistSession(force = true)
+        syncNotificationSafely()
+    }
+
     fun startShuffle(songs: List<AudioItem>) {
         if (songs.isEmpty()) return
         pauseOthers()
