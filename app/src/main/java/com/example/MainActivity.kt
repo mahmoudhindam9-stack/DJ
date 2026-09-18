@@ -331,7 +331,12 @@ fun MainApp() {
             }
             
             composable("radio") {
-                com.example.radio.RadioScreen(playerController = playerController)
+                com.example.radio.RadioScreen(
+                    playerController = playerController,
+                    audioLibrary = audioLibrary,
+                    playlists = playlists,
+                    playlistRepo = playlistRepo
+                )
             }
             composable("online_music") {
                 val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }
