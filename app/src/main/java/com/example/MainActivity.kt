@@ -1,7 +1,6 @@
 package com.example
 
 import com.example.diagnostics.RuntimeDiagnostics
-import com.example.diagnostics.TemporaryDiagnosticsScreen
 import com.example.ui.components.PremiumBackdrop
 
 import android.Manifest
@@ -284,12 +283,6 @@ fun MainApp() {
                 )
             }
         },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                RuntimeDiagnostics.recordAction("open_diagnostics")
-                navController.navigate("diagnostics") { launchSingleTop = true }
-            }) { Icon(Icons.Filled.BugReport, contentDescription = "Runtime QA") }
-        }
     ) { innerPadding ->
         NavHost(
             navController = navController,
@@ -298,9 +291,6 @@ fun MainApp() {
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)
-            }
-            composable("diagnostics") {
-                TemporaryDiagnosticsScreen(onBack = { navController.popBackStack() })
             }
             composable("player") {
                 PlayerScreenV2(
@@ -341,7 +331,13 @@ fun MainApp() {
             composable("online_music") {
                 val repo = remember { com.example.onlinemusic.OnlineMusicRepository() }
                 val vm = remember { com.example.onlinemusic.OnlineMusicViewModel(repo) }
-                com.example.onlinemusic.OnlineMusicScreen(vm, playerController)
+                com.example.onlinemusic.OnlineMusicScreen(
+                    viewModel = vm,
+                    playerController = playerController,
+                    playlists = playlists,
+                    audioLibrary = audioLibrary,
+                    playlistRepo = playlistRepo
+                )
             }
         }
     }

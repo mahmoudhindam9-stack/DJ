@@ -91,7 +91,7 @@ private fun smartTrackMatches(song: AudioItem, query: String): Boolean {
 fun PlayerScreenV2(
     playerController: AudioPlayerController,
     audioLibrary: SnapshotStateList<AudioItem>,
-    playlists: SnapshotStateList<Playlist>,
+    playlists: List<Playlist>,
     onPauseDJ: () -> Unit,
     navController: NavHostController
 ) {
@@ -410,7 +410,7 @@ fun PlayerScreenV2(
             }
         }
     }
-    if (showQueue) QueueSheet(playerController, { showQueue = false }) { song -> playerController.play(song, null); showQueue = false }
+    if (showQueue) QueueSheet(playerController, playlists, audioLibrary, repo, { showQueue = false }) { song -> playerController.play(song, null); showQueue = false }
     if (showMusicImport) {
         MusicImportDialog(
             onDismiss = { showMusicImport = false },
@@ -505,12 +505,21 @@ private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBa
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit, onSelect: (AudioItem) -> Unit) {
+fun QueueSheet(
+    controller: AudioPlayerController,
+    playlists: List<Playlist>,
+    library: SnapshotStateList<AudioItem>,
+    playlistRepo: PlaylistRepository,
+    onDismiss: () -> Unit,
+    onSelect: (AudioItem) -> Unit
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var showFolderPicker by remember { mutableStateOf(false) }
     var downloading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
+    var showSaveDialog by remember { mutableStateOf(false) }
+    var showExistingDialog by remember { mutableStateOf(false) }
+    var playlistName by remember { mutableStateOf("") }
 
     val onlineSongs = remember(controller.playlist.toList()) {
         controller.playlist.filter {
@@ -521,7 +530,6 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
     val hasOnlineSongs = onlineSongs.isNotEmpty()
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
-        showFolderPicker = false
         if (uri == null) return@rememberLauncherForActivityResult
         downloading = true
         message = "Downloading queue..."
@@ -532,12 +540,49 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
         }
     }
 
+    suspend fun persistQueueItems() {
+        val existingIds = library.map { it.id }.toHashSet()
+        val newItems = controller.playlist.filter { existingIds.add(it.id) }
+        if (newItems.isNotEmpty()) {
+            library.addAll(newItems)
+            PlayerLibraryStore.save(context, newItems)
+        }
+    }
+
+    fun saveCurrentQueue(name: String) {
+        val cleaned = name.trim()
+        val items = controller.playlist.toList()
+        if (cleaned.isBlank() || items.isEmpty()) return
+        scope.launch {
+            persistQueueItems()
+            playlistRepo.insert(
+                PlaylistEntity(
+                    playlistId = UUID.randomUUID().toString(),
+                    name = cleaned,
+                    songIdsJson = items.joinToString(",") { it.id }
+                )
+            )
+            message = "Playlist saved"
+        }
+    }
+
+    fun addQueueToExisting(playlist: Playlist) {
+        val items = controller.playlist.toList()
+        if (items.isEmpty()) return
+        scope.launch {
+            persistQueueItems()
+            val merged = (playlist.songIds + items.map { it.id }).distinct().joinToString(",")
+            playlistRepo.updateSongs(playlist.id, merged)
+            message = "Added to ${playlist.name}"
+        }
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text("UPCOMING QUEUE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("${controller.playlist.size} song(s)", style = MaterialTheme.typography.bodySmall)
+                    Text("${controller.playlist.size} item(s)", style = MaterialTheme.typography.bodySmall)
                 }
                 if (hasOnlineSongs || downloading) {
                     Button(onClick = { if (!downloading) folderPicker.launch(null) }, enabled = !downloading) {
@@ -561,10 +606,62 @@ private fun QueueSheet(controller: AudioPlayerController, onDismiss: () -> Unit,
                     }
                 }
             }
+            Spacer(Modifier.height(10.dp))
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(
+                    onClick = { playlistName = ""; showSaveDialog = true },
+                    enabled = controller.playlist.isNotEmpty(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.Save, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Save Playlist")
+                }
+                OutlinedButton(
+                    onClick = { showExistingDialog = true },
+                    enabled = controller.playlist.isNotEmpty() && playlists.isNotEmpty(),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Filled.PlaylistAdd, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text("Add to Existing")
+                }
+            }
         }
     }
-}
 
+    if (showSaveDialog) {
+        AlertDialog(
+            onDismissRequest = { showSaveDialog = false },
+            title = { Text("Save Playlist") },
+            text = { OutlinedTextField(value = playlistName, onValueChange = { playlistName = it }, label = { Text("Playlist name") }, singleLine = true) },
+            confirmButton = {
+                TextButton(onClick = {
+                    val name = playlistName.trim()
+                    if (name.isNotBlank()) { showSaveDialog = false; saveCurrentQueue(name) }
+                }) { Text("Save") }
+            },
+            dismissButton = { TextButton(onClick = { showSaveDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showExistingDialog) {
+        AlertDialog(
+            onDismissRequest = { showExistingDialog = false },
+            title = { Text("Add to Existing Playlist") },
+            text = {
+                LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                    items(playlists, key = { it.id }) { playlist ->
+                        TextButton(onClick = { showExistingDialog = false; addQueueToExisting(playlist) }, modifier = Modifier.fillMaxWidth()) {
+                            Text(playlist.name, modifier = Modifier.fillMaxWidth(), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { showExistingDialog = false }) { Text("Cancel") } }
+        )
+    }
+}
 @Composable
 private fun MixPlaylistsDialog(playlists: List<Playlist>, library: List<AudioItem>, onDismiss: () -> Unit, onPlay: (List<AudioItem>, Boolean) -> Unit) {
     val selected = remember { mutableStateMapOf<String, Boolean>() }
