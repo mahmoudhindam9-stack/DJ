@@ -95,6 +95,96 @@ class AudioPlayerController(private val context: Context) {
         private set
     private var skipNextFadeIn = false
 
+    private data class RadioRecoverySnapshot(
+        val baseQueue: List<AudioItem>,
+        val playlist: List<AudioItem>,
+        val currentSongIndex: Int,
+        val positionMs: Long,
+        val isShuffle: Boolean,
+        val shuffleState: ShuffleState,
+        val repeatOption: RepeatOption,
+        val wasPlaying: Boolean
+    )
+
+    private var radioRecoverySnapshot: RadioRecoverySnapshot? = null
+
+    private fun captureBeforeRadioSwitch() {
+        if (currentSong?.album == "Live Radio") return
+        if (playlist.isEmpty()) return
+
+        radioRecoverySnapshot = RadioRecoverySnapshot(
+            baseQueue = baseQueue.toList(),
+            playlist = playlist.toList(),
+            currentSongIndex = currentSongIndex,
+            positionMs = exoPlayer.currentPosition.coerceAtLeast(currentPositionMs),
+            isShuffle = isShuffle,
+            shuffleState = shuffleState,
+            repeatOption = repeatOption,
+            wasPlaying = exoPlayer.isPlaying
+        )
+    }
+
+    private fun preparePlayerForRecoveryIfNeeded() {
+        if (exoPlayer.playerError != null || exoPlayer.playbackState == Player.STATE_IDLE) {
+            exoPlayer.prepare()
+        }
+    }
+
+    fun recoverFromRadioFailure() {
+        val snapshot = radioRecoverySnapshot
+        radioRecoverySnapshot = null
+        stopCrossfadePreview()
+
+        if (snapshot == null || snapshot.playlist.isEmpty()) {
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            baseQueue.clear()
+            playlist.clear()
+            currentSongIndex = -1
+            currentSong = null
+            currentPositionMs = 0L
+            durationMs = 0L
+            isPlaying = false
+            isBuffering = false
+            persistSession(force = true)
+            syncNotificationSafely()
+            return
+        }
+
+        baseQueue.clear()
+        baseQueue.addAll(snapshot.baseQueue)
+        playlist.clear()
+        playlist.addAll(snapshot.playlist)
+        isShuffle = snapshot.isShuffle
+        shuffleState = snapshot.shuffleState
+        repeatOption = snapshot.repeatOption
+
+        val safeIndex = snapshot.currentSongIndex.coerceIn(0, playlist.lastIndex)
+        currentSongIndex = safeIndex
+        currentSong = playlist[safeIndex]
+        currentPositionMs = snapshot.positionMs
+
+        exoPlayer.setMediaItems(playlist.map { mediaItemFromSong(it) }, safeIndex, snapshot.positionMs)
+        exoPlayer.shuffleModeEnabled = false
+        if (isShuffle) {
+            applyShuffleOrderToPlayer(shuffleState.currentOrder)
+        }
+
+        exoPlayer.repeatMode = when (repeatOption) {
+            RepeatOption.OFF -> Player.REPEAT_MODE_OFF
+            RepeatOption.ALL -> if (isShuffle) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
+            RepeatOption.ONE -> Player.REPEAT_MODE_ONE
+        }
+
+        exoPlayer.prepare()
+        applyPreferredAudioDevice()
+        if (snapshot.wasPlaying) {
+            exoPlayer.play()
+        }
+        persistSession(force = true)
+        syncNotificationSafely()
+    }
+
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     private var lastPersistAt = 0L
 
@@ -389,20 +479,25 @@ class AudioPlayerController(private val context: Context) {
 
     fun playRadio(song: AudioItem, mediaItem: MediaItem) {
         pauseOthers()
+        captureBeforeRadioSwitch()
         stopCrossfadePreview()
-        
+
         baseQueue.clear()
         baseQueue.add(song)
         playlist.clear()
         playlist.add(song)
         currentSongIndex = 0
         currentSong = song
-        
-        exoPlayer.setMediaItem(mediaItem)
+        currentPositionMs = 0L
+        durationMs = 0L
+        isShuffle = false
+        exoPlayer.shuffleModeEnabled = false
+
+        exoPlayer.setMediaItem(mediaItem, 0L)
         exoPlayer.prepare()
         applyPreferredAudioDevice()
         exoPlayer.play()
-        
+
         skipNextFadeIn = true
         persistSession(force = true)
         syncNotificationSafely()
@@ -435,6 +530,7 @@ class AudioPlayerController(private val context: Context) {
                 exoPlayer.seekTo(idx, 0L)
                 currentPositionMs = 0L
                 applyPreferredAudioDevice()
+                preparePlayerForRecoveryIfNeeded()
                 exoPlayer.play()
             } else {
                 val pool = (baseQueue + listOf(song))
@@ -479,6 +575,7 @@ class AudioPlayerController(private val context: Context) {
         } else {
             pauseOthers()
             applyPreferredAudioDevice()
+            preparePlayerForRecoveryIfNeeded()
             exoPlayer.play()
         }
     }
@@ -554,6 +651,7 @@ class AudioPlayerController(private val context: Context) {
         pauseOthers()
         currentPositionMs = 0L
         applyPreferredAudioDevice()
+        preparePlayerForRecoveryIfNeeded()
         exoPlayer.play()
         persistSession(force = true)
         syncNotificationSafely()
@@ -596,6 +694,7 @@ class AudioPlayerController(private val context: Context) {
         pauseOthers()
         currentPositionMs = 0L
         applyPreferredAudioDevice()
+        preparePlayerForRecoveryIfNeeded()
         exoPlayer.play()
         persistSession(force = true)
         syncNotificationSafely()
@@ -607,6 +706,7 @@ class AudioPlayerController(private val context: Context) {
         skipNextFadeIn = false
 
         val safe = positionMs.coerceAtLeast(0L)
+        preparePlayerForRecoveryIfNeeded()
         exoPlayer.seekTo(safe)
         currentPositionMs = safe
         persistSession(force = true)
