@@ -1,5 +1,6 @@
 package com.example
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +48,13 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
             MaterialTheme.colorScheme.primary.copy(alpha = 0.2f),
             MaterialTheme.colorScheme.background
         )
+    )
+
+    val artworkTransition = rememberInfiniteTransition(label = "artwork-rotation")
+    val artworkRotation by artworkTransition.animateFloat(
+        0f, 360f,
+        animationSpec = infiniteRepeatable(tween(18000, easing = LinearEasing)),
+        label = "artwork-spin"
     )
 
     Column(
@@ -84,11 +93,30 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
+                .graphicsLayer {
+                    rotationY = if (playerController.isPlaying) artworkRotation else 0f
+                    rotationX = if (playerController.isPlaying) 2f else 0f
+                    cameraDistance = 34f * density
+                    shadowElevation = 26f
+                }
                 .clip(RoundedCornerShape(32.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
                 .shadow(16.dp, RoundedCornerShape(32.dp)),
             contentAlignment = Alignment.Center
         ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.radialGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.48f),
+                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+                            )
+                        )
+                    )
+            )
             Icon(
                 Icons.Filled.MusicNote,
                 contentDescription = null,
