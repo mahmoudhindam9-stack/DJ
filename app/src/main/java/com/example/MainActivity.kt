@@ -193,6 +193,7 @@ fun MainApp() {
     PremiumBackdrop {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground,
         bottomBar = {
             NavigationBar(
                 modifier = Modifier
@@ -208,7 +209,7 @@ fun MainApp() {
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Player") },
-                    label = { Text("Player") },
+                    label = { Text("Player", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "player",
                     onClick = {
                         djMixerController.pauseAll()
@@ -221,7 +222,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Headset, contentDescription = "DJ Mixer") },
-                    label = { Text("DJ Mixer") },
+                    label = { Text("DJ", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "dj",
                     onClick = {
                         playerController.pause()
@@ -234,7 +235,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
-                    label = { Text("Equalizer") },
+                    label = { Text("EQ", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "equalizer",
                     onClick = {
                         navController.navigate("equalizer") {
@@ -246,7 +247,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
-                    label = { Text("Mic") },
+                    label = { Text("Mic", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "mic",
                     onClick = {
                         navController.navigate("mic") {
@@ -259,7 +260,7 @@ fun MainApp() {
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
-                    label = { Text("Radio") },
+                    label = { Text("Radio", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "radio",
                     onClick = {
                         navController.navigate("radio") {
@@ -271,7 +272,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
-                    label = { Text("Online") },
+                    label = { Text("Online", maxLines = 1, softWrap = false) },
                     selected = currentDestination?.route == "online_music",
                     onClick = {
                         navController.navigate("online_music") {
