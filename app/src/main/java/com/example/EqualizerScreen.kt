@@ -19,15 +19,17 @@ import androidx.compose.ui.unit.sp
 import com.example.player.EqualizerController
 import com.example.ui.components.CustomVerticalSlider
 import com.example.ui.components.DjSurfaceCard
+import com.example.ui.components.PremiumBackdrop
+import com.example.ui.components.PremiumStatusPill
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EqualizerScreen(eqController: EqualizerController) {
+    PremiumBackdrop {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(top = 16.dp, bottom = 16.dp, start = 16.dp, end = 16.dp)
             .verticalScroll(rememberScrollState())
     ) {
@@ -51,6 +53,10 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            PremiumStatusPill(
+                text = if (eqController.isEnabled) "DSP ACTIVE" else "DSP BYPASS",
+                active = eqController.isEnabled
+            )
             Switch(
                 checked = eqController.isEnabled,
                 onCheckedChange = { eqController.toggleEnable() },
@@ -292,5 +298,6 @@ fun EqualizerScreen(eqController: EqualizerController) {
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+    }
     }
 }
