@@ -2,6 +2,7 @@ package com.example
 
 import com.example.diagnostics.RuntimeDiagnostics
 import com.example.diagnostics.TemporaryDiagnosticsScreen
+import com.example.ui.components.PremiumBackdrop
 
 import android.Manifest
 import android.content.Context
@@ -189,17 +190,19 @@ fun MainApp() {
         }
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    PremiumBackdrop {
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         bottomBar = {
             NavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(24.dp, RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                    .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)),
-                containerColor = MaterialTheme.colorScheme.surface,
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+                    .shadow(24.dp, RoundedCornerShape(28.dp))
+                    .clip(RoundedCornerShape(28.dp)),
+                containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.90f),
                 contentColor = MaterialTheme.colorScheme.onSurface,
-                tonalElevation = 0.dp
+                tonalElevation = 6.dp
             ) {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
@@ -336,7 +339,6 @@ fun MainApp() {
             }
         }
     }
-    
     }
 }
 // KARAOKE_MIC_PAGE_V5

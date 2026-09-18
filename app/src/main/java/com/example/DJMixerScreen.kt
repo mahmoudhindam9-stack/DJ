@@ -25,6 +25,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -37,6 +38,8 @@ import com.example.djfx.DjFxController
 import com.example.player.MicController
 import com.example.ui.components.DjSurfaceCard
 import com.example.ui.components.DjSectionHeader
+import com.example.ui.components.PremiumBackdrop
+import com.example.ui.components.PremiumStatusPill
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -75,10 +78,10 @@ fun DJMixerScreen(
     
     val onImportClicked = { filePicker.launch(arrayOf("audio/*")) }
 
+    PremiumBackdrop {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
             .padding(top = 16.dp, bottom = 16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -95,12 +98,23 @@ fun DJMixerScreen(
                 letterSpacing = 2.sp,
                 modifier = Modifier.weight(1f)
             )
+            PremiumStatusPill(
+                text = if (deckA.isPlaying || deckB.isPlaying) "LIVE AUDIO" else "STANDBY",
+                active = deckA.isPlaying || deckB.isPlaying
+            )
         }
 
         // Crossfader
         DjSurfaceCard(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .graphicsLayer {
+                    rotationY = (djMixerController.crossfader - 0.5f) * 7f
+                    rotationX = if (deckA.isPlaying || deckB.isPlaying) 1.2f else 0f
+                    cameraDistance = 30f * density
+                },
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.58f)
         ) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
@@ -174,6 +188,7 @@ fun DJMixerScreen(
             Box(modifier = Modifier) { com.example.djfx.DjFxBoard(controller = djFxController) }
         }
     }
+}
 }
 
 @Composable
