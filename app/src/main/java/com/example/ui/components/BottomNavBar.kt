@@ -12,6 +12,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 
 @Composable
@@ -37,7 +38,7 @@ fun DjBottomNavBar(
             tonalElevation = 0.dp
         ) {
             DjNavItem(Icons.Filled.PlayArrow, "Player", currentRoute == "player") { onNavigate("player") }
-            DjNavItem(Icons.Filled.Headset, "Mixer", currentRoute == "dj") { onNavigate("dj") }
+            DjNavItem(Icons.Filled.Headset, "DJ", currentRoute == "dj") { onNavigate("dj") }
             DjNavItem(Icons.Filled.Tune, "EQ", currentRoute == "equalizer") { onNavigate("equalizer") }
             DjNavItem(Icons.Filled.Radio, "Radio", currentRoute == "radio") { onNavigate("radio") }
             DjNavItem(Icons.Filled.Cloud, "Online", currentRoute == "online_music") { onNavigate("online_music") }
@@ -64,7 +65,10 @@ private fun RowScope.DjNavItem(
         label = {
             Text(
                 text = label,
-                style = MaterialTheme.typography.labelSmall
+                style = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp),
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip
             )
         },
         selected = selected,
