@@ -41,11 +41,21 @@ object OnlineQueueDownloader {
                     fileName
                 ) ?: error("Unable to create $fileName")
 
-                val connection = (URL(source).openConnection() as HttpURLConnection).apply {
+                val safeSource = try {
+                    val u = URL(source)
+                    val decodedPath = java.net.URLDecoder.decode(u.path, "UTF-8")
+                    java.net.URI(u.protocol, u.authority, decodedPath, u.query, u.ref).toASCIIString()
+                } catch (_: Exception) {
+                    source
+                }
+                val connection = (URL(safeSource).openConnection() as HttpURLConnection).apply {
                     connectTimeout = 15000
                     readTimeout = 30000
                     instanceFollowRedirects = true
                     requestMethod = "GET"
+                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+                    setRequestProperty("Referer", "https://www.albumaty.com/")
+                    setRequestProperty("Accept", "*/*")
                 }
                 try {
                     if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")

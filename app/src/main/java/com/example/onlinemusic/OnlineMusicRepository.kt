@@ -6,21 +6,29 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import java.net.URI
+import java.net.URL
 import java.net.URLDecoder
+import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 class OnlineMusicRepository {
     companion object {
-        const val HOME_URL = "https://www.albumaty.com/cat/1"
+        const val HOME_URL = "https://www.albumaty.com/cat/1.html"
         private const val BASE_URL = "https://www.albumaty.com"
+        private const val USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     }
 
     private val client = OkHttpClient.Builder().followRedirects(true).followSslRedirects(true).build()
 
     private suspend fun getHtml(url: String): String = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(url)
-            .header("User-Agent", "Mozilla/5.0 (Android) DJ Music Player")
-            .header("Accept", "text/html,application/xhtml+xml")
+        val safeUrl = encodeUrlSafely(url)
+        val request = Request.Builder()
+            .url(safeUrl)
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language", "ar,en-US;q=0.9,en;q=0.8")
+            .header("Referer", "$BASE_URL/")
             .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("Albumaty returned ${response.code}")
@@ -35,9 +43,6 @@ class OnlineMusicRepository {
         val type = pageType(link.url)
         val content = parseSectionContent(html, type)
             .ifEmpty {
-                // Albumaty's Arabic category is currently served at /cat/1 and the
-                // page markup can vary between CDN responses. Fall back to the full
-                // document instead of returning an empty section.
                 parseLinks(html).filter {
                     when (type) {
                         "cat", "category" -> it.isSong() || it.isAlbum() || it.isArtist()
@@ -55,18 +60,55 @@ class OnlineMusicRepository {
     }
 
     suspend fun resolveTrack(song: AlbumatyLink): OnlineMusicTrack = withContext(Dispatchers.IO) {
-        require(song.isSong()) { "الرابط المحدد ليس أغنية" }
-        val songHtml = getHtml(song.url)
-        val downloadPageUrl = extractDownloadPage(songHtml) ?: error("لم يتم العثور على صفحة تحميل الأغنية")
-        val downloadHtml = getHtml(downloadPageUrl)
-        val audioUrl = extractAudioUrl(downloadHtml) ?: extractAudioUrl(songHtml) ?: error("لم يتم العثور على رابط الصوت المباشر")
-        OnlineMusicTrack(song.url, extractSongTitle(songHtml).ifBlank { song.title }, extractArtist(songHtml), extractAlbum(songHtml), extractImageUrl(songHtml), audioUrl, audioUrl)
+        val songUrl = normalizeUrl(song.url)
+        val songHtml = getHtml(songUrl)
+
+        // 1. Direct audio URL from song page (where Albumaty embeds it)
+        var audioUrl = extractAudioUrl(songHtml)
+
+        // 2. If not found, try download page if one exists
+        if (audioUrl == null) {
+            val downloadPageUrl = extractDownloadPage(songHtml)
+            if (downloadPageUrl != null) {
+                runCatching {
+                    val downloadHtml = getHtml(downloadPageUrl)
+                    audioUrl = extractAudioUrl(downloadHtml)
+                }
+            }
+        }
+
+        // 3. Fallback: check any .mp3 link in the song page
+        if (audioUrl == null) {
+            audioUrl = extractAnyMp3(songHtml)
+        }
+
+        val directAudioUrl = audioUrl ?: error("لم يتم العثور على رابط تشغيل الأغنية المباشر")
+        val safeAudioUrl = encodeUrlSafely(directAudioUrl)
+
+        val (h1Title, h1Artist) = extractTitleAndArtistFromH1(songHtml)
+        val title = h1Title.ifBlank { extractSongTitle(songHtml).ifBlank { song.title } }
+        val artist = h1Artist.ifBlank { extractArtist(songHtml).ifBlank { "Albumaty" } }
+        val album = extractAlbum(songHtml)
+        val imageUrl = extractImageUrl(songHtml)
+
+        OnlineMusicTrack(
+            id = song.url,
+            title = title,
+            artist = artist,
+            album = album,
+            artworkUrl = imageUrl,
+            streamUrl = safeAudioUrl,
+            downloadUrl = safeAudioUrl
+        )
     }
 
     suspend fun downloadToUri(audioUrl: String, resolver: ContentResolver, destination: Uri): Long = withContext(Dispatchers.IO) {
-        val request = Request.Builder().url(audioUrl)
-            .header("User-Agent", "Mozilla/5.0 (Android) DJ Music Player")
-            .header("Referer", "${BASE_URL}/").build()
+        val safeUrl = encodeUrlSafely(audioUrl)
+        val request = Request.Builder().url(safeUrl)
+            .header("User-Agent", USER_AGENT)
+            .header("Referer", "$BASE_URL/")
+            .header("Accept", "*/*")
+            .build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("فشل تنزيل الملف: HTTP ${response.code}")
             val body = response.body ?: error("ملف الصوت فارغ")
@@ -88,10 +130,25 @@ class OnlineMusicRepository {
     }
 
     suspend fun search(query: String): List<AlbumatyLink> = withContext(Dispatchers.IO) {
-        val home = getHome()
         val q = query.trim()
-        if (q.isBlank()) return@withContext home.songs
-        (home.albums + home.songs + home.artists + home.categories).filter { it.title.contains(q, true) }.distinctBy { it.url }
+        if (q.isBlank()) return@withContext getHome().songs
+
+        val remoteResults = runCatching {
+            val encodedQuery = URLEncoder.encode(q, StandardCharsets.UTF_8.name())
+            val searchUrl = "$BASE_URL/search.php?q=$encodedQuery"
+            val html = getHtml(searchUrl)
+            val mainContent = extractMainContentHtml(html)
+            parseLinks(mainContent).filter { it.isSong() || it.isAlbum() || it.isArtist() }
+        }.getOrDefault(emptyList())
+
+        if (remoteResults.isNotEmpty()) {
+            return@withContext remoteResults.distinctBy { it.url }
+        }
+
+        val home = getHome()
+        (home.albums + home.songs + home.artists + home.categories)
+            .filter { it.title.contains(q, true) }
+            .distinctBy { it.url }
     }
 
     private fun parseHome(html: String): AlbumatyHomeData {
@@ -142,10 +199,7 @@ class OnlineMusicRepository {
     }
 
     private fun extractDownloadPage(html: String): String? {
-        val hrefRegex = Regex(
-            "<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>",
-            RegexOption.IGNORE_CASE
-        )
+        val hrefRegex = Regex("<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>", RegexOption.IGNORE_CASE)
         return hrefRegex.findAll(html)
             .map { it.groupValues[1] }
             .firstOrNull { it.contains("/download/", true) || it.contains("download", true) }
@@ -153,26 +207,87 @@ class OnlineMusicRepository {
     }
 
     private fun extractAudioUrl(html: String): String? {
-        Regex("https?://[^\\\"'<>\\s]+\\.mp3(?:\\?[^\\\"'<>\\s]*)?", RegexOption.IGNORE_CASE).find(html)?.value?.let { return normalizeUrl(it) }
-        Regex("<(?:audio|source)[^>]+src=[\\\"']([^\\\"']+)[\\\"']", RegexOption.IGNORE_CASE).find(html)?.groupValues?.getOrNull(1)?.let { if (it.contains(".mp3", true)) return normalizeUrl(it) }
+        // 1. Check itemprop="contentUrl" or itemprop="url" with .mp3
+        Regex("""<meta[^>]+itemprop=["'](?:contentUrl|url)["'][^>]+content=["']([^"']+\.mp3[^"']*)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)?.let { return normalizeUrl(it) }
+
+        // 2. Check <audio ... src="..."> or <source ... src="..."> or data-src
+        Regex("""<(?:audio|source)[^>]+(?:src|data-src)=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)?.let {
+                if (it.contains(".mp3", ignoreCase = true) || it.contains("serv", ignoreCase = true)) return normalizeUrl(it)
+            }
+
+        // 3. Check direct mp3 URL
+        Regex("""https?://[^\s"'<>]+\.mp3(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
+            .find(html)?.value?.let { return normalizeUrl(it) }
+
+        // 4. Check download anchors
         return Regex("<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>[^<]*(?:تحميل|download)[^<]*</a>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
             .find(html)?.groupValues?.getOrNull(1)?.let(::normalizeUrl)?.takeIf { it.contains(".mp3", true) }
     }
 
-    private fun extractSongTitle(html: String): String = Regex("<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+MP3\\s*</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        .find(html)?.groupValues?.getOrNull(1)?.let { stripHtml(it).substringBeforeLast(" - ").trim() }.orEmpty()
+    private fun extractAnyMp3(html: String): String? {
+        return Regex("""https?://[^\s"'<>]+\.mp3(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
+            .find(html)?.value?.let(::normalizeUrl)
+    }
 
-    private fun extractArtist(html: String): String = Regex("<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+-\\s+(.+?)\\s+MP3\\s*</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        .find(html)?.groupValues?.getOrNull(2)?.let(::stripHtml)?.trim().orEmpty()
+    private fun extractTitleAndArtistFromH1(html: String): Pair<String, String> {
+        val h1Match = Regex("<h1[^>]*>(.*?)</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)).find(html)
+            ?: return Pair("", "")
+        var text = stripHtml(h1Match.groupValues[1])
+        text = text.replace(Regex("^(?:اغنية|أغنية)\\s*", RegexOption.IGNORE_CASE), "").trim()
+        text = text.replace(Regex("\\s*MP3\\s*$", RegexOption.IGNORE_CASE), "").trim()
 
-    private fun extractAlbum(html: String): String? = Regex("اغاني\\s+اخرى\\s+من\\s+ألبوم\\s+([^<]+)", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
-        .find(stripHtml(html))?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+        return if (text.contains(" - ")) {
+            val parts = text.split(" - ", limit = 2)
+            Pair(parts[0].trim(), parts.getOrNull(1)?.trim().orEmpty())
+        } else {
+            Pair(text, "")
+        }
+    }
 
-    private fun extractImageUrl(html: String): String? = Regex("<img[^>]+(?:src|data-src)=[\\\"']([^\\\"']+)[\\\"']", RegexOption.IGNORE_CASE)
-        .find(html)?.groupValues?.getOrNull(1)?.let(::normalizeUrl)
+    private fun extractSongTitle(html: String): String =
+        Regex("<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+MP3\\s*</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(html)?.groupValues?.getOrNull(1)?.let { stripHtml(it).substringBeforeLast(" - ").trim() }.orEmpty()
+
+    private fun extractArtist(html: String): String {
+        val schemaArtist = Regex("""itemprop=["']byArtist["'][^>]*>.*?<span[^>]*itemprop=["']name["'][^>]*>(.*?)</span>""", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(html)?.groupValues?.getOrNull(1)?.let(::stripHtml)?.trim()
+        if (!schemaArtist.isNullOrBlank()) return schemaArtist
+
+        return Regex("<h1[^>]*>\\s*اغنية\\s+(.+?)\\s+-\\s+(.+?)\\s+MP3\\s*</h1>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(html)?.groupValues?.getOrNull(2)?.let(::stripHtml)?.trim().orEmpty()
+    }
+
+    private fun extractAlbum(html: String): String? =
+        Regex("اغاني\\s+اخرى\\s+من\\s+ألبوم\\s+([^<]+)", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL))
+            .find(stripHtml(html))?.groupValues?.getOrNull(1)?.trim()?.takeIf { it.isNotBlank() }
+
+    private fun extractImageUrl(html: String): String? {
+        val metaImg = Regex("""<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["']""", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)?.let(::normalizeUrl)
+        if (!metaImg.isNullOrBlank() && !metaImg.contains("logo.png") && !metaImg.contains("empty.png")) {
+            return metaImg
+        }
+
+        return Regex("<img[^>]+(?:src|data-src)=[\\\"']([^\\\"']+)[\\\"']", RegexOption.IGNORE_CASE)
+            .find(html)?.groupValues?.getOrNull(1)?.let(::normalizeUrl)
+    }
+
+    private fun encodeUrlSafely(rawUrl: String): String {
+        return try {
+            val u = URL(rawUrl)
+            val decodedPath = URLDecoder.decode(u.path, StandardCharsets.UTF_8.name())
+            val uri = URI(u.protocol, u.authority, decodedPath, u.query, u.ref)
+            uri.toASCIIString()
+        } catch (_: Exception) {
+            rawUrl
+        }
+    }
 
     private fun normalizeUrl(value: String): String {
-        val decoded = URLDecoder.decode(value.replace("&amp;", "&"), StandardCharsets.UTF_8.name())
+        val safe = value.replace("&amp;", "&").trim()
+        val decoded = runCatching { URLDecoder.decode(safe, StandardCharsets.UTF_8.name()) }.getOrDefault(safe)
         return when {
             decoded.startsWith("http://", true) -> decoded.replaceFirst("http://", "https://")
             decoded.startsWith("https://", true) -> decoded.replace("https://albumaty.com", BASE_URL, true).replace("https://www.albumaty.com", BASE_URL, true)
@@ -182,10 +297,15 @@ class OnlineMusicRepository {
         }
     }
 
-    private fun isAlbumatyUrl(url: String): Boolean = try { java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com" } catch (e: Exception) { android.util.Log.w("OnlineMusicRepository", "Caught exception", e); false }
+    private fun isAlbumatyUrl(url: String): Boolean = try {
+        URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com"
+    } catch (e: Exception) {
+        android.util.Log.w("OnlineMusicRepository", "Caught exception", e)
+        false
+    }
 
     private fun pathSegments(url: String): List<String> = try {
-        java.net.URI(url).path.orEmpty()
+        URI(url).path.orEmpty()
             .trim('/')
             .lowercase()
             .split('/')
@@ -195,10 +315,6 @@ class OnlineMusicRepository {
         emptyList()
     }
 
-    private fun path(url: String): String = pathSegments(url).joinToString("/")
-
-    // Albumaty currently serves some valid links under a language/namespace prefix,
-    // e.g. /n/song/39167.html. Do not assume the first path segment is the resource type.
     private fun pageType(url: String): String {
         val segments = pathSegments(url)
         return segments.firstOrNull {
@@ -219,6 +335,10 @@ class OnlineMusicRepository {
         .replace(Regex("<script.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
         .replace(Regex("<style.*?</style>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
         .replace(Regex("<[^>]+>"), " ")
-        .replace("&nbsp;", " ").replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'")
-        .replace(Regex("\\s+"), " ").trim()
+        .replace("&nbsp;", " ")
+        .replace("&amp;", "&")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace(Regex("\\s+"), " ")
+        .trim()
 }

@@ -84,54 +84,155 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
     val saveDownloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri: Uri? ->
         val pending = pendingDownload; pendingDownload = null
         if (uri == null || pending == null) return@rememberLauncherForActivityResult
-        scope.launch { message = "Downloading ${pending.title}..."; runCatching { viewModel.downloadTrack(pending.audioUrl, context.contentResolver, uri) }.onSuccess { message = "Song downloaded successfully" }.onFailure { message = it.message ?: "Failed to download song" } }
+        scope.launch {
+            message = "جاري تنزيل ${pending.title}..."
+            runCatching { viewModel.downloadTrack(pending.audioUrl, context.contentResolver, uri) }
+                .onSuccess { message = "تم تنزيل الأغنية بنجاح" }
+                .onFailure { message = it.message ?: "فشل تنزيل الأغنية" }
+        }
     }
     LaunchedEffect(Unit) { viewModel.loadHome() }
+    LaunchedEffect(query) {
+        val trimmed = query.trim()
+        if (trimmed.length >= 2) {
+            kotlinx.coroutines.delay(400)
+            viewModel.searchAlbumaty(trimmed)
+        } else if (trimmed.isBlank()) {
+            viewModel.clearAlbumatySearch()
+        }
+    }
+
     fun playSong(link: AlbumatyLink) {
         scope.launch {
             val same = playerController.currentSong?.id == link.url
             if (same) { playerController.togglePlayPause(); return@launch }
-            message = "Preparing song..."
+            message = "جاري تحضير وتشغيل الأغنية..."
             runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
-                val audio = track.streamUrl ?: error("No audio link")
+                val audio = track.streamUrl ?: error("لم يتم العثور على رابط الصوت")
                 val item = AudioItem(link.url, track.title, track.artist.ifBlank { "Albumaty" }, track.album ?: "Online Music", 0L, Uri.parse(audio))
-                playerController.play(item, listOf(item)); message = "Playing: ${track.title}"
-            }.onFailure { message = it.message ?: "Failed to play song" }
+                playerController.play(item, listOf(item))
+                message = "جاري تشغيل: ${track.title}"
+            }.onFailure { message = it.message ?: "فشل تشغيل الأغنية" }
         }
     }
     fun downloadSong(link: AlbumatyLink) {
         scope.launch {
-            message = "Preparing download link..."
+            message = "جاري استخراج رابط التحميل..."
             runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
-                val audio = track.downloadUrl ?: track.streamUrl ?: error("No download link")
-                pendingDownload = PendingOnlineDownload(track.title, audio); saveDownloadLauncher.launch(suggestedFileName(track.title))
-            }.onFailure { message = it.message ?: "Failed to prepare download" }
+                val audio = track.downloadUrl ?: track.streamUrl ?: error("لم يتم العثور على رابط التحميل")
+                pendingDownload = PendingOnlineDownload(track.title, audio)
+                saveDownloadLauncher.launch(suggestedFileName(track.title))
+            }.onFailure { message = it.message ?: "فشل تجهيز التحميل" }
         }
     }
-    fun queueSong(link: AlbumatyLink) { scope.launch { runCatching { viewModel.resolveTrack(link) }.onSuccess { track -> val audio=track.streamUrl ?: error("No audio link"); playerController.enqueueOnlineSong(AudioItem(link.url, track.title, track.artist.ifBlank { "Albumaty" }, track.album ?: "Online Music", 0L, Uri.parse(audio))); message="Added ${track.title} to Playlist" }.onFailure { message=it.message ?: "Failed to add song to Playlist" } } }
-    fun sendToDeck(link: AlbumatyLink, deck: OnlineDeckTarget) { scope.launch { runCatching { viewModel.resolveTrack(link) }.onSuccess { track -> val audio=track.streamUrl ?: error("No audio link"); OnlineDjBridge.send(AudioItem(link.url, track.title, track.artist.ifBlank { "Albumaty" }, track.album ?: "Online Music", 0L, Uri.parse(audio)), deck); message="Sent ${track.title} to Deck ${deck.name}" }.onFailure { message=it.message ?: "Failed to send song to DJ" } } }
+    fun queueSong(link: AlbumatyLink) {
+        scope.launch {
+            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
+                val audio = track.streamUrl ?: error("لم يتم العثور على رابط الصوت")
+                playerController.enqueueOnlineSong(AudioItem(link.url, track.title, track.artist.ifBlank { "Albumaty" }, track.album ?: "Online Music", 0L, Uri.parse(audio)))
+                message = "تمت إضافة ${track.title} لقائمة التشغيل"
+            }.onFailure { message = it.message ?: "فشل إضافة الأغنية لقائمة التشغيل" }
+        }
+    }
+    fun sendToDeck(link: AlbumatyLink, deck: OnlineDeckTarget) {
+        scope.launch {
+            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
+                val audio = track.streamUrl ?: error("لم يتم العثور على رابط الصوت")
+                OnlineDjBridge.send(AudioItem(link.url, track.title, track.artist.ifBlank { "Albumaty" }, track.album ?: "Online Music", 0L, Uri.parse(audio)), deck)
+                message = "تم إرسال ${track.title} إلى Deck ${deck.name}"
+            }.onFailure { message = it.message ?: "فشل إرسال الأغنية إلى DJ" }
+        }
+    }
     fun activate(link: AlbumatyLink) { if (link.isSong()) playSong(link) else viewModel.openSection(link) }
     viewModel.section?.let { section ->
         OnlineSectionScreen(section, viewModel.isLoading, viewModel.errorMessage, message, viewModel::closeSection, ::activate, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)
         return
     }
+
     val normalized = query.trim()
-    val albums = viewModel.home.albums.filter { normalized.isBlank() || it.title.contains(normalized, true) }
-    val songs = viewModel.home.songs.filter { normalized.isBlank() || it.title.contains(normalized, true) }
-    val artists = viewModel.home.artists.filter { normalized.isBlank() || it.title.contains(normalized, true) }
+    val isSearching = normalized.isNotBlank()
+    val hasSearchResults = viewModel.albumatySearchResults.isNotEmpty()
+
+    val searchSongs = if (hasSearchResults) viewModel.albumatySearchResults.filter { it.isSong() } else emptyList()
+    val searchAlbums = if (hasSearchResults) viewModel.albumatySearchResults.filter { it.isAlbum() } else emptyList()
+    val searchArtists = if (hasSearchResults) viewModel.albumatySearchResults.filter { it.isArtist() } else emptyList()
+
+    val localAlbums = viewModel.home.albums.filter { normalized.isBlank() || it.title.contains(normalized, true) }
+    val localSongs = viewModel.home.songs.filter { normalized.isBlank() || it.title.contains(normalized, true) }
+    val localArtists = viewModel.home.artists.filter { normalized.isBlank() || it.title.contains(normalized, true) }
+
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Albumaty", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }; IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") }
+            Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp))
+            Spacer(Modifier.size(8.dp))
+            Text("Albumaty", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconButton(onClick = { viewModel.loadHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }
+            IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") }
         }
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("ابحث في Albumaty") })
-        if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-        else if (viewModel.errorMessage != null && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(viewModel.errorMessage ?: "Unknown error", color = MaterialTheme.colorScheme.error); TextButton(onClick = { viewModel.loadHome(true) }) { Text("Retry") } } }
-        else LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item { OnlineSection("Sections") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(viewModel.home.categories) { link -> Card(Modifier.clickable { activate(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) } } } } }
-            item { OnlineSection("New Albums") { LinkList(albums, ::activate, playerController) } }
-            item { OnlineSection("New Songs") { SongList(songs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
-            item { OnlineSection("Artists") { LinkList(artists, ::activate, playerController, null) } }
-            message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            placeholder = { Text("ابحث في Albumaty") }
+        )
+
+        if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+        } else if (viewModel.errorMessage != null && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
+            Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(viewModel.errorMessage ?: "Unknown error", color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { viewModel.loadHome(true) }) { Text("Retry") }
+                }
+            }
+        } else {
+            LazyColumn(Modifier.fillMaxSize().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (viewModel.isSearchingAlbumaty) {
+                    item {
+                        Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(Modifier.size(24.dp))
+                        }
+                    }
+                }
+
+                if (isSearching && hasSearchResults) {
+                    if (searchSongs.isNotEmpty()) {
+                        item { OnlineSection("Songs") { SongList(searchSongs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
+                    }
+                    if (searchAlbums.isNotEmpty()) {
+                        item { OnlineSection("Albums") { LinkList(searchAlbums, ::activate, playerController) } }
+                    }
+                    if (searchArtists.isNotEmpty()) {
+                        item { OnlineSection("Artists") { LinkList(searchArtists, ::activate, playerController, null) } }
+                    }
+                } else if (isSearching) {
+                    if (localSongs.isNotEmpty()) {
+                        item { OnlineSection("Songs") { SongList(localSongs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
+                    }
+                    if (localAlbums.isNotEmpty()) {
+                        item { OnlineSection("Albums") { LinkList(localAlbums, ::activate, playerController) } }
+                    }
+                    if (localArtists.isNotEmpty()) {
+                        item { OnlineSection("Artists") { LinkList(localArtists, ::activate, playerController, null) } }
+                    }
+                    if (!viewModel.isSearchingAlbumaty && localSongs.isEmpty() && localAlbums.isEmpty() && localArtists.isEmpty()) {
+                        item {
+                            Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                                Text("No results found for \"$query\"", style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                } else {
+                    item { OnlineSection("Sections") { LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) { items(viewModel.home.categories) { link -> Card(Modifier.clickable { activate(link) }) { Text(link.title, Modifier.padding(horizontal = 14.dp, vertical = 9.dp), maxLines = 1) } } } } }
+                    item { OnlineSection("New Albums") { LinkList(localAlbums, ::activate, playerController) } }
+                    item { OnlineSection("New Songs") { SongList(localSongs, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController) } }
+                    item { OnlineSection("Artists") { LinkList(localArtists, ::activate, playerController, null) } }
+                }
+
+                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(16.dp)) } }
+            }
         }
     }
 }
@@ -220,6 +321,8 @@ private fun OnlineSectionScreen(section: AlbumatySection, isLoading: Boolean, er
 @Composable private fun OnlineSongCard(link: AlbumatyLink, onPlay: (AlbumatyLink) -> Unit, onDownload: (AlbumatyLink) -> Unit, onQueue: (AlbumatyLink) -> Unit, onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit, playerController: AudioPlayerController) { val active = playerController.currentSong?.id == link.url; val playing = active && playerController.isPlaying; com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(44.dp).background(MaterialTheme.colorScheme.surfaceVariant), contentAlignment = Alignment.Center) { Icon(Icons.Filled.MusicNote, null) }; Spacer(Modifier.size(9.dp)); Text(link.title, modifier = Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold); IconButton(modifier = Modifier, onClick = { onPlay(link) }) { Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play") }; IconButton(modifier = Modifier, onClick = { onQueue(link) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist") }; OnlineDeckButton { onDeck(link, it) }; IconButton(modifier = Modifier, onClick = { onDownload(link) }) { Icon(Icons.Filled.Download, "Download") } } } }
 @Composable private fun OnlineSection(title: String, content: @Composable () -> Unit) { Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) { Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Spacer(Modifier.height(6.dp)); content() } }
 private fun AlbumatyLink.isSong(): Boolean = runCatching { java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "song" || it.startsWith("song") } }.getOrDefault(false)
+private fun AlbumatyLink.isAlbum(): Boolean = runCatching { java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "album" || it.startsWith("album") } }.getOrDefault(false)
+private fun AlbumatyLink.isArtist(): Boolean = runCatching { java.net.URI(url).path.orEmpty().trim('/').lowercase().split('/').any { it == "singer" || it == "artist" || it.startsWith("singer") || it.startsWith("artist") } }.getOrDefault(false)
 enum class OnlineDeckTarget { A, B }
 @Composable private fun OnlineDeckButton(onSelected: (OnlineDeckTarget) -> Unit) { var showPicker by remember { mutableStateOf(false) }; IconButton(onClick = { showPicker=true }) { Icon(Icons.Filled.Headset, "Send to DJ Deck") }; if(showPicker) AlertDialog(onDismissRequest={showPicker=false}, title={Text("Send song to which Deck?")}, text={Text("Select A or B")}, confirmButton={Row(horizontalArrangement=Arrangement.spacedBy(8.dp)){TextButton(onClick={showPicker=false;onSelected(OnlineDeckTarget.A)}){Text("A")};TextButton(onClick={showPicker=false;onSelected(OnlineDeckTarget.B)}){Text("B")}}}) }
 private data class PendingOnlineDownload(val title: String, val audioUrl: String)

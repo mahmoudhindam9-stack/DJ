@@ -27,6 +27,10 @@ class OnlineMusicViewModel(
         private set
     var isLoading by mutableStateOf(false)
         private set
+    var isSearchingAlbumaty by mutableStateOf(false)
+        private set
+    var albumatySearchResults by mutableStateOf<List<AlbumatyLink>>(emptyList())
+        private set
     var isResolvingTrack by mutableStateOf(false)
         private set
     var errorMessage by mutableStateOf<String?>(null)
@@ -45,6 +49,28 @@ class OnlineMusicViewModel(
                 .onFailure { errorMessage = it.message ?: "Failed to load Albumaty" }
             isLoading = false
         }
+    }
+
+    fun searchAlbumaty(query: String) {
+        val q = query.trim()
+        if (q.isBlank()) {
+            albumatySearchResults = emptyList()
+            isSearchingAlbumaty = false
+            return
+        }
+        viewModelScope.launch {
+            isSearchingAlbumaty = true
+            errorMessage = null
+            runCatching { repository.search(q) }
+                .onSuccess { albumatySearchResults = it }
+                .onFailure { errorMessage = it.message ?: "Search failed" }
+            isSearchingAlbumaty = false
+        }
+    }
+
+    fun clearAlbumatySearch() {
+        albumatySearchResults = emptyList()
+        isSearchingAlbumaty = false
     }
 
     fun loadAudiusHome(force: Boolean = false) {
