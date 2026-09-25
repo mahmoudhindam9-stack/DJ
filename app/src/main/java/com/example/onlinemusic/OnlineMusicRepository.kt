@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets
 
 class OnlineMusicRepository {
     companion object {
-        const val HOME_URL = "https://www.albumaty.com/cat/1.html"
+        const val HOME_URL = "https://www.albumaty.com/cat/1"
         private const val BASE_URL = "https://www.albumaty.com"
     }
 
@@ -34,6 +34,20 @@ class OnlineMusicRepository {
         val html = getHtml(link.url)
         val type = pageType(link.url)
         val content = parseSectionContent(html, type)
+            .ifEmpty {
+                // Albumaty's Arabic category is currently served at /cat/1 and the
+                // page markup can vary between CDN responses. Fall back to the full
+                // document instead of returning an empty section.
+                parseLinks(html).filter {
+                    when (type) {
+                        "cat", "category" -> it.isSong() || it.isAlbum() || it.isArtist()
+                        "album" -> it.isSong()
+                        "singer", "artist" -> it.isAlbum() || it.isSong()
+                        "lastalbums" -> it.isAlbum()
+                        else -> it.isSong() || it.isAlbum() || it.isArtist()
+                    }
+                }
+            }
             .filterNot { it.url.trimEnd('/') == link.url.trimEnd('/') }
             .distinctBy { it.url }
             .take(500)
@@ -52,7 +66,7 @@ class OnlineMusicRepository {
     suspend fun downloadToUri(audioUrl: String, resolver: ContentResolver, destination: Uri): Long = withContext(Dispatchers.IO) {
         val request = Request.Builder().url(audioUrl)
             .header("User-Agent", "Mozilla/5.0 (Android) DJ Music Player")
-            .header("Referer", "$BASE_URL/").build()
+            .header("Referer", "${BASE_URL}/").build()
         client.newCall(request).execute().use { response ->
             if (!response.isSuccessful) error("فشل تنزيل الملف: HTTP ${response.code}")
             val body = response.body ?: error("ملف الصوت فارغ")
@@ -90,30 +104,16 @@ class OnlineMusicRepository {
         )
     }
 
-    /**
-     * Parse only the page's own content area.
-     *
-     * Albumaty repeats the global navigation, latest albums/songs and artist lists on
-     * many pages. Parsing every <a> on the document made those unrelated links leak
-     * into a selected category/artist/album screen. The first h1 marks the main page
-     * content on Albumaty, so we scope parsing to that region and then apply a stricter
-     * album rule so an album screen contains only its own songs.
-     */
     private fun parseSectionContent(html: String, type: String): List<AlbumatyLink> {
         val mainHtml = extractMainContentHtml(html)
         if (mainHtml.isBlank()) return emptyList()
 
         return when (type) {
-            "album" -> parseLinks(mainHtml)
-                .filter { it.isSong() }
-            "singer", "artist" -> parseLinks(mainHtml)
-                .filter { it.isAlbum() || it.isSong() }
-            "lastalbums" -> parseLinks(mainHtml)
-                .filter { it.isAlbum() }
-            "cat", "category" -> parseLinks(mainHtml)
-                .filter { it.isSong() || it.isAlbum() || it.isArtist() }
-            else -> parseLinks(mainHtml)
-                .filter { it.isSong() || it.isAlbum() || it.isArtist() }
+            "album" -> parseLinks(mainHtml).filter { it.isSong() }
+            "singer", "artist" -> parseLinks(mainHtml).filter { it.isAlbum() || it.isSong() }
+            "lastalbums" -> parseLinks(mainHtml).filter { it.isAlbum() }
+            "cat", "category" -> parseLinks(mainHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }
+            else -> parseLinks(mainHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }
         }
     }
 
@@ -122,7 +122,7 @@ class OnlineMusicRepository {
         val start = h1.range.first
 
         val footerStart = Regex(
-            "<(?:footer|\\/footer)\\b|(?:اتصل بنا|contact us|about us|جميع الحقوق محفوظة)",
+            "<(?:footer|/footer)\\b|(?:اتصل بنا|contact us|about us|جميع الحقوق محفوظة)",
             RegexOption.IGNORE_CASE
         ).find(html, start + h1.value.length)?.range?.first ?: html.length
 
