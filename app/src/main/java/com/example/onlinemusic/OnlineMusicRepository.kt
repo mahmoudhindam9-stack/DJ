@@ -141,8 +141,16 @@ class OnlineMusicRepository {
         }.toList()
     }
 
-    private fun extractDownloadPage(html: String): String? = Regex("<a[^>]+href=[\\\"']([^\\\"']*?/download/[^\\\"']+)[\\\"'][^>]*>", RegexOption.IGNORE_CASE)
-        .find(html)?.groupValues?.getOrNull(1)?.let(::normalizeUrl)
+    private fun extractDownloadPage(html: String): String? {
+        val hrefRegex = Regex(
+            "<a[^>]+href=[\\\"']([^\\\"']+)[\\\"'][^>]*>",
+            RegexOption.IGNORE_CASE
+        )
+        return hrefRegex.findAll(html)
+            .map { it.groupValues[1] }
+            .firstOrNull { it.contains("/download/", true) || it.contains("download", true) }
+            ?.let(::normalizeUrl)
+    }
 
     private fun extractAudioUrl(html: String): String? {
         Regex("https?://[^\\\"'<>\\s]+\\.mp3(?:\\?[^\\\"'<>\\s]*)?", RegexOption.IGNORE_CASE).find(html)?.value?.let { return normalizeUrl(it) }
@@ -176,12 +184,36 @@ class OnlineMusicRepository {
 
     private fun isAlbumatyUrl(url: String): Boolean = try { java.net.URI(url).host?.lowercase()?.removePrefix("www.") == "albumaty.com" } catch (e: Exception) { android.util.Log.w("OnlineMusicRepository", "Caught exception", e); false }
 
-    private fun path(url: String): String = try { java.net.URI(url).path.orEmpty().trim('/').lowercase() } catch (e: Exception) { android.util.Log.w("OnlineMusicRepository", "Caught exception", e); "" }
-    private fun pageType(url: String): String = path(url).split('/').firstOrNull().orEmpty()
-    private fun AlbumatyLink.isSong(): Boolean = pageType(url) == "song"
-    private fun AlbumatyLink.isAlbum(): Boolean = pageType(url) == "album"
-    private fun AlbumatyLink.isArtist(): Boolean = pageType(url) == "singer" || pageType(url) == "artist"
-    private fun AlbumatyLink.isCategory(): Boolean = pageType(url) == "cat" || pageType(url) == "category"
+    private fun pathSegments(url: String): List<String> = try {
+        java.net.URI(url).path.orEmpty()
+            .trim('/')
+            .lowercase()
+            .split('/')
+            .filter { it.isNotBlank() }
+    } catch (e: Exception) {
+        android.util.Log.w("OnlineMusicRepository", "Caught exception", e)
+        emptyList()
+    }
+
+    private fun path(url: String): String = pathSegments(url).joinToString("/")
+
+    // Albumaty currently serves some valid links under a language/namespace prefix,
+    // e.g. /n/song/39167.html. Do not assume the first path segment is the resource type.
+    private fun pageType(url: String): String {
+        val segments = pathSegments(url)
+        return segments.firstOrNull {
+            it == "song" || it.startsWith("song") ||
+                it == "album" || it.startsWith("album") ||
+                it == "singer" || it == "artist" ||
+                it == "cat" || it == "category" ||
+                it == "lastalbums"
+        } ?: segments.firstOrNull().orEmpty()
+    }
+
+    private fun AlbumatyLink.isSong(): Boolean = pathSegments(url).any { it == "song" || it.startsWith("song") }
+    private fun AlbumatyLink.isAlbum(): Boolean = pathSegments(url).any { it == "album" || it.startsWith("album") }
+    private fun AlbumatyLink.isArtist(): Boolean = pathSegments(url).any { it == "singer" || it == "artist" }
+    private fun AlbumatyLink.isCategory(): Boolean = pathSegments(url).any { it == "cat" || it == "category" }
 
     private fun stripHtml(value: String): String = value
         .replace(Regex("<script.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
