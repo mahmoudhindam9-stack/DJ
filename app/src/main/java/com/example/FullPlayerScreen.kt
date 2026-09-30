@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.sp
 import com.example.player.AudioPlayerController
 import com.example.player.RepeatOption
 import com.example.utils.MusicScanner
+import com.example.visualizer.AudioVisualizerContainer
 
 @Composable
 fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit) {
@@ -88,42 +89,49 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
 
         Spacer(modifier = Modifier.weight(1f))
 
-        // Artwork Mockup
-        Box(
+        // Artwork / Audio-Reactive Visualizer
+        AudioVisualizerContainer(
+            playerController = playerController,
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(1f)
-                .graphicsLayer {
-                    rotationY = if (playerController.isPlaying) artworkRotation else 0f
-                    rotationX = if (playerController.isPlaying) 2f else 0f
-                    cameraDistance = 34f * density
-                    shadowElevation = 26f
-                }
-                .clip(RoundedCornerShape(32.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .shadow(16.dp, RoundedCornerShape(32.dp)),
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.radialGradient(
-                            listOf(
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.48f),
-                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+            artworkContent = {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            rotationY = if (playerController.isPlaying) artworkRotation else 0f
+                            rotationX = if (playerController.isPlaying) 2f else 0f
+                            cameraDistance = 34f * density
+                            shadowElevation = 26f
+                        }
+                        .clip(RoundedCornerShape(32.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.radialGradient(
+                                    listOf(
+                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.48f),
+                                        MaterialTheme.colorScheme.secondary.copy(alpha = 0.16f),
+                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.92f)
+                                    )
+                                )
                             )
-                        )
                     )
-            )
-            Icon(
-                Icons.Filled.MusicNote,
-                contentDescription = null,
-                modifier = Modifier.size(100.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-        }
+                    Icon(
+                        Icons.Filled.MusicNote,
+                        contentDescription = null,
+                        modifier = Modifier.size(100.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                }
+            }
+        )
 
         Spacer(modifier = Modifier.weight(1f))
 

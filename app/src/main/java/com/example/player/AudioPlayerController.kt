@@ -19,11 +19,16 @@ import androidx.media3.exoplayer.source.ShuffleOrder.DefaultShuffleOrder
 import com.example.model.AudioItem
 import org.json.JSONArray
 import org.json.JSONObject
+import com.example.visualizer.AudioVisualizerEngine
+import com.example.visualizer.VisualizerMode
 
 enum class RepeatOption { OFF, ALL, ONE }
 
 @OptIn(UnstableApi::class)
 class AudioPlayerController(private val context: Context) {
+    val visualizerEngine = AudioVisualizerEngine()
+    var visualizerMode by mutableStateOf(VisualizerMode.SPECTRUM)
+
     val fxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "PLAYER" }
     var crossfadeDurationMs by mutableLongStateOf(2000L)
 
@@ -35,7 +40,7 @@ class AudioPlayerController(private val context: Context) {
             return DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-                .setAudioProcessors(arrayOf(fxProcessor))
+                .setAudioProcessors(arrayOf(fxProcessor, visualizerEngine.audioProcessor))
                 .build()
         }
     }
@@ -220,6 +225,7 @@ class AudioPlayerController(private val context: Context) {
         exoPlayer.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
                 isPlaying = playing
+                visualizerEngine.isPlaying = playing
                 RuntimeDiagnostics.recordAction(if (playing) "player_play" else "player_pause")
                 persistSession(force = true)
                 syncNotificationSafely()
@@ -1356,6 +1362,7 @@ class AudioPlayerController(private val context: Context) {
                 .putLong("crossfade", crossfadeDurationMs)
                 .putString(KEY_TITLE, currentSong?.title ?: "Music Player")
                 .putString(KEY_ARTIST, currentSong?.artist ?: "Music")
+                .putString("visualizer_mode", visualizerMode.name)
                 .apply()
         } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
     }
@@ -1418,6 +1425,9 @@ class AudioPlayerController(private val context: Context) {
                 ?: RepeatOption.OFF
             volume = prefs.getFloat(KEY_VOLUME, 1f).coerceIn(0f, 1f)
             crossfadeDurationMs = prefs.getLong("crossfade", 2000L).coerceIn(0L, 10000L)
+            prefs.getString("visualizer_mode", null)?.let { savedMode ->
+                runCatching { VisualizerMode.valueOf(savedMode) }.getOrNull()?.let { visualizerMode = it }
+            }
             val savedPosition = prefs.getLong(KEY_POSITION, 0L).coerceAtLeast(0L)
             val savedPlaying = prefs.getBoolean(KEY_PLAYING, false)
 
@@ -1515,6 +1525,7 @@ class AudioPlayerController(private val context: Context) {
         PlaybackNotificationRouter.clear("player")
         try { exoPlayer.setPreferredAudioDevice(null) } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         if (activeInstance === this) activeInstance = null
+        visualizerEngine.release()
         exoPlayer.release()
         try { previewPlayerInstance?.release() } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         previewPlayerInstance = null

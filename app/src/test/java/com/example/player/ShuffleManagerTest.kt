@@ -162,8 +162,9 @@ class ShuffleManagerTest {
         val curSong = state.currentSong
         assertNotNull(curSong)
 
-        // Library updated: song_1 deleted, song_6 and song_7 added
-        val updatedLibrary = initialSongs.filter { it.id != "song_1" } + listOf(
+        // Library updated: delete a song that is NOT the currently playing song, add song_6 and song_7
+        val songToDelete = initialSongs.first { it.id != curSong?.id }
+        val updatedLibrary = initialSongs.filter { it.id != songToDelete.id } + listOf(
             createDummySong("song_6", "Song 6"),
             createDummySong("song_7", "Song 7")
         )
@@ -172,8 +173,8 @@ class ShuffleManagerTest {
 
         // Current song must still be the active one
         assertEquals(curSong?.id, syncedState.currentSong?.id)
-        // Deleted song_1 must no longer be in currentOrder
-        assertFalse(syncedState.currentOrder.any { it.id == "song_1" })
+        // Deleted song must no longer be in currentOrder
+        assertFalse(syncedState.currentOrder.any { it.id == songToDelete.id })
         // New songs must be included in currentOrder
         assertTrue(syncedState.currentOrder.any { it.id == "song_6" })
         assertTrue(syncedState.currentOrder.any { it.id == "song_7" })
