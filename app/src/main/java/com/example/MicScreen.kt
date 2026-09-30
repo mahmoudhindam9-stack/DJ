@@ -166,7 +166,67 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                 Spacer(Modifier.height(4.dp))
                 Text("Vocal Filters", style = MaterialTheme.typography.labelSmall)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(MicFilter.values().toList()) { filter -> FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) }) }
+                    items(MicFilter.values().toList().filter {
+                        it !in setOf(
+                            MicFilter.KID,
+                            MicFilter.CHIPMUNK,
+                            MicFilter.SMALL_WOMAN,
+                            MicFilter.OLD_WOMAN,
+                            MicFilter.OLD_MAN,
+                            MicFilter.GIANT,
+                            MicFilter.MONSTER
+                        )
+                    }) { filter -> FilterChip(filter == micController.currentFilter, { micController.currentFilter = filter }, label = { Text(filter.displayName) }) }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+            Column(Modifier.padding(14.dp)) {
+                Text("Voice Changer", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Real voice transformation • affects the live microphone",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(MicVoiceEffect.values().toList()) { effect ->
+                        val active = micController.currentVoiceEffect == effect
+                        Card(
+                            modifier = Modifier
+                                .width(96.dp)
+                                .height(86.dp)
+                                .clickable { micController.setVoiceEffect(effect) },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (active) {
+                                    MaterialTheme.colorScheme.primaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            ),
+                            border = if (active) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                            shape = RoundedCornerShape(14.dp)
+                        ) {
+                            Column(
+                                Modifier.fillMaxSize().padding(8.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                Text(effect.emoji, fontSize = 24.sp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(
+                                    effect.displayName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = if (active) FontWeight.Bold else FontWeight.Medium,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

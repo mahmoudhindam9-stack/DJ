@@ -41,6 +41,7 @@ import androidx.compose.foundation.rememberScrollState
 data class ModularEffect(val id: String, val displayName: String, val isCustom: Boolean = false)
 
 private val BUILT_IN_ENGINE_LABELS = linkedMapOf(
+    "fx_karaoke" to "🎤 Karaoke",
     "fx_filter" to "🎛️ Filter",
     "fx_delay" to "🔁 Delay",
     "fx_reverb" to "🌊 Reverb",
@@ -53,12 +54,6 @@ private val BUILT_IN_ENGINE_LABELS = linkedMapOf(
 
 fun loadCustomEffects(context: Context): List<ModularEffect> {
     val list = mutableListOf<ModularEffect>()
-    list.add(ModularEffect("voice_woman", "👩 Woman Voice"))
-    list.add(ModularEffect("voice_kid", "👶 Kid Voice"))
-    list.add(ModularEffect("voice_chipmunk", "🐿️ Chipmunk"))
-    list.add(ModularEffect("voice_monster", "👹 Monster"))
-    list.add(ModularEffect("voice_demon", "👻 Dark Demon"))
-    list.add(ModularEffect("voice_giant", "🏔️ Giant Bass"))
     BUILT_IN_ENGINE_LABELS.forEach { (id, label) -> list.add(ModularEffect(id, label)) }
     DspPluginManager(context).getCustomPresets().forEach { preset ->
         list.add(ModularEffect(preset.id, preset.name, isCustom = true))

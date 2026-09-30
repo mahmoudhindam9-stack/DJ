@@ -45,6 +45,23 @@ enum class MicFilter(val displayName: String, val pitchRatio: Float = 1f) {
     TELEPHONE("Telephone"), RADIO("Radio"), MEGAPHONE("Megaphone"), CHORUS("Chorus"), TREMOLO("Tremolo"), BASS_BOOST("Bass Boost")
 }
 
+enum class MicVoiceEffect(
+    val displayName: String,
+    val emoji: String,
+    val pitchRatio: Float,
+    val brightness: Float,
+    val toneCutoffHz: Float,
+    val drive: Float
+) {
+    NONE("Clean", "🎙️", 1f, 0f, 7500f, 0f),
+    WOMAN("Woman Voice", "👩", 1.22f, 0.22f, 7000f, 0f),
+    KID("Kid Voice", "👶", 1.48f, 0.34f, 7800f, 0f),
+    CHIPMUNK("Chipmunk", "🐿️", 1.78f, 0.42f, 9000f, 0f),
+    MONSTER("Monster", "👹", 0.68f, -0.12f, 2800f, 0.22f),
+    DARK_DEMON("Dark Demon", "👻", 0.56f, -0.22f, 2400f, 0.45f),
+    GIANT_BASS("Giant Bass", "🏔️", 0.62f, -0.30f, 1900f, 0.12f)
+}
+
 enum class BeatFxDivision(val displayName: String, val beats: Float) {
     HALF("1/2 Beat", 0.5f),
     QUARTER("1/4 Beat", 0.25f),
@@ -127,6 +144,45 @@ class MicController(private val context: Context) {
     var micVolume by mutableStateOf(1.2f)
     var echoLevel by mutableStateOf(0.3f)
     var currentFilter by mutableStateOf(MicFilter.STUDIO_REVERB)
+
+    var currentVoiceEffect by mutableStateOf(MicVoiceEffect.NONE)
+        private set
+    private val micVoiceShifter = PitchShifter(grainSize = 1024)
+    private var voiceToneLow = 0f
+    private var lastVoiceEffect = MicVoiceEffect.NONE
+
+    fun setVoiceEffect(effect: MicVoiceEffect) {
+        if (currentVoiceEffect == effect) return
+        currentVoiceEffect = effect
+        micVoiceShifter.reset()
+        voiceToneLow = 0f
+        lastVoiceEffect = effect
+    }
+
+    private fun processMicVoice(sample: Float, effect: MicVoiceEffect): Float {
+        if (effect == MicVoiceEffect.NONE) return sample
+        if (lastVoiceEffect != effect) {
+            micVoiceShifter.reset()
+            voiceToneLow = 0f
+            lastVoiceEffect = effect
+        }
+
+        val shifted = micVoiceShifter.process(sample, effect.pitchRatio)
+        val cutoff = effect.toneCutoffHz.coerceIn(120f, sampleRate * 0.45f)
+        val alpha = kotlin.math.exp(
+            (-2.0 * kotlin.math.PI * cutoff / sampleRate.coerceAtLeast(1)).coerceIn(-50.0, 0.0)
+        ).toFloat()
+        voiceToneLow = alpha * voiceToneLow + (1f - alpha) * shifted
+        val high = shifted - voiceToneLow
+        val tone = (shifted + high * effect.brightness).coerceIn(-1.5f, 1.5f)
+        val shaped = if (effect.drive > 0f) {
+            val driveGain = 1f + effect.drive * 6f
+            kotlin.math.tanh(tone * driveGain) / kotlin.math.tanh(driveGain)
+        } else {
+            tone
+        }
+        return shaped.coerceIn(-1f, 1f)
+    }
     var echoFxEnabled by mutableStateOf(true)
     var reverbFxEnabled by mutableStateOf(true)
     var flangerFxEnabled by mutableStateOf(false)
@@ -291,6 +347,7 @@ class MicController(private val context: Context) {
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
                         if (voiceProcessingEnabled && kotlin.math.abs(sample) < 0.012f) sample *= 0.08f
+                        sample = processMicVoice(sample, currentVoiceEffect)
                         val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
                             MicFilter.CHIPMUNK -> sample *= 1.12f
@@ -473,6 +530,9 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
+        micVoiceShifter.reset()
+        voiceToneLow = 0f
+        lastVoiceEffect = currentVoiceEffect
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()

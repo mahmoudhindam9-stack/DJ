@@ -67,7 +67,11 @@ class DeckFxAudioProcessor : AudioProcessor {
         if (activeEffects == newActiveEffects) return
         
         val newChain = mutableListOf<AudioPlugin>()
-        for (effectId in newActiveEffects) {
+        val sanitizedEffects = newActiveEffects
+            .filterNot { it.startsWith("voice_") || it == "fx_karaoke" }
+            .toSet()
+
+        for (effectId in sanitizedEffects) {
             var plugin = pluginCache[effectId]
             if (plugin == null) {
                 plugin = pluginManager?.createPlugin(effectId)
@@ -81,7 +85,8 @@ class DeckFxAudioProcessor : AudioProcessor {
             }
         }
         
-        activeEffects = newActiveEffects
+        activeEffects = sanitizedEffects +
+            if (newActiveEffects.contains("fx_karaoke")) setOf("fx_karaoke") else emptySet()
         pluginChain = newChain
     }
 
@@ -167,12 +172,29 @@ class DeckFxAudioProcessor : AudioProcessor {
         val frames = bytes / (2 * channelCount)
         val fxAmount = amount.coerceIn(0.01f, 1f)
         val gain = if (eqEnabled) Math.pow(10.0, GlobalEqualizerState.preampDb.toDouble() / 20.0).toFloat() else 1f
-        
+        val frameSamples = FloatArray(2)
+
         for (f in 0 until frames) {
             for (ch in 0 until channelCount) {
                 if (!inputBuffer.hasRemaining()) break
-                val inputShort = inputBuffer.short
-                val originalSample = inputShort.toFloat() / 32768.0f
+                frameSamples[ch] = inputBuffer.short.toFloat() / 32768.0f
+            }
+
+            // Karaoke/Vocal Cut: attenuate the stereo-center component while
+            // retaining side information. This is real-time DSP and requires
+            // no model inference, so it remains safe for live DJ playback.
+            if (channelCount >= 2 && activeEffects.contains("fx_karaoke")) {
+                val left = frameSamples[0]
+                val right = frameSamples[1]
+                val mid = (left + right) * 0.5f
+                val side = (left - right) * 0.5f
+                val keptCenter = mid * (1f - fxAmount)
+                frameSamples[0] = keptCenter + side
+                frameSamples[1] = keptCenter - side
+            }
+
+            for (ch in 0 until channelCount) {
+                val originalSample = frameSamples[ch]
                 var sample = originalSample
                 
                 if (eqEnabled) {
