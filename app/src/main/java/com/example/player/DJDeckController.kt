@@ -83,23 +83,13 @@ class DJDeckController(private val context: Context, val deckName: String) {
     fun isEffectActive(fxId: String): Boolean = activeEffects[fxId] == true
 
     fun toggleEffect(fxId: String) {
+        // Character voices belong exclusively to the Mic page.
+        if (fxId.startsWith("voice_")) return
+
         RuntimeDiagnostics.recordAction(deckName + "_fx_" + fxId)
         val currentlyActive = activeEffects[fxId] ?: false
         
-        if (!currentlyActive && fxId.startsWith("voice_")) {
-            activeEffects.keys.toList().filter { it.startsWith("voice_") }.forEach {
-                activeEffects[it] = false
-            }
-        }
-        
         activeEffects[fxId] = !currentlyActive
-        
-        // Voice effects are now real DSP effects. Keep ExoPlayer's playback
-        // parameters neutral so the voice buttons do not merely change tempo/pitch.
-        if (fxId.startsWith("voice_")) {
-            setPlaybackPitch(1.0f)
-        }
-
         updateProcessorEffects()
         RuntimeDiagnostics.record("INFO", "DJ_FX", deckName + ": FX state changed", "fx=" + fxId + ", active=" + activeEffects.filterValues { it }.keys.joinToString())
     }

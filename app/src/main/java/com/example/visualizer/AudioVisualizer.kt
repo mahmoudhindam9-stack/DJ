@@ -468,7 +468,7 @@ fun WaveVisualizer(
             center = Offset(width * 0.5f, centerY)
         )
 
-        val scanX = ((phase / (Math.PI * 2f)) * width) % width
+        val scanX = ((phase / (Math.PI * 2.0).toFloat()) * width) % width
         drawLine(
             color = secondary.copy(alpha = 0.24f + state.energy * 0.12f),
             start = Offset(scanX, height * 0.14f),

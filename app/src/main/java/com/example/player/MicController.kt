@@ -147,41 +147,15 @@ class MicController(private val context: Context) {
 
     var currentVoiceEffect by mutableStateOf(MicVoiceEffect.NONE)
         private set
-    private val micVoiceShifter = PitchShifter(grainSize = 1024)
-    private var voiceToneLow = 0f
-    private var lastVoiceEffect = MicVoiceEffect.NONE
+
+    // Character voices are Mic-only. The processor adds pitch shifting,
+    // vocal-tract resonances, controlled tone, dynamics and saturation.
+    private val professionalVoiceProcessor = ProfessionalVoiceProcessor()
 
     fun setVoiceEffect(effect: MicVoiceEffect) {
         if (currentVoiceEffect == effect) return
         currentVoiceEffect = effect
-        micVoiceShifter.reset()
-        voiceToneLow = 0f
-        lastVoiceEffect = effect
-    }
-
-    private fun processMicVoice(sample: Float, effect: MicVoiceEffect): Float {
-        if (effect == MicVoiceEffect.NONE) return sample
-        if (lastVoiceEffect != effect) {
-            micVoiceShifter.reset()
-            voiceToneLow = 0f
-            lastVoiceEffect = effect
-        }
-
-        val shifted = micVoiceShifter.process(sample, effect.pitchRatio)
-        val cutoff = effect.toneCutoffHz.coerceIn(120f, sampleRate * 0.45f)
-        val alpha = kotlin.math.exp(
-            (-2.0 * kotlin.math.PI * cutoff / sampleRate.coerceAtLeast(1)).coerceIn(-50.0, 0.0)
-        ).toFloat()
-        voiceToneLow = alpha * voiceToneLow + (1f - alpha) * shifted
-        val high = shifted - voiceToneLow
-        val tone = (shifted + high * effect.brightness).coerceIn(-1.5f, 1.5f)
-        val shaped = if (effect.drive > 0f) {
-            val driveGain = 1f + effect.drive * 6f
-            kotlin.math.tanh(tone * driveGain) / kotlin.math.tanh(driveGain)
-        } else {
-            tone
-        }
-        return shaped.coerceIn(-1f, 1f)
+        professionalVoiceProcessor.setEffect(effect)
     }
     var echoFxEnabled by mutableStateOf(true)
     var reverbFxEnabled by mutableStateOf(true)
@@ -347,7 +321,7 @@ class MicController(private val context: Context) {
                     for (i in 0 until read) {
                         var sample = buffer[i].toFloat() / Short.MAX_VALUE.toFloat()
                         if (voiceProcessingEnabled && kotlin.math.abs(sample) < 0.012f) sample *= 0.08f
-                        sample = processMicVoice(sample, currentVoiceEffect)
+                        sample = professionalVoiceProcessor.process(sample)
                         val readDelay = fun(frames: Int): Float { val idx = (writeIdx - frames + delayBuffer.size) % delayBuffer.size; return delayBuffer[idx].toFloat() / Short.MAX_VALUE.toFloat() }
                         when (activeFilter) {
                             MicFilter.CHIPMUNK -> sample *= 1.12f
@@ -530,9 +504,7 @@ class MicController(private val context: Context) {
 
     private fun stopMic() {
         isMicEnabled = false
-        micVoiceShifter.reset()
-        voiceToneLow = 0f
-        lastVoiceEffect = currentVoiceEffect
+        professionalVoiceProcessor.reset()
         if (isOutputRecording) stopOutputRecording()
         stopMicForegroundService()
         if (isOutputRecording) stopOutputRecording()
