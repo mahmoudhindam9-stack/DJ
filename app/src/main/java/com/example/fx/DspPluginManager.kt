@@ -1,6 +1,7 @@
 package com.example.fx
 
 import android.content.Context
+import com.example.player.PitchShifter
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.*
@@ -23,6 +24,54 @@ class DspPluginManager(private val context: Context) {
             android.util.Log.d("DspPluginManager", "Creating plugin instance for: $id")
         }
         when (id) {
+            "voice_woman" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Woman Voice",
+                pitchRatio = 1.22f,
+                brightness = 0.22f,
+                toneCutoffHz = 7000f,
+                drive = 0f
+            )
+            "voice_kid" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Kid Voice",
+                pitchRatio = 1.48f,
+                brightness = 0.34f,
+                toneCutoffHz = 7800f,
+                drive = 0f
+            )
+            "voice_chipmunk" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Chipmunk",
+                pitchRatio = 1.78f,
+                brightness = 0.42f,
+                toneCutoffHz = 9000f,
+                drive = 0f
+            )
+            "voice_monster" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Monster",
+                pitchRatio = 0.68f,
+                brightness = -0.12f,
+                toneCutoffHz = 2800f,
+                drive = 0.22f
+            )
+            "voice_demon" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Dark Demon",
+                pitchRatio = 0.56f,
+                brightness = -0.22f,
+                toneCutoffHz = 2400f,
+                drive = 0.45f
+            )
+            "voice_giant" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Giant Bass",
+                pitchRatio = 0.62f,
+                brightness = -0.30f,
+                toneCutoffHz = 1900f,
+                drive = 0.12f
+            )
             "fx_filter" -> return FilterPlugin()
             "fx_delay" -> return DelayPlugin()
             "fx_reverb" -> return ReverbPlugin()
@@ -643,5 +692,73 @@ class CustomFilterPlugin(override val id: String, override val name: String, pri
     }
     override fun reset() {
         lpState.fill(0f)
+    }
+}
+
+
+/**
+ * Real-time voice character processor.
+ *
+ * Unlike the old implementation, voice_* effects no longer touch ExoPlayer
+ * PlaybackParameters (which changes playback pitch/tempo behavior). They run
+ * in the PCM DSP path and combine pitch shifting with tonal shaping and
+ * optional saturation, so the sound itself is transformed.
+ *
+ * This is a voice-character effect for the complete incoming audio stream;
+ * it does not isolate vocals from instruments.
+ */
+class VoiceChangerPlugin(
+    override val id: String,
+    override val name: String,
+    private val pitchRatio: Float,
+    private val brightness: Float,
+    private val toneCutoffHz: Float,
+    private val drive: Float
+) : AudioPlugin {
+    override var enabled = false
+    override var amount = 0.5f
+    override var sampleRate = 44100
+        set(value) {
+            field = value
+        }
+    override var channelCount = 2
+
+    private val shifters = Array(2) { PitchShifter(grainSize = 1024) }
+    private val toneLow = FloatArray(2)
+    private val dryLow = FloatArray(2)
+
+    private fun lowPass(input: Float, channel: Int, cutoffHz: Float): Float {
+        val safeCutoff = cutoffHz.coerceIn(120f, sampleRate * 0.45f)
+        val alpha = exp(
+            (-2.0 * PI * safeCutoff / sampleRate.coerceAtLeast(1)).coerceIn(-50.0, 0.0)
+        ).toFloat()
+        val out = alpha * toneLow[channel] + (1f - alpha) * input
+        toneLow[channel] = out
+        return out
+    }
+
+    private fun saturate(value: Float, amount: Float): Float {
+        if (amount <= 0f) return value
+        val driveGain = 1f + amount * 6f
+        return tanh(value * driveGain) / tanh(driveGain)
+    }
+
+    override fun process(sample: Float, channel: Int): Float {
+        val ch = channel.coerceIn(0, shifters.lastIndex)
+        val shifted = shifters[ch].process(sample, pitchRatio)
+
+        val low = lowPass(shifted, ch, toneCutoffHz)
+        val high = shifted - low
+        val brightened = (shifted + high * brightness).coerceIn(-1.5f, 1.5f)
+        val shaped = saturate(brightened, drive)
+
+        val wet = shaped.coerceIn(-1f, 1f)
+        return sample * (1f - amount) + wet * amount
+    }
+
+    override fun reset() {
+        shifters.forEach { it.reset() }
+        toneLow.fill(0f)
+        dryLow.fill(0f)
     }
 }

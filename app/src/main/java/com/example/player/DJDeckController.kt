@@ -94,15 +94,12 @@ class DJDeckController(private val context: Context, val deckName: String) {
         
         activeEffects[fxId] = !currentlyActive
         
-        var newPitch = 1.0f
-        if (activeEffects["voice_woman"] == true) newPitch = 1.4f
-        else if (activeEffects["voice_kid"] == true) newPitch = 1.6f
-        else if (activeEffects["voice_chipmunk"] == true) newPitch = 2.0f
-        else if (activeEffects["voice_monster"] == true) newPitch = 0.7f
-        else if (activeEffects["voice_demon"] == true) newPitch = 0.5f
-        else if (activeEffects["voice_giant"] == true) newPitch = 0.6f
-        
-        setPlaybackPitch(newPitch)
+        // Voice effects are now real DSP effects. Keep ExoPlayer's playback
+        // parameters neutral so the voice buttons do not merely change tempo/pitch.
+        if (fxId.startsWith("voice_")) {
+            setPlaybackPitch(1.0f)
+        }
+
         updateProcessorEffects()
         RuntimeDiagnostics.record("INFO", "DJ_FX", deckName + ": FX state changed", "fx=" + fxId + ", active=" + activeEffects.filterValues { it }.keys.joinToString())
     }

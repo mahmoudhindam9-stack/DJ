@@ -68,7 +68,6 @@ class DeckFxAudioProcessor : AudioProcessor {
         
         val newChain = mutableListOf<AudioPlugin>()
         for (effectId in newActiveEffects) {
-            if (effectId.startsWith("voice_")) continue
             var plugin = pluginCache[effectId]
             if (plugin == null) {
                 plugin = pluginManager?.createPlugin(effectId)
