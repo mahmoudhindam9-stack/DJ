@@ -70,8 +70,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class MainActivity : ComponentActivity() {
+    companion object {
+        val incomingAudioUri = mutableStateOf<android.net.Uri?>(null)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        handleAudioIntent(intent)
         RuntimeDiagnostics.initialize(applicationContext)
         com.example.ui.theme.ThemeManager.init(this)
         enableEdgeToEdge()
@@ -90,6 +95,21 @@ class MainActivity : ComponentActivity() {
             MyApplicationTheme(appTheme = appTheme) {
                 MainApp()
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleAudioIntent(intent)
+    }
+
+    private fun handleAudioIntent(intent: android.content.Intent?) {
+        if (intent == null) return
+        val action = intent.action
+        val dataUri = intent.data
+        if ((action == android.content.Intent.ACTION_VIEW || action == android.content.Intent.ACTION_MAIN) && dataUri != null) {
+            incomingAudioUri.value = dataUri
         }
     }
 }
@@ -135,6 +155,28 @@ fun MainApp() {
         val loaded = PlayerLibraryStore.load(context)
         audioLibrary.clear()
         audioLibrary.addAll(loaded)
+    }
+
+    LaunchedEffect(MainActivity.incomingAudioUri.value) {
+        val uri = MainActivity.incomingAudioUri.value ?: return@LaunchedEffect
+        try {
+            val audioItem = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                MusicScanner.parsePickedUri(context, uri)
+            }
+            if (!audioLibrary.any { it.uri == audioItem.uri }) {
+                audioLibrary.add(0, audioItem)
+            }
+            playerController.play(audioItem, listOf(audioItem))
+            navController.navigate("full_player") {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Failed to play incoming audio file", e)
+        } finally {
+            MainActivity.incomingAudioUri.value = null
+        }
     }
 
     // Persist the library the moment it changes (song imported, removed, etc.)

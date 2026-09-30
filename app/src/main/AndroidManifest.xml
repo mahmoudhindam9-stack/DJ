@@ -29,6 +29,60 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+
+            <!-- Default Music Player in Android System Settings -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.APP_MUSIC" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.MUSIC_PLAYER" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.APP_MUSIC" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.media.action.MEDIA_PLAY_FROM_SEARCH" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+
+            <!-- Open and Play all audio files by MIME type -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="audio/*" />
+                <data android:mimeType="application/ogg" />
+                <data android:mimeType="application/x-ogg" />
+                <data android:mimeType="application/itunes" />
+                <data android:mimeType="application/x-flac" />
+                <data android:mimeType="application/flac" />
+            </intent-filter>
+
+            <!-- Open and Play all audio files by file extension -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:host="*" />
+                <data android:pathPattern=".*\\.mp3" />
+                <data android:pathPattern=".*\\.wav" />
+                <data android:pathPattern=".*\\.m4a" />
+                <data android:pathPattern=".*\\.aac" />
+                <data android:pathPattern=".*\\.flac" />
+                <data android:pathPattern=".*\\.ogg" />
+                <data android:pathPattern=".*\\.oga" />
+                <data android:pathPattern=".*\\.opus" />
+                <data android:pathPattern=".*\\.mid" />
+                <data android:pathPattern=".*\\.midi" />
+                <data android:pathPattern=".*\\.wma" />
+                <data android:pathPattern=".*\\.amr" />
+                <data android:pathPattern=".*\\.3gp" />
+            </intent-filter>
         </activity>
         <activity android:name=".widget.LocationWeatherActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
