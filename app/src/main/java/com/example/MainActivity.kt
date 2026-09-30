@@ -76,7 +76,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        handleAudioIntent(intent)
+        if (savedInstanceState == null) {
+            handleAudioIntent(intent)
+        }
         RuntimeDiagnostics.initialize(applicationContext)
         com.example.ui.theme.ThemeManager.init(this)
         enableEdgeToEdge()
@@ -108,8 +110,11 @@ class MainActivity : ComponentActivity() {
         if (intent == null) return
         val action = intent.action
         val dataUri = intent.data
-        if ((action == android.content.Intent.ACTION_VIEW || action == android.content.Intent.ACTION_MAIN) && dataUri != null) {
+        if (action == android.content.Intent.ACTION_VIEW && dataUri != null) {
             incomingAudioUri.value = dataUri
+            // Consume the intent so activity recreation, screen lock/unlock, or returning from background never re-triggers it
+            intent.data = null
+            intent.action = android.content.Intent.ACTION_MAIN
         }
     }
 }
@@ -159,6 +164,7 @@ fun MainApp() {
 
     LaunchedEffect(MainActivity.incomingAudioUri.value) {
         val uri = MainActivity.incomingAudioUri.value ?: return@LaunchedEffect
+        MainActivity.incomingAudioUri.value = null
         try {
             val audioItem = withContext(kotlinx.coroutines.Dispatchers.IO) {
                 MusicScanner.parsePickedUri(context, uri)
@@ -174,8 +180,6 @@ fun MainApp() {
             }
         } catch (e: Exception) {
             android.util.Log.w("MainActivity", "Failed to play incoming audio file", e)
-        } finally {
-            MainActivity.incomingAudioUri.value = null
         }
     }
 

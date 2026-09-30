@@ -137,8 +137,20 @@ class OnlineMusicRepository {
             val encodedQuery = URLEncoder.encode(q, StandardCharsets.UTF_8.name())
             val searchUrl = "$BASE_URL/search.php?q=$encodedQuery"
             val html = getHtml(searchUrl)
-            val mainContent = extractMainContentHtml(html)
-            parseLinks(mainContent).filter { it.isSong() || it.isAlbum() || it.isArtist() }
+
+            val searchBlocks = Regex(
+                "<div[^>]*class=[\"']search-block[\"'][^>]*>(.*?)</div>\\s*</div>",
+                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
+            ).findAll(html).map { it.groupValues[1] }.joinToString("\n")
+
+            val targetHtml = if (searchBlocks.isNotBlank()) searchBlocks else html
+            val links = parseLinks(targetHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }
+
+            if (searchBlocks.isBlank()) {
+                links.filter { it.title.contains(q, ignoreCase = true) }
+            } else {
+                links
+            }
         }.getOrDefault(emptyList())
 
         if (remoteResults.isNotEmpty()) {
@@ -278,8 +290,22 @@ class OnlineMusicRepository {
         return try {
             val u = URL(rawUrl)
             val decodedPath = URLDecoder.decode(u.path, StandardCharsets.UTF_8.name())
-            val uri = URI(u.protocol, u.authority, decodedPath, u.query, u.ref)
-            uri.toASCIIString()
+            val baseUri = URI(u.protocol, u.authority, decodedPath, null, u.ref).toASCIIString()
+            if (!u.query.isNullOrBlank()) {
+                val queryStr = if (u.query.contains("%")) {
+                    u.query
+                } else {
+                    u.query.split("&").joinToString("&") { param ->
+                        val parts = param.split("=", limit = 2)
+                        if (parts.size == 2) {
+                            parts[0] + "=" + URLEncoder.encode(parts[1], StandardCharsets.UTF_8.name())
+                        } else param
+                    }
+                }
+                baseUri + "?" + queryStr
+            } else {
+                baseUri
+            }
         } catch (_: Exception) {
             rawUrl
         }

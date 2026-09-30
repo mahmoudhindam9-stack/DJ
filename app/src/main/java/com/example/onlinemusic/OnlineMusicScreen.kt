@@ -11,8 +11,11 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MusicNote
@@ -24,6 +27,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -174,8 +178,25 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             onValueChange = { query = it },
             modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
             singleLine = true,
-            leadingIcon = { Icon(Icons.Filled.Search, null) },
-            placeholder = { Text("ابحث في Albumaty") }
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "بحث") },
+            trailingIcon = if (query.isNotBlank()) {
+                {
+                    IconButton(onClick = {
+                        query = ""
+                        viewModel.clearAlbumatySearch()
+                    }) {
+                        Icon(Icons.Filled.Close, contentDescription = "مسح")
+                    }
+                }
+            } else null,
+            placeholder = { Text("ابحث في Albumaty (أغاني، فنانين، ألبومات)") },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                val trimmed = query.trim()
+                if (trimmed.isNotBlank()) {
+                    viewModel.searchAlbumaty(trimmed)
+                }
+            })
         )
 
         if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
@@ -279,7 +300,31 @@ private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController
     val trending = if (query.isBlank()) viewModel.audiusHome.trending else searchResults
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.MusicNote, null, Modifier.size(28.dp)); Spacer(Modifier.size(8.dp)); Text("Foreign • Audius", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); IconButton(onClick = { viewModel.loadAudiusHome(true) }) { Icon(Icons.Filled.Refresh, "Refresh") }; IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") } }
-        OutlinedTextField(query, { query = it }, Modifier.fillMaxWidth().padding(horizontal = 12.dp), singleLine = true, leadingIcon = { Icon(Icons.Filled.Search, null) }, placeholder = { Text("Search foreign music") })
+        OutlinedTextField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+            singleLine = true,
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+            trailingIcon = if (query.isNotBlank()) {
+                {
+                    IconButton(onClick = {
+                        query = ""
+                        viewModel.clearAudiusSearch()
+                    }) {
+                        Icon(Icons.Filled.Close, contentDescription = "Clear")
+                    }
+                }
+            } else null,
+            placeholder = { Text("Search foreign music") },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = {
+                val trimmed = query.trim()
+                if (trimmed.isNotBlank()) {
+                    viewModel.searchAudius(trimmed)
+                }
+            })
+        )
         LaunchedEffect(query) { if (query.trim().length >= 2) { kotlinx.coroutines.delay(350); viewModel.searchAudius(query.trim()) } else if (query.isBlank()) viewModel.clearAudiusSearch() }
         if (viewModel.isLoading && viewModel.audiusHome.trending.isEmpty()) Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         else if (viewModel.errorMessage != null && viewModel.audiusHome.trending.isEmpty()) Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Text(viewModel.errorMessage ?: "Unknown error", color = MaterialTheme.colorScheme.error); TextButton(onClick = { viewModel.loadAudiusHome(true) }) { Text("Retry") } } }
