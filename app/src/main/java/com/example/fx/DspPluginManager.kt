@@ -1,6 +1,7 @@
 package com.example.fx
 
 import android.content.Context
+import com.example.player.PitchShifter
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlin.math.*
@@ -9,7 +10,7 @@ import kotlin.math.*
  * The DJ app's real-time DSP effects library.
  *
  * [getAvailablePlugins] returns one [AudioPlugin] per entry in the library:
- * the 8 built-in engines below, plus every preset the user has saved from
+ * the built-in engines below plus the built-in voice effects, and every preset the user has saved from
  * the in-app "Effects Library" screen. Nothing about the library is
  * hard-coded into the UI — adding, editing, or deleting a preset here is
  * immediately reflected the next time the deck rebuilds its plugin chain,
@@ -23,6 +24,54 @@ class DspPluginManager(private val context: Context) {
             android.util.Log.d("DspPluginManager", "Creating plugin instance for: $id")
         }
         when (id) {
+            "voice_woman" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Woman Voice",
+                pitchRatio = 1.22f,
+                brightness = 0.22f,
+                toneCutoffHz = 7000f,
+                drive = 0f
+            )
+            "voice_kid" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Kid Voice",
+                pitchRatio = 1.48f,
+                brightness = 0.34f,
+                toneCutoffHz = 7800f,
+                drive = 0f
+            )
+            "voice_chipmunk" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Chipmunk",
+                pitchRatio = 1.78f,
+                brightness = 0.42f,
+                toneCutoffHz = 9000f,
+                drive = 0f
+            )
+            "voice_monster" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Monster",
+                pitchRatio = 0.68f,
+                brightness = -0.12f,
+                toneCutoffHz = 2800f,
+                drive = 0.22f
+            )
+            "voice_demon" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Dark Demon",
+                pitchRatio = 0.56f,
+                brightness = -0.22f,
+                toneCutoffHz = 2400f,
+                drive = 0.45f
+            )
+            "voice_giant" -> return VoiceChangerPlugin(
+                id = id,
+                name = "Giant Bass",
+                pitchRatio = 0.62f,
+                brightness = -0.30f,
+                toneCutoffHz = 1900f,
+                drive = 0.12f
+            )
             "fx_filter" -> return FilterPlugin()
             "fx_delay" -> return DelayPlugin()
             "fx_reverb" -> return ReverbPlugin()

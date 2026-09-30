@@ -41,6 +41,12 @@ import androidx.compose.foundation.rememberScrollState
 data class ModularEffect(val id: String, val displayName: String, val isCustom: Boolean = false)
 
 private val BUILT_IN_ENGINE_LABELS = linkedMapOf(
+    "voice_woman" to "👩 Woman Voice",
+    "voice_kid" to "👶 Kid Voice",
+    "voice_chipmunk" to "🐿️ Chipmunk",
+    "voice_monster" to "👹 Monster",
+    "voice_demon" to "👻 Dark Demon",
+    "voice_giant" to "🏔️ Giant Bass",
     "fx_karaoke" to "🎤 Karaoke",
     "fx_filter" to "🎛️ Filter",
     "fx_delay" to "🔁 Delay",

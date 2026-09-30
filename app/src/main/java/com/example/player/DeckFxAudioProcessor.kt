@@ -68,7 +68,7 @@ class DeckFxAudioProcessor : AudioProcessor {
         
         val newChain = mutableListOf<AudioPlugin>()
         val sanitizedEffects = newActiveEffects
-            .filterNot { it.startsWith("voice_") || it == "fx_karaoke" }
+            .filterNot { it == "fx_karaoke" }
             .toSet()
 
         for (effectId in sanitizedEffects) {
