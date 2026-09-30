@@ -6,7 +6,10 @@ enum class VisualizerMode(val label: String) {
     OFF("Off"),
     SPECTRUM("Spectrum"),
     CIRCULAR("Circular"),
-    WAVE("Wave")
+    WAVE("Wave"),
+    AURORA("Aurora"),
+    GALAXY("Galaxy"),
+    TUNNEL("Tunnel")
 }
 
 @Immutable

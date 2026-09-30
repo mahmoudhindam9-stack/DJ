@@ -28,6 +28,7 @@ class AudioVisualizerEngineTest {
         assertEquals(0f, initial.treble, 0.0001f)
         assertEquals(0f, initial.energy, 0.0001f)
         assertEquals(0f, initial.peak, 0.0001f)
+        assertEquals(0f, initial.beat, 0.0001f)
         assertEquals(32, initial.bands.size)
         assertEquals(64, initial.wave.size)
         assertFalse(initial.isPlaying)
@@ -131,6 +132,7 @@ class AudioVisualizerEngineTest {
         repeat(30) { engine.decayToZero() }
         assertEquals(0f, engine.state.value.energy, 0.0001f)
         assertEquals(0f, engine.state.value.bass, 0.0001f)
+        assertEquals(0f, engine.state.value.beat, 0.0001f)
 
         engine.release()
     }
