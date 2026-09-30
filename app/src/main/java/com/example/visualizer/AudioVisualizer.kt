@@ -5,7 +5,9 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -30,6 +32,9 @@ import kotlin.math.*
 fun AudioVisualizerContainer(
     playerController: AudioPlayerController,
     modifier: Modifier = Modifier,
+    shape: Shape = RoundedCornerShape(28.dp),
+    showSelector: Boolean = true,
+    showBadge: Boolean = true,
     artworkContent: (@Composable () -> Unit)? = null
 ) {
     val visualizerState by playerController.visualizerEngine.state.collectAsState()
@@ -47,7 +52,7 @@ fun AudioVisualizerContainer(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(28.dp))
+            .clip(shape)
             .background(MaterialTheme.colorScheme.surfaceVariant),
         contentAlignment = Alignment.Center
     ) {
@@ -78,34 +83,59 @@ fun AudioVisualizerContainer(
                     modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 18.dp)
                 )
             }
+            VisualizerMode.AURORA -> {
+                AuroraVisualizer(
+                    state = visualizerState,
+                    phase = phase,
+                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                )
+            }
+            VisualizerMode.GALAXY -> {
+                GalaxyVisualizer(
+                    state = visualizerState,
+                    phase = phase,
+                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                )
+            }
+            VisualizerMode.TUNNEL -> {
+                TunnelVisualizer(
+                    state = visualizerState,
+                    phase = phase,
+                    modifier = Modifier.fillMaxSize().padding(12.dp)
+                )
+            }
         }
 
-        Surface(
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-            tonalElevation = 2.dp
-        ) {
-            Text(
-                text = when (mode) {
-                    VisualizerMode.OFF -> "ARTWORK"
-                    else -> "LIVE • " + mode.label.uppercase()
-                },
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.2.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+        if (showBadge) {
+            Surface(
+                modifier = Modifier.align(Alignment.TopCenter).padding(top = 10.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                tonalElevation = 2.dp
+            ) {
+                Text(
+                    text = when (mode) {
+                        VisualizerMode.OFF -> "ARTWORK"
+                        else -> "LIVE • " + mode.label.uppercase()
+                    },
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.2.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
         }
 
-        Box(
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)
-        ) {
-            VisualizerModeSelector(
-                currentMode = mode,
-                onModeSelected = { newMode -> playerController.visualizerMode = newMode }
-            )
+        if (showSelector) {
+            Box(
+                modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 10.dp)
+            ) {
+                VisualizerModeSelector(
+                    currentMode = mode,
+                    onModeSelected = { newMode -> playerController.visualizerMode = newMode }
+                )
+            }
         }
     }
 }
@@ -487,13 +517,15 @@ fun VisualizerModeSelector(
     Surface(
         modifier = modifier,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.82f),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
         tonalElevation = 6.dp,
         shadowElevation = 10.dp
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 5.dp, vertical = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 6.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             VisualizerMode.values().forEach { visualMode ->
@@ -513,7 +545,7 @@ fun VisualizerModeSelector(
                         .clip(CircleShape)
                         .background(bgColor)
                         .clickable { onModeSelected(visualMode) }
-                        .padding(horizontal = 9.dp, vertical = 6.dp),
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -521,10 +553,281 @@ fun VisualizerModeSelector(
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
                         color = contentColor,
-                        fontSize = 10.sp
+                        fontSize = 11.sp
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun AuroraVisualizer(
+    state: AudioVisualizerState,
+    phase: Float,
+    modifier: Modifier = Modifier
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
+    Canvas(modifier = modifier) {
+        val width = size.width
+        val height = size.height
+        val beat = state.beat
+        val energy = state.energy
+        val bands = state.bands
+
+        val ribbonLayers = listOf(
+            Triple(primary, 0.32f, 0.45f),
+            Triple(secondary, 0.48f, 0.35f),
+            Triple(tertiary, 0.64f, 0.55f)
+        )
+
+        ribbonLayers.forEachIndexed { layerIdx, (color, vRatio, speedMultiplier) ->
+            val path = Path()
+            val fillPath = Path()
+            val waveCenterY = height * (vRatio + sin(phase * speedMultiplier + layerIdx.toFloat()) * 0.05f)
+            val segments = 48
+            val dx = width / segments
+
+            for (i in 0..segments) {
+                val x = i * dx
+                val bandIdx = ((i * bands.size) / segments).coerceIn(0, bands.lastIndex)
+                val bandVal = bands[bandIdx].coerceIn(0f, 1f)
+                val waveOffset = sin(phase * (0.8f + layerIdx * 0.3f) + (i * 0.25f)) * (height * 0.12f * (0.4f + bandVal * 0.9f + beat * 0.35f))
+                val y = (waveCenterY + waveOffset).coerceIn(height * 0.08f, height * 0.92f)
+
+                if (i == 0) {
+                    path.moveTo(x, y)
+                    fillPath.moveTo(x, y)
+                } else {
+                    val prevX = (i - 1) * dx
+                    val prevBandIdx = (((i - 1) * bands.size) / segments).coerceIn(0, bands.lastIndex)
+                    val prevBandVal = bands[prevBandIdx].coerceIn(0f, 1f)
+                    val prevWaveOffset = sin(phase * (0.8f + layerIdx * 0.3f) + ((i - 1) * 0.25f)) * (height * 0.12f * (0.4f + prevBandVal * 0.9f + beat * 0.35f))
+                    val prevY = (waveCenterY + prevWaveOffset).coerceIn(height * 0.08f, height * 0.92f)
+                    val midX = (prevX + x) / 2f
+                    path.quadraticTo(prevX, prevY, midX, (prevY + y) / 2f)
+                    fillPath.quadraticTo(prevX, prevY, midX, (prevY + y) / 2f)
+                }
+            }
+
+            fillPath.lineTo(width, height)
+            fillPath.lineTo(0f, height)
+            fillPath.close()
+
+            drawPath(
+                path = fillPath,
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        color.copy(alpha = (0.22f + energy * 0.20f + beat * 0.15f).coerceIn(0f, 0.65f)),
+                        color.copy(alpha = 0.04f),
+                        Color.Transparent
+                    ),
+                    startY = waveCenterY - height * 0.20f,
+                    endY = height
+                )
+            )
+
+            drawPath(
+                path = path,
+                color = color.copy(alpha = (0.35f + energy * 0.25f + beat * 0.25f).coerceIn(0f, 0.85f)),
+                style = Stroke(width = 9.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+            drawPath(
+                path = path,
+                color = Color.White.copy(alpha = 0.85f),
+                style = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round)
+            )
+        }
+
+        repeat(24) { i ->
+            val angle = phase * (0.15f + (i % 5) * 0.04f) + i.toFloat() * 0.28f
+            val px = ((sin(angle * 1.3f) * 0.45f + 0.5f) * width).coerceIn(0f, width)
+            val py = ((cos(angle * 0.9f) * 0.42f + 0.48f) * height).coerceIn(0f, height)
+            val pSize = (1.5.dp.toPx() + (i % 4) * 0.8.dp.toPx()) * (1f + beat * 0.8f)
+            val pColor = when (i % 3) {
+                0 -> primary
+                1 -> secondary
+                else -> tertiary
+            }
+            drawCircle(
+                color = pColor.copy(alpha = (0.20f + energy * 0.40f + beat * 0.30f).coerceIn(0f, 0.9f)),
+                radius = pSize,
+                center = Offset(px, py)
+            )
+        }
+    }
+}
+
+@Composable
+fun GalaxyVisualizer(
+    state: AudioVisualizerState,
+    phase: Float,
+    modifier: Modifier = Modifier
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
+    Canvas(modifier = modifier) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val minDim = min(size.width, size.height)
+        val beat = state.beat
+        val energy = state.energy
+        val bass = state.bass
+
+        val coreRadius = minDim * (0.09f + bass * 0.05f) * (1f + beat * 0.35f)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White.copy(alpha = 0.95f),
+                    primary.copy(alpha = 0.70f + beat * 0.25f),
+                    secondary.copy(alpha = 0.25f + energy * 0.15f),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = coreRadius * 3.5f
+            ),
+            radius = coreRadius * 3.5f,
+            center = center
+        )
+
+        val shockwave1 = coreRadius * (2.2f + beat * 1.8f)
+        val shockwave2 = coreRadius * (3.8f + energy * 1.4f)
+        drawCircle(
+            color = tertiary.copy(alpha = (0.35f * beat).coerceIn(0f, 0.6f)),
+            radius = shockwave1,
+            center = center,
+            style = Stroke(width = 2.dp.toPx())
+        )
+        drawCircle(
+            color = secondary.copy(alpha = (0.25f * energy).coerceIn(0f, 0.4f)),
+            radius = shockwave2,
+            center = center,
+            style = Stroke(width = 1.5.dp.toPx())
+        )
+
+        val totalStars = 84
+        val armCount = 3
+        for (i in 0 until totalStars) {
+            val armIdx = i % armCount
+            val progress = i.toFloat() / totalStars.toFloat()
+            val baseAngle = (armIdx.toFloat() * (Math.PI * 2.0 / armCount.toDouble()).toFloat())
+            val spiralAngle = baseAngle + phase * 0.28f + (progress * 5.2f)
+            val distance = coreRadius * 1.2f + (progress * minDim * 0.42f) * (1f + bass * 0.18f)
+
+            val bandIdx = ((progress * state.bands.size).toInt()).coerceIn(0, state.bands.lastIndex)
+            val bandVal = state.bands[bandIdx].coerceIn(0f, 1f)
+
+            val px = center.x + cos(spiralAngle) * distance
+            val py = center.y + sin(spiralAngle) * distance
+
+            val starSize = (1.5.dp.toPx() + progress * 2.5.dp.toPx() + bandVal * 2.8.dp.toPx()) * (1f + beat * 0.6f)
+            val starColor = when (armIdx) {
+                0 -> primary
+                1 -> secondary
+                else -> tertiary
+            }
+
+            drawCircle(
+                color = starColor.copy(alpha = (0.25f + bandVal * 0.55f + beat * 0.20f).coerceIn(0f, 1f)),
+                radius = starSize,
+                center = Offset(px, py)
+            )
+
+            if (i > 3 && i % 3 == 0) {
+                val prevProg = (i - 3).toFloat() / totalStars.toFloat()
+                val prevAngle = baseAngle + phase * 0.28f + (prevProg * 5.2f)
+                val prevDist = coreRadius * 1.2f + (prevProg * minDim * 0.42f) * (1f + bass * 0.18f)
+                drawLine(
+                    color = starColor.copy(alpha = (0.08f + bandVal * 0.15f).coerceIn(0f, 0.35f)),
+                    start = Offset(center.x + cos(prevAngle) * prevDist, center.y + sin(prevAngle) * prevDist),
+                    end = Offset(px, py),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun TunnelVisualizer(
+    state: AudioVisualizerState,
+    phase: Float,
+    modifier: Modifier = Modifier
+) {
+    val primary = MaterialTheme.colorScheme.primary
+    val secondary = MaterialTheme.colorScheme.secondary
+    val tertiary = MaterialTheme.colorScheme.tertiary
+
+    Canvas(modifier = modifier) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val width = size.width
+        val height = size.height
+        val maxDim = max(width, height)
+        val beat = state.beat
+        val energy = state.energy
+        val bass = state.bass
+
+        val sunRadius = 24.dp.toPx() * (1f + beat * 0.5f + bass * 0.3f)
+        drawCircle(
+            brush = Brush.radialGradient(
+                colors = listOf(
+                    Color.White,
+                    primary.copy(alpha = 0.85f),
+                    secondary.copy(alpha = 0.30f),
+                    Color.Transparent
+                ),
+                center = center,
+                radius = sunRadius * 2.2f
+            ),
+            radius = sunRadius * 2.2f,
+            center = center
+        )
+
+        val rayCount = 12
+        for (r in 0 until rayCount) {
+            val angle = ((Math.PI * 2.0 * r.toDouble() / rayCount.toDouble()).toFloat()) + phase * 0.08f
+            val endX = center.x + cos(angle) * maxDim * 0.7f
+            val endY = center.y + sin(angle) * maxDim * 0.7f
+            drawLine(
+                color = tertiary.copy(alpha = (0.15f + energy * 0.22f + beat * 0.15f).coerceIn(0f, 0.6f)),
+                start = Offset(center.x + cos(angle) * sunRadius, center.y + sin(angle) * sunRadius),
+                end = Offset(endX, endY),
+                strokeWidth = 1.2.dp.toPx()
+            )
+        }
+
+        val frameCount = 10
+        for (f in 0 until frameCount) {
+            val rawDepth = ((f.toFloat() / frameCount.toFloat()) + (phase * 0.22f)) % 1f
+            val depth = rawDepth * rawDepth
+            if (depth < 0.04f) continue
+
+            val bandIdx = (f * state.bands.size / frameCount).coerceIn(0, state.bands.lastIndex)
+            val bandVal = state.bands[bandIdx].coerceIn(0f, 1f)
+
+            val frameW = width * depth * (1f + bandVal * 0.25f + beat * 0.18f)
+            val frameH = height * depth * (1f + bandVal * 0.25f + beat * 0.18f)
+            val halfW = frameW / 2f
+            val halfH = frameH / 2f
+
+            val frameColor = when (f % 3) {
+                0 -> primary
+                1 -> secondary
+                else -> tertiary
+            }
+            val alpha = (depth * (0.35f + bandVal * 0.45f + beat * 0.20f)).coerceIn(0f, 0.95f)
+
+            drawRoundRect(
+                color = frameColor.copy(alpha = alpha),
+                topLeft = Offset(center.x - halfW, center.y - halfH),
+                size = Size(frameW, frameH),
+                cornerRadius = CornerRadius(16.dp.toPx() * depth, 16.dp.toPx() * depth),
+                style = Stroke(width = (1.5.dp.toPx() + depth * 3.dp.toPx()), cap = StrokeCap.Round)
+            )
         }
     }
 }
