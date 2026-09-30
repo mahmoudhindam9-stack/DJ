@@ -23,9 +23,7 @@ class EqBand(
  * UI/state controller for the app EQ.
  *
  * Android's native Equalizer is intentionally never attached. All EQ work is
- * performed by DeckFxAudioProcessor in the PCM path. Multiple controller
- * instances exist because each deck owns one, so changes are broadcast to all
- * instances to keep the visible EQ and the real deck DSP synchronized.
+ * performed by DeckFxAudioProcessor in the PCM path.
  */
 class EqualizerController(private val context: Context, private val onUpdate: () -> Unit = {}) {
     private val instanceRegistry = companionObjectRegistry
@@ -36,6 +34,14 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         EqBand(8, "14 kHz"), EqBand(9, "16 kHz")
     )
 
+    val customBands = IntArray(10) { 0 }
+    var customPreampDb = 0f
+        private set
+    var customBassBoostLevel = 0f
+        private set
+    var customTrebleBoostLevel = 0f
+        private set
+
     init {
         instanceRegistry.add(this)
         loadState()
@@ -43,7 +49,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     var isEnabled by mutableStateOf(false)
         private set
-    var selectedPreset by mutableStateOf("Flat")
+    var selectedPreset by mutableStateOf("Custom")
         private set
     var quickBassDb by mutableStateOf(0)
         private set
@@ -63,17 +69,13 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         private set
 
     val presets = listOf(
-        "Flat", "Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game",
-        "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Concert", "Custom"
+        "Custom", "Flat", "Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game",
+        "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Concert"
     )
 
     fun toggleEnable() {
         val nextEnabled = !isEnabled
         isEnabled = nextEnabled
-        if (!nextEnabled) {
-            // EQ OFF must immediately mean no EQ/preamp/limiter processing.
-            //DeckFxAudioProcessor.setGlobalPreampDb(0f)
-        }
         persistState()
         broadcastState()
         recordDiagnosticsState()
@@ -81,8 +83,13 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBandLevel(bandIndex: Int, levelDb: Int) {
         if (bandIndex !in bands.indices) return
-        bands[bandIndex].currentLevelDb = levelDb.coerceIn(-12, 12)
+        val clamped = levelDb.coerceIn(-12, 12)
+        bands[bandIndex].currentLevelDb = clamped
+        customBands[bandIndex] = clamped
         selectedPreset = "Custom"
+        customPreampDb = preampDb
+        customBassBoostLevel = bassBoostLevel
+        customTrebleBoostLevel = trebleBoostLevel
         syncQuickFromBands()
         persistState()
         broadcastState()
@@ -95,6 +102,9 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateBassBoost(level: Float) {
         bassBoostLevel = level.coerceIn(0f, 1f)
+        if (selectedPreset == "Custom") {
+            customBassBoostLevel = bassBoostLevel
+        }
         persistState()
         broadcastState()
         recordDiagnosticsState()
@@ -102,6 +112,9 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
 
     fun updateTrebleBoost(level: Float) {
         trebleBoostLevel = level.coerceIn(0f, 1f)
+        if (selectedPreset == "Custom") {
+            customTrebleBoostLevel = trebleBoostLevel
+        }
         persistState()
         broadcastState()
         recordDiagnosticsState()
@@ -110,14 +123,34 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     // Named updatePreampDb to avoid the JVM setter clash with the preampDb property.
     fun updatePreampDb(value: Float) {
         preampDb = value.coerceIn(0f, 12f)
+        if (selectedPreset == "Custom") {
+            customPreampDb = preampDb
+        }
         persistState()
         broadcastState()
         recordDiagnosticsState()
     }
 
     fun applyPreset(presetName: String) {
+        if (presetName == "Custom") {
+            selectedPreset = "Custom"
+            for (i in bands.indices) {
+                bands[i].currentLevelDb = customBands[i].coerceIn(-12, 12)
+            }
+            preampDb = customPreampDb.coerceIn(0f, 12f)
+            bassBoostLevel = customBassBoostLevel.coerceIn(0f, 1f)
+            trebleBoostLevel = customTrebleBoostLevel.coerceIn(0f, 1f)
+            syncQuickFromBands()
+            isEnabled = true
+            persistState()
+            broadcastState()
+            recordDiagnosticsState()
+            return
+        }
+
         selectedPreset = if (presetName in presets) presetName else "Custom"
         val values = when (presetName) {
+            "Flat" -> List(10) { 0 }
             "Dolby Music" -> listOf(5, 4, 3, 1, 2, 3, 4, 5, 4, 3)
             "Dolby Cinema" -> listOf(3, 2, 1, 0, 1, 3, 4, 5, 4, 3)
             "Dolby Dynamic" -> listOf(4, 3, 2, 1, 2, 3, 5, 5, 4, 4)
@@ -205,7 +238,11 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 .putFloat("trebleBoost", trebleBoostLevel)
             for (i in bands.indices) {
                 editor.putInt("band_$i", bands[i].currentLevelDb)
+                editor.putInt("custom_band_$i", customBands[i])
             }
+            editor.putFloat("custom_preamp", customPreampDb)
+            editor.putFloat("custom_bass_boost", customBassBoostLevel)
+            editor.putFloat("custom_treble_boost", customTrebleBoostLevel)
             editor.apply()
         } catch (e: Exception) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
@@ -214,18 +251,25 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         try {
             val prefs = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE)
             for (i in bands.indices) {
-                bands[i].currentLevelDb = prefs.getInt("band_$i", prefs.getInt(when(i) {
+                val fallback = prefs.getInt(when(i) {
                     0 -> "bass"
                     4 -> "mid"
                     9 -> "treble"
                     else -> "unknown_default"
-                }, 0)).coerceIn(-12, 12)
+                }, 0)
+                customBands[i] = prefs.getInt("custom_band_$i", prefs.getInt("band_$i", fallback)).coerceIn(-12, 12)
+                bands[i].currentLevelDb = prefs.getInt("band_$i", customBands[i]).coerceIn(-12, 12)
             }
-            selectedPreset = prefs.getString("preset", "Flat") ?: "Flat"
+            customPreampDb = prefs.getFloat("custom_preamp", prefs.getFloat("preamp", 0f)).coerceIn(0f, 12f)
+            customBassBoostLevel = prefs.getFloat("custom_bass_boost", prefs.getFloat("bassBoost", 0f)).coerceIn(0f, 1f)
+            customTrebleBoostLevel = prefs.getFloat("custom_treble_boost", prefs.getFloat("trebleBoost", 0f)).coerceIn(0f, 1f)
+
+            selectedPreset = prefs.getString("preset", "Custom") ?: "Custom"
             isEnabled = prefs.getBoolean("enabled", false)
-            preampDb = prefs.getFloat("preamp", 0f).coerceIn(0f, 12f)
-            bassBoostLevel = prefs.getFloat("bassBoost", 0f).coerceIn(0f, 1f)
-            trebleBoostLevel = prefs.getFloat("trebleBoost", 0f).coerceIn(0f, 1f)
+            preampDb = prefs.getFloat("preamp", if (selectedPreset == "Custom") customPreampDb else 0f).coerceIn(0f, 12f)
+            bassBoostLevel = prefs.getFloat("bassBoost", if (selectedPreset == "Custom") customBassBoostLevel else 0f).coerceIn(0f, 1f)
+            trebleBoostLevel = prefs.getFloat("trebleBoost", if (selectedPreset == "Custom") customTrebleBoostLevel else 0f).coerceIn(0f, 1f)
+
             GlobalEqualizerState.update(
                 bands.map { it.currentLevelDb.toFloat() }.toFloatArray(),
                 isEnabled,
@@ -250,8 +294,18 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     companion object {
         private val companionObjectRegistry = CopyOnWriteArraySet<EqualizerController>()
 
+        @Volatile
+        private var activeInstance: EqualizerController? = null
+
+        @JvmStatic
+        fun obtain(context: Context): EqualizerController {
+            return activeInstance ?: synchronized(this) {
+                activeInstance ?: EqualizerController(context.applicationContext).also { activeInstance = it }
+            }
+        }
+
         fun adjustQuickBand(context: Context, band: Int) {
-            val controller = companionObjectRegistry.lastOrNull() ?: EqualizerController(context)
+            val controller = obtain(context)
             when (band) {
                 0 -> controller.setQuickBass((controller.quickBassDb + 1).coerceAtMost(12))
                 1 -> controller.setQuickMid((controller.quickMidDb + 1).coerceAtMost(12))

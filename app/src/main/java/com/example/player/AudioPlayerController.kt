@@ -6,6 +6,8 @@ import android.content.Context
 import android.media.AudioDeviceInfo
 import androidx.annotation.OptIn
 import androidx.compose.runtime.*
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
@@ -26,6 +28,9 @@ class AudioPlayerController(private val context: Context) {
     var crossfadeDurationMs by mutableLongStateOf(2000L)
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
+        init {
+            setEnableDecoderFallback(true)
+        }
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
             return DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
@@ -35,7 +40,15 @@ class AudioPlayerController(private val context: Context) {
         }
     }
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build().apply {
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .setUsage(C.USAGE_MEDIA)
+                .build(),
+            false
+        )
+    }
 
     // --- Auto crossfade support -------------------------------------------------
     // A second, hidden player used only to pre-roll the upcoming track underneath
@@ -43,6 +56,9 @@ class AudioPlayerController(private val context: Context) {
     // instead of just fading the current track to silence.
     private val previewFxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "CROSSFADE_PREVIEW" }
     private val previewRenderersFactory = object : DefaultRenderersFactory(context) {
+        init {
+            setEnableDecoderFallback(true)
+        }
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
             return DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
@@ -54,7 +70,16 @@ class AudioPlayerController(private val context: Context) {
     private var previewPlayerInstance: ExoPlayer? = null
     private fun ensurePreviewPlayer(): ExoPlayer {
         return previewPlayerInstance ?: ExoPlayer.Builder(context, previewRenderersFactory).build()
-            .apply { volume = 0f }
+            .apply {
+                volume = 0f
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    false
+                )
+            }
             .also { previewPlayerInstance = it }
     }
     private var crossfadePreparedIndex: Int = -1
@@ -1277,6 +1302,8 @@ class AudioPlayerController(private val context: Context) {
         try {
             previewPlayerInstance?.stop()
             previewPlayerInstance?.clearMediaItems()
+            previewPlayerInstance?.release()
+            previewPlayerInstance = null
         } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught exception", e) }
     }
 

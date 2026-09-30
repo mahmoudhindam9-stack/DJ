@@ -116,7 +116,7 @@ fun MainApp() {
     // Persistent State Controllers
     val playerController = remember { AudioPlayerController.obtain(context).apply { activityCount++ } }
     val djMixerController = remember { DJMixerController(context) }
-    val eqController = remember { EqualizerController(context) }
+    val eqController = remember { EqualizerController.obtain(context) }
     val micController = remember { MicController(context) }
     val djFxController = remember { com.example.djfx.DjFxController(context) }
 
@@ -183,7 +183,6 @@ fun MainApp() {
             playerController.activityCount--
             playerController.checkRelease()
             djMixerController.release()
-            eqController.release()
             djFxController.release()
             micController.close()
         }

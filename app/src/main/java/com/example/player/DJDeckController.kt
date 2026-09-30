@@ -4,6 +4,8 @@ import com.example.diagnostics.RuntimeDiagnostics
 
 import android.content.Context
 import androidx.compose.runtime.*
+import androidx.media3.common.AudioAttributes
+import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -19,9 +21,12 @@ class DJDeckController(private val context: Context, val deckName: String) {
     // the plugin chain stays empty and every effect toggle is a no-op even
     // though the UI shows it as "on".
     val fxProcessor = DeckFxAudioProcessor().apply { initContext(context); diagnosticsLabel = "DJ_" + deckName }
-    val eqController = EqualizerController(context)
+    val eqController = EqualizerController.obtain(context)
 
     private val renderersFactory = object : DefaultRenderersFactory(context) {
+        init {
+            setEnableDecoderFallback(true)
+        }
         override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): AudioSink {
             return DefaultAudioSink.Builder(context)
                 .setEnableFloatOutput(enableFloatOutput)
@@ -31,7 +36,15 @@ class DJDeckController(private val context: Context, val deckName: String) {
         }
     }
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build()
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build().apply {
+        setAudioAttributes(
+            AudioAttributes.Builder()
+                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                .setUsage(C.USAGE_MEDIA)
+                .build(),
+            false
+        )
+    }
 
     var currentSong by mutableStateOf<AudioItem?>(null)
     var isPlaying by mutableStateOf(false)
@@ -166,7 +179,6 @@ class DJDeckController(private val context: Context, val deckName: String) {
 
     fun release() {
         activeDecks.remove(this)
-        eqController.release()
         exoPlayer.release()
     }
 
