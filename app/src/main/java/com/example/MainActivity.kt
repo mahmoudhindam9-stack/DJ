@@ -125,8 +125,9 @@ fun MainApp() {
     val context = LocalContext.current
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    LaunchedEffect(navBackStackEntry?.destination?.route) {
-        RuntimeDiagnostics.setScreen(navBackStackEntry?.destination?.route)
+    val currentRoute = navBackStackEntry?.destination?.route
+    LaunchedEffect(currentRoute) {
+        RuntimeDiagnostics.setScreen(currentRoute)
     }
 
     var appVersion by remember { mutableStateOf("1.0") }
@@ -239,7 +240,8 @@ fun MainApp() {
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         bottomBar = {
-            NavigationBar(
+            if (currentRoute != "full_player") {
+                NavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 10.dp, vertical = 8.dp)
@@ -327,12 +329,13 @@ fun MainApp() {
                     }
                 )
             }
+            }
         },
     ) { innerPadding ->
         NavHost(
             navController = navController,
             startDestination = "player",
-            modifier = Modifier.padding(innerPadding)
+            modifier = if (currentRoute == "full_player") Modifier else Modifier.padding(innerPadding)
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)

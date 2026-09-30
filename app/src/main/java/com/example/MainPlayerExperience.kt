@@ -178,7 +178,13 @@ fun PlayerScreenV2(
     }
 
     if (showNowPlaying && playerController.currentSong != null) {
-        NowPlayingFullScreenV2(playerController, { showNowPlaying = false }, { showQueue = true }, onPauseDJ)
+        NowPlayingFullScreenV2(
+            playerController = playerController,
+            onBack = { showNowPlaying = false },
+            onQueue = { showQueue = true },
+            onPauseDJ = onPauseDJ,
+            navController = navController
+        )
     } else {
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -475,12 +481,45 @@ private fun LibraryMultiSelectDialog(playlist: Playlist, library: List<AudioItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NowPlayingFullScreenV2(playerController: AudioPlayerController, onBack: () -> Unit, onQueue: () -> Unit, onPauseDJ: () -> Unit) {
+private fun NowPlayingFullScreenV2(
+    playerController: AudioPlayerController,
+    onBack: () -> Unit,
+    onQueue: () -> Unit,
+    onPauseDJ: () -> Unit,
+    navController: NavHostController
+) {
     val song = playerController.currentSong ?: return
     val maxPos = playerController.durationMs.coerceAtLeast(1L).toFloat()
     val current = playerController.currentPositionMs.coerceIn(0L, maxPos.toLong()).toFloat()
     Column(Modifier.fillMaxSize().padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }; Text("NOW PLAYING", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary); IconButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue") } }
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+            }
+            Text(
+                "NOW PLAYING",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onQueue) {
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue")
+                }
+                IconButton(onClick = {
+                    navController.navigate("full_player") {
+                        launchSingleTop = true
+                    }
+                }) {
+                    Icon(Icons.Filled.Fullscreen, "Full screen")
+                }
+            }
+        }
         Spacer(Modifier.height(20.dp))
         com.example.visualizer.AudioVisualizerContainer(
             playerController = playerController,

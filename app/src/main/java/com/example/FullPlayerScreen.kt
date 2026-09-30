@@ -18,6 +18,11 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import android.app.Activity
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,6 +34,19 @@ import com.example.visualizer.AudioVisualizerContainer
 
 @Composable
 fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit) {
+    val context = LocalContext.current
+    val activity = context as? Activity
+    val window = activity?.window
+
+    DisposableEffect(window) {
+        val controller = window?.let { WindowCompat.getInsetsController(it, it.decorView) }
+        controller?.hide(WindowInsetsCompat.Type.systemBars())
+        controller?.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+
     var lastValidSong by remember { mutableStateOf(playerController.currentSong) }
     LaunchedEffect(playerController.currentSong) {
         if (playerController.currentSong != null) {
@@ -62,8 +80,7 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
         modifier = Modifier
             .fillMaxSize()
             .background(gradient)
-            .padding(24.dp)
-            .systemBarsPadding(),
+            .padding(horizontal = 18.dp, vertical = 14.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         // Top Bar
@@ -82,8 +99,8 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
                 letterSpacing = 2.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            IconButton(onClick = { /* TODO: Context menu */ }) {
-                Icon(Icons.Filled.MoreVert, contentDescription = "Options")
+            IconButton(onClick = onBack) {
+                Icon(Icons.Filled.Close, contentDescription = "Exit full screen")
             }
         }
 
@@ -201,7 +218,7 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
             )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // Controls
         Row(
@@ -249,6 +266,6 @@ fun FullPlayerScreen(playerController: AudioPlayerController, onBack: () -> Unit
             }
         }
         
-        Spacer(modifier = Modifier.height(48.dp))
+        Spacer(modifier = Modifier.height(26.dp))
     }
 }

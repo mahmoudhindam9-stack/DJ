@@ -16,6 +16,7 @@ data class AudioVisualizerState(
     val treble: Float = 0f,
     val energy: Float = 0f,
     val peak: Float = 0f,
+    val beat: Float = 0f,
     val bands: FloatArray = FloatArray(BAND_COUNT),
     val wave: FloatArray = FloatArray(WAVE_COUNT),
     val isPlaying: Boolean = false
@@ -31,6 +32,7 @@ data class AudioVisualizerState(
         if (treble != other.treble) return false
         if (energy != other.energy) return false
         if (peak != other.peak) return false
+        if (beat != other.beat) return false
         if (!bands.contentEquals(other.bands)) return false
         if (!wave.contentEquals(other.wave)) return false
         if (isPlaying != other.isPlaying) return false
@@ -44,6 +46,7 @@ data class AudioVisualizerState(
         result = 31 * result + treble.hashCode()
         result = 31 * result + energy.hashCode()
         result = 31 * result + peak.hashCode()
+        result = 31 * result + beat.hashCode()
         result = 31 * result + bands.contentHashCode()
         result = 31 * result + wave.contentHashCode()
         result = 31 * result + isPlaying.hashCode()

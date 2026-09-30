@@ -43,10 +43,10 @@ class AudioVisualizerEngine {
     private val fftSize = 512
     private val fftHalf = fftSize / 2
     private val rawSamples = FloatArray(fftSize)
-    private val windowedSamples = FloatArray(fftSize)
     private val fftReal = FloatArray(fftSize)
     private val fftImag = FloatArray(fftSize)
     private val magnitudes = FloatArray(fftHalf)
+    private val rawBands = FloatArray(AudioVisualizerState.BAND_COUNT)
 
     // Pre-calculated Hann window
     private val hannWindow = FloatArray(fftSize) { i ->
@@ -84,6 +84,8 @@ class AudioVisualizerEngine {
     private var smoothedTreble = 0f
     private var smoothedEnergy = 0f
     private var smoothedPeak = 0f
+    private var smoothedBeat = 0f
+    private var previousEnergy = 0f
 
     @Volatile
     private var lastAudioFeedTimestamp = 0L
@@ -248,7 +250,6 @@ class AudioVisualizerEngine {
         }
 
         // 6. Aggregate into 32 Frequency Bands with attack/decay
-        val rawBands = FloatArray(AudioVisualizerState.BAND_COUNT)
         for (bandIdx in 0 until AudioVisualizerState.BAND_COUNT) {
             val start = bandStartBins[bandIdx]
             val end = bandEndBins[bandIdx]
@@ -293,11 +294,16 @@ class AudioVisualizerEngine {
         val targetTreble = (trebleSum / 12f).coerceIn(0f, 1f)
 
         // Smooth metrics
+        val energyDelta = (rmsEnergy - previousEnergy).coerceAtLeast(0f)
+        previousEnergy = rmsEnergy
+        val beatTarget = ((energyDelta * 7f) + (targetBass * 0.35f)).coerceIn(0f, 1f)
+
         smoothedBass = smoothedBass + (targetBass - smoothedBass) * 0.6f
         smoothedMid = smoothedMid + (targetMid - smoothedMid) * 0.6f
         smoothedTreble = smoothedTreble + (targetTreble - smoothedTreble) * 0.6f
         smoothedEnergy = smoothedEnergy + (rmsEnergy - smoothedEnergy) * 0.6f
         smoothedPeak = if (peakVal > smoothedPeak) peakVal else smoothedPeak * 0.88f
+        smoothedBeat = max(beatTarget, smoothedBeat * 0.72f)
 
         // Emit immutable state snapshot
         _state.value = AudioVisualizerState(
@@ -306,6 +312,7 @@ class AudioVisualizerEngine {
             treble = smoothedTreble,
             energy = smoothedEnergy,
             peak = smoothedPeak,
+            beat = smoothedBeat,
             bands = smoothedBands.copyOf(),
             wave = smoothedWave.copyOf(),
             isPlaying = isPlaying
@@ -334,8 +341,10 @@ class AudioVisualizerEngine {
         smoothedTreble *= decayFactor
         smoothedEnergy *= decayFactor
         smoothedPeak *= decayFactor
+        smoothedBeat *= 0.68f
+        previousEnergy *= decayFactor
 
-        if (smoothedBass > 0.005f || smoothedEnergy > 0.005f) hasActiveValues = true
+        if (smoothedBass > 0.005f || smoothedEnergy > 0.005f || smoothedBeat > 0.005f) hasActiveValues = true
 
         _state.value = AudioVisualizerState(
             bass = if (smoothedBass > 0.005f) smoothedBass else 0f,
@@ -343,6 +352,7 @@ class AudioVisualizerEngine {
             treble = if (smoothedTreble > 0.005f) smoothedTreble else 0f,
             energy = if (smoothedEnergy > 0.005f) smoothedEnergy else 0f,
             peak = if (smoothedPeak > 0.005f) smoothedPeak else 0f,
+            beat = if (smoothedBeat > 0.005f) smoothedBeat else 0f,
             bands = smoothedBands.copyOf(),
             wave = smoothedWave.copyOf(),
             isPlaying = isPlaying
