@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
 /**
  * Single hardened downloader for all online music providers.
  * Preserves already-percent-encoded URLs, follows redirects, sends browser-like
- * headers, retries transient HTTP failures, and verifies that bytes were written.
+ * headers, retries transient HTTP failures, verifies bytes, and optionally
+ * reports byte progress to the caller.
  */
 object OnlineDownloadEngine {
     private const val USER_AGENT = "Mozilla/5.0 (Android 14; Mobile) AppleWebKit/537.36 Chrome/120.0 Mobile Safari/537.36"
@@ -32,7 +33,8 @@ object OnlineDownloadEngine {
         rawUrl: String,
         resolver: ContentResolver,
         destination: Uri,
-        referer: String? = null
+        referer: String? = null,
+        onProgress: ((bytesWritten: Long, totalBytes: Long) -> Unit)? = null
     ): Long = withContext(Dispatchers.IO) {
         val url = safeHttpUrl(rawUrl)
         var lastError: Throwable? = null
@@ -60,6 +62,7 @@ object OnlineDownloadEngine {
                     val body = response.body ?: error("ملف الصوت فارغ")
                     val contentLength = body.contentLength()
                     var total = 0L
+                    var lastReported = 0L
                     resolver.openOutputStream(destination, "w")?.use { output ->
                         body.byteStream().use { input ->
                             val buffer = ByteArray(32 * 1024)
@@ -69,6 +72,10 @@ object OnlineDownloadEngine {
                                 if (count > 0) {
                                     output.write(buffer, 0, count)
                                     total += count
+                                    if (onProgress != null && (total - lastReported >= 256 * 1024 || (contentLength > 0 && total >= contentLength))) {
+                                        onProgress(total, contentLength)
+                                        lastReported = total
+                                    }
                                 }
                             }
                             output.flush()
@@ -79,6 +86,7 @@ object OnlineDownloadEngine {
                     if (contentLength > 0L && total != contentLength) {
                         error("اكتمل التنزيل بشكل غير صحيح ($total/$contentLength bytes)")
                     }
+                    onProgress?.invoke(total, contentLength)
                     return@withContext total
                 }
             } catch (t: Throwable) {
