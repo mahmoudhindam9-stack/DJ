@@ -178,8 +178,8 @@ class OnlineMusicViewModel(
     }
 
     suspend fun downloadTrack(audioUrl: String, resolver: ContentResolver, destination: Uri): Long =
-        repository.downloadToUri(audioUrl, resolver, destination)
+        OnlineDownloadEngine.downloadToUri(audioUrl, resolver, destination)
 
     suspend fun downloadAudiusTrack(audioUrl: String, resolver: ContentResolver, destination: Uri): Long =
-        audiusRepository.downloadToUri(audioUrl, resolver, destination)
+        OnlineDownloadEngine.downloadToUri(audioUrl, resolver, destination, referer = "https://audius.co/")
 }

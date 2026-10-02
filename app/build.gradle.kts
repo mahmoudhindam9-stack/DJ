@@ -10,9 +10,7 @@ plugins {
 }
 
 android {
-  lint {
-    abortOnError = false
-  }
+  lint { abortOnError = false }
   namespace = "com.example"
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
@@ -20,8 +18,8 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 53
-    versionName = "3.7.6" // Auto-release trigger
+    versionCode = 54
+    versionName = "3.7.7" // Auto-release trigger
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -29,14 +27,8 @@ android {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH")
       if (!keystorePath.isNullOrBlank()) {
-        val ksFile = if (keystorePath.startsWith("/")) {
-          file(keystorePath)
-        } else {
-          file("${rootDir}/$keystorePath")
-        }
-        if (ksFile.exists() && ksFile.isFile) {
-          storeFile = ksFile
-        }
+        val ksFile = if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+        if (ksFile.exists() && ksFile.isFile) storeFile = ksFile
       }
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = System.getenv("KEY_ALIAS")
@@ -51,9 +43,7 @@ android {
       proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
       signingConfig = signingConfigs.getByName("release")
     }
-    debug {
-      signingConfig = signingConfigs.getByName("debug")
-    }
+    debug { signingConfig = signingConfigs.getByName("debug") }
   }
 
   compileOptions {
@@ -61,17 +51,9 @@ android {
     targetCompatibility = JavaVersion.VERSION_11
   }
 
-  buildFeatures {
-    compose = true
-    buildConfig = true
-  }
-
+  buildFeatures { compose = true; buildConfig = true }
   testOptions { unitTests { isIncludeAndroidResources = true } }
-
-  dependenciesInfo {
-    includeInApk = false
-    includeInBundle = true
-  }
+  dependenciesInfo { includeInApk = false; includeInBundle = true }
 }
 
 val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
@@ -80,34 +62,18 @@ val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
     val keyAlias = System.getenv("KEY_ALIAS")
     val keyPassword = System.getenv("KEY_PASSWORD")
     val keystorePath = System.getenv("KEYSTORE_PATH")
-
-    if (keystorePath.isNullOrBlank() ||
-        storePassword.isNullOrBlank() ||
-        keyAlias.isNullOrBlank() ||
-        keyPassword.isNullOrBlank()) {
+    if (keystorePath.isNullOrBlank() || storePassword.isNullOrBlank() || keyAlias.isNullOrBlank() || keyPassword.isNullOrBlank()) {
       throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
     }
-
-    val ksFile = if (keystorePath.startsWith("/")) {
-      file(keystorePath)
-    } else {
-      file("${rootDir}/$keystorePath")
-    }
-
-    if (!ksFile.exists() || !ksFile.isFile ||
-        storePassword == "android" ||
-        keyPassword == "android" ||
-        keyAlias == "androiddebugkey" ||
-        ksFile.name == "debug.keystore") {
+    val ksFile = if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+    if (!ksFile.exists() || !ksFile.isFile || storePassword == "android" || keyPassword == "android" || keyAlias == "androiddebugkey" || ksFile.name == "debug.keystore") {
       throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
     }
   }
 }
 
 tasks.configureEach {
-  if (name.startsWith("packageRelease") || name.startsWith("assembleRelease") || name.startsWith("bundleRelease")) {
-    dependsOn(verifyReleaseSigning)
-  }
+  if (name.startsWith("packageRelease") || name.startsWith("assembleRelease") || name.startsWith("bundleRelease")) dependsOn(verifyReleaseSigning)
 }
 
 secrets {
@@ -126,7 +92,6 @@ dependencies {
   implementation(libs.androidx.compose.ui)
   implementation(libs.androidx.compose.ui.graphics)
   implementation(libs.androidx.compose.ui.tooling.preview)
-  implementation(libs.androidx.core.ktx)
   implementation(libs.androidx.lifecycle.runtime.compose)
   implementation(libs.androidx.lifecycle.runtime.ktx)
   implementation(libs.androidx.lifecycle.viewmodel.compose)

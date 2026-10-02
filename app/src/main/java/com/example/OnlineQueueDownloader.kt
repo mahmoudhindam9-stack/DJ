@@ -5,10 +5,9 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import com.example.model.AudioItem
+import com.example.onlinemusic.OnlineDownloadEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLConnection
 import java.util.Locale
 
@@ -23,60 +22,38 @@ object OnlineQueueDownloader {
 
         songs.forEach { song ->
             val source = song.uri.toString()
-            if (!(source.startsWith("http://") || source.startsWith("https://"))) {
+            if (!(source.startsWith("http://", true) || source.startsWith("https://", true))) {
                 skipped++
                 return@forEach
             }
+
+            var documentUri: Uri? = null
             try {
                 val fileName = fileNameFor(song)
-                val existing = findChildByName(resolver, treeUri, fileName)
-                if (existing != null) {
+                findChildByName(resolver, treeUri, fileName)?.let { existing ->
                     runCatching { DocumentsContract.deleteDocument(resolver, existing) }
                 }
+
                 val mime = URLConnection.guessContentTypeFromName(fileName) ?: "audio/mpeg"
-                val documentUri = DocumentsContract.createDocument(
+                val treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+                    ?: error("Invalid destination folder")
+                documentUri = DocumentsContract.createDocument(
                     resolver,
-                    DocumentsContract.buildDocumentUriUsingTree(treeUri, DocumentsContract.getTreeDocumentId(treeUri)),
+                    DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId),
                     mime,
                     fileName
                 ) ?: error("Unable to create $fileName")
 
-                val safeSource = try {
-                    val u = URL(source)
-                    val decodedPath = java.net.URLDecoder.decode(u.path, "UTF-8")
-                    java.net.URI(u.protocol, u.authority, decodedPath, u.query, u.ref).toASCIIString()
-                } catch (_: Exception) {
-                    source
-                }
-                val connection = (URL(safeSource).openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                    instanceFollowRedirects = true
-                    requestMethod = "GET"
-                    setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-                    setRequestProperty("Referer", "https://www.albumaty.com/")
-                    setRequestProperty("Accept", "*/*")
-                }
-                try {
-                    if (connection.responseCode !in 200..299) error("HTTP ${connection.responseCode}")
-                    resolver.openOutputStream(documentUri, "w").use { output ->
-                        requireNotNull(output) { "Unable to open $fileName" }
-                        connection.inputStream.use { input ->
-                            val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
-                            while (true) {
-                                val count = input.read(buffer)
-                                if (count < 0) break
-                                output.write(buffer, 0, count)
-                            }
-                            output.flush()
-                        }
-                    }
-                    downloaded++
-                } finally {
-                    connection.disconnect()
-                }
+                OnlineDownloadEngine.downloadToUri(
+                    rawUrl = source,
+                    resolver = resolver,
+                    destination = documentUri,
+                    referer = "https://www.albumaty.com/"
+                )
+                downloaded++
             } catch (e: Exception) {
-            android.util.Log.w("OnlineQueueDownloader", "Caught throwable", e)
+                documentUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+                android.util.Log.w("OnlineQueueDownloader", "Download failed for ${song.title}", e)
                 failed++
             }
         }
@@ -94,8 +71,7 @@ object OnlineQueueDownloader {
             null
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
-                val id = cursor.getString(0)
-                return DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
+                return DocumentsContract.buildDocumentUriUsingTree(treeUri, cursor.getString(0))
             }
         }
         return null
