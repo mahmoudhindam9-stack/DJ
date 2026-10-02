@@ -16,7 +16,6 @@ import kotlin.math.*
 
 @OptIn(UnstableApi::class)
 class AudioVisualizerEngine {
-
     val audioProcessor = VisualizerAudioProcessor(this)
 
     private val _state = MutableStateFlow(AudioVisualizerState.EMPTY)
@@ -33,38 +32,35 @@ class AudioVisualizerEngine {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var analysisJob: Job? = null
 
-    // Circular PCM buffer (Power of 2 for fast bitwise masking)
-    private val ringBufferSize = 4096
+    // 1024-point FFT gives ~43 Hz bins at 44.1 kHz and makes kick detection much more reliable.
+    private val ringBufferSize = 8192
     private val ringBufferMask = ringBufferSize - 1
     private val ringBuffer = FloatArray(ringBufferSize)
     private val writePos = AtomicInteger(0)
 
-    // Pre-allocated analysis buffers (Zero allocations in hot loop)
-    private val fftSize = 512
+    private val fftSize = 1024
     private val fftHalf = fftSize / 2
     private val rawSamples = FloatArray(fftSize)
     private val fftReal = FloatArray(fftSize)
     private val fftImag = FloatArray(fftSize)
     private val magnitudes = FloatArray(fftHalf)
+    private val previousMagnitudes = FloatArray(fftHalf)
     private val rawBands = FloatArray(AudioVisualizerState.BAND_COUNT)
 
-    // Pre-calculated Hann window
     private val hannWindow = FloatArray(fftSize) { i ->
         (0.5 * (1.0 - cos(2.0 * Math.PI * i / (fftSize - 1)))).toFloat()
     }
 
-    // Pre-calculated Bit-reversal indices for 512-point FFT
     private val bitReversal = IntArray(fftSize) { i ->
         var rev = 0
         var temp = i
-        for (b in 0 until 9) { // 2^9 = 512
+        for (b in 0 until 10) {
             rev = (rev shl 1) or (temp and 1)
             temp = temp shr 1
         }
         rev
     }
 
-    // Pre-calculated Twiddle factors
     private val cosTwiddle = FloatArray(fftSize / 2) { k ->
         cos(-2.0 * Math.PI * k / fftSize).toFloat()
     }
@@ -72,11 +68,9 @@ class AudioVisualizerEngine {
         sin(-2.0 * Math.PI * k / fftSize).toFloat()
     }
 
-    // Band bin boundaries (32 logarithmically distributed bands between bin 1 and 255)
     private val bandStartBins = IntArray(AudioVisualizerState.BAND_COUNT)
     private val bandEndBins = IntArray(AudioVisualizerState.BAND_COUNT)
 
-    // Smoothed state accumulators
     private val smoothedBands = FloatArray(AudioVisualizerState.BAND_COUNT)
     private val smoothedWave = FloatArray(AudioVisualizerState.WAVE_COUNT)
     private var smoothedBass = 0f
@@ -85,69 +79,56 @@ class AudioVisualizerEngine {
     private var smoothedEnergy = 0f
     private var smoothedPeak = 0f
     private var smoothedBeat = 0f
+
     private var previousEnergy = 0f
+    private var previousBass = 0f
+    private var fluxBaseline = 0f
+    private var lastBeatTimestamp = 0L
+
+    @Volatile
+    private var inputSampleRate = 44_100
 
     @Volatile
     private var lastAudioFeedTimestamp = 0L
 
-    init {
-        initBandBoundaries()
-    }
+    init { initBandBoundaries() }
 
     private fun initBandBoundaries() {
-        // Map 255 FFT bins into 32 bands logarithmically
         val minBin = 1.0
-        val maxBin = (fftHalf - 1).toDouble() // 255
+        val maxBin = (fftHalf - 1).toDouble()
         val logMin = ln(minBin)
         val logMax = ln(maxBin)
-        val bandCount = AudioVisualizerState.BAND_COUNT
-
-        for (i in 0 until bandCount) {
-            val startRatio = i.toDouble() / bandCount
-            val endRatio = (i + 1).toDouble() / bandCount
-
+        for (i in 0 until AudioVisualizerState.BAND_COUNT) {
+            val startRatio = i.toDouble() / AudioVisualizerState.BAND_COUNT
+            val endRatio = (i + 1).toDouble() / AudioVisualizerState.BAND_COUNT
             var start = exp(logMin + startRatio * (logMax - logMin)).roundToInt()
             var end = exp(logMin + endRatio * (logMax - logMin)).roundToInt()
-
-            if (start < 1) start = 1
-            if (end <= start) end = start + 1
-            if (end > fftHalf) end = fftHalf
-
+            start = start.coerceIn(1, fftHalf - 1)
+            end = end.coerceIn(start + 1, fftHalf)
             bandStartBins[i] = start
             bandEndBins[i] = end
         }
     }
 
-    /**
-     * Called from the audio processing thread (ExoPlayer AudioSink).
-     * Must be non-blocking and allocate zero memory.
-     */
     fun feedPcm(buffer: ByteBuffer, channelCount: Int, sampleRate: Int, isFloat: Boolean = false) {
         if (!isEngineActive.get()) return
-
+        inputSampleRate = sampleRate.coerceAtLeast(8_000)
         lastAudioFeedTimestamp = System.currentTimeMillis()
         var currentWrite = writePos.get()
-
         if (isFloat) {
             val floatBuffer = buffer.asFloatBuffer()
             while (floatBuffer.remaining() >= channelCount) {
                 var sum = 0f
-                for (ch in 0 until channelCount) {
-                    sum += floatBuffer.get()
-                }
-                val mono = sum / channelCount
-                ringBuffer[currentWrite] = mono
+                for (ch in 0 until channelCount) sum += floatBuffer.get()
+                ringBuffer[currentWrite] = sum / channelCount
                 currentWrite = (currentWrite + 1) and ringBufferMask
             }
         } else {
             val shortBuffer = buffer.asShortBuffer()
             while (shortBuffer.remaining() >= channelCount) {
                 var sum = 0f
-                for (ch in 0 until channelCount) {
-                    sum += shortBuffer.get()
-                }
-                val mono = (sum / channelCount) / 32768.0f
-                ringBuffer[currentWrite] = mono
+                for (ch in 0 until channelCount) sum += shortBuffer.get()
+                ringBuffer[currentWrite] = (sum / channelCount) / 32768.0f
                 currentWrite = (currentWrite + 1) and ringBufferMask
             }
         }
@@ -158,154 +139,146 @@ class AudioVisualizerEngine {
         if (analysisJob?.isActive == true) return
         analysisJob = scope.launch {
             while (isActive && isEngineActive.get()) {
-                val now = System.currentTimeMillis()
-                val hasRecentAudio = (now - lastAudioFeedTimestamp) < 300L && isPlaying
-
-                if (hasRecentAudio) {
+                val recent = System.currentTimeMillis() - lastAudioFeedTimestamp < 300L && isPlaying
+                if (recent) {
                     processFrame()
-                    delay(22L) // ~45 FPS update rate for fluid animation
+                    delay(22L)
                 } else {
-                    // Decay smoothly to zero when playback is paused or stopped
-                    if (decayToZero()) {
-                        delay(22L)
-                    } else {
-                        // Fully decayed, sleep longer until new audio arrives
-                        delay(100L)
-                    }
+                    if (decayToZero()) delay(22L) else delay(100L)
                 }
             }
         }
     }
 
-    /**
-     * Read recent samples from the ring buffer and perform FFT & state computation.
-     */
     internal fun processFrame() {
         val head = writePos.get()
+        for (i in 0 until fftSize) rawSamples[i] = ringBuffer[(head - fftSize + i) and ringBufferMask]
 
-        // Read last 512 samples
-        for (i in 0 until fftSize) {
-            val idx = (head - fftSize + i) and ringBufferMask
-            rawSamples[i] = ringBuffer[idx]
-        }
-
-        // 1. Calculate Peak and RMS Energy from raw samples
         var peakVal = 0f
         var sumSquares = 0.0
-        for (i in 0 until fftSize) {
-            val s = rawSamples[i]
-            val absS = abs(s)
-            if (absS > peakVal) peakVal = absS
-            sumSquares += (s * s)
+        for (sample in rawSamples) {
+            val a = abs(sample)
+            if (a > peakVal) peakVal = a
+            sumSquares += sample * sample
         }
-        val rmsEnergy = (sqrt(sumSquares / fftSize) * 2.2f).coerceIn(0.0, 1.0).toFloat()
+        val rmsEnergy = (sqrt(sumSquares / fftSize) * 2.6f).coerceIn(0.0, 1.0).toFloat()
 
-        // 2. Waveform points (downsample to 64 points)
-        val step = fftSize / AudioVisualizerState.WAVE_COUNT
+        val waveStep = fftSize / AudioVisualizerState.WAVE_COUNT
         for (i in 0 until AudioVisualizerState.WAVE_COUNT) {
-            val targetWave = rawSamples[i * step].coerceIn(-1f, 1f)
-            val prevWave = smoothedWave[i]
-            // Light smoothing on waveform
-            smoothedWave[i] = prevWave + (targetWave - prevWave) * 0.75f
+            val target = rawSamples[i * waveStep].coerceIn(-1f, 1f)
+            smoothedWave[i] += (target - smoothedWave[i]) * 0.82f
         }
 
-        // 3. Apply Hann window and bit-reversal reordering
         for (i in 0 until fftSize) {
             val rev = bitReversal[i]
             fftReal[i] = rawSamples[rev] * hannWindow[rev]
             fftImag[i] = 0f
         }
 
-        // 4. In-Place Radix-2 Cooley-Tukey FFT
         var subLen = 2
         while (subLen <= fftSize) {
             val halfSub = subLen / 2
             val twiddleStep = fftSize / subLen
-            var i = 0
-            while (i < fftSize) {
-                var k = 0
+            var block = 0
+            while (block < fftSize) {
                 for (j in 0 until halfSub) {
                     val twIdx = j * twiddleStep
                     val c = cosTwiddle[twIdx]
                     val s = sinTwiddle[twIdx]
-
-                    val tr = c * fftReal[i + j + halfSub] - s * fftImag[i + j + halfSub]
-                    val ti = s * fftReal[i + j + halfSub] + c * fftImag[i + j + halfSub]
-
-                    fftReal[i + j + halfSub] = fftReal[i + j] - tr
-                    fftImag[i + j + halfSub] = fftImag[i + j] - ti
-                    fftReal[i + j] += tr
-                    fftImag[i + j] += ti
+                    val right = block + j + halfSub
+                    val left = block + j
+                    val tr = c * fftReal[right] - s * fftImag[right]
+                    val ti = s * fftReal[right] + c * fftImag[right]
+                    fftReal[right] = fftReal[left] - tr
+                    fftImag[right] = fftImag[left] - ti
+                    fftReal[left] += tr
+                    fftImag[left] += ti
                 }
-                i += subLen
+                block += subLen
             }
             subLen = subLen shl 1
         }
 
-        // 5. Compute Magnitudes for first half (0 until 256)
         for (i in 0 until fftHalf) {
             val r = fftReal[i]
             val im = fftImag[i]
             magnitudes[i] = sqrt(r * r + im * im) / (fftSize / 2f)
         }
 
-        // 6. Aggregate into 32 Frequency Bands with attack/decay
+        // Spectral flux reacts to newly arriving frequency energy instead of raw loudness.
+        var fluxSum = 0f
+        for (i in 1 until fftHalf) {
+            val delta = magnitudes[i] - previousMagnitudes[i]
+            if (delta > 0f) fluxSum += delta
+            previousMagnitudes[i] = magnitudes[i]
+        }
+        val flux = (fluxSum / fftHalf * 42f).coerceIn(0f, 1f)
+        fluxBaseline += (flux - fluxBaseline) * 0.045f
+        val fluxNovelty = ((flux - fluxBaseline) * 8.5f).coerceIn(0f, 1f)
+
         for (bandIdx in 0 until AudioVisualizerState.BAND_COUNT) {
             val start = bandStartBins[bandIdx]
             val end = bandEndBins[bandIdx]
             var sum = 0f
-            val count = (end - start).coerceAtLeast(1)
-            for (bin in start until end) {
-                sum += magnitudes[bin]
+            for (bin in start until end) sum += magnitudes[bin]
+            val avgMag = sum / (end - start).coerceAtLeast(1)
+            val db = 20f * log10(avgMag.coerceAtLeast(0.0015f))
+            val normalized = ((db + 56f) / 56f).coerceIn(0f, 1f)
+            val weight = when {
+                bandIdx < 7 -> 1.22f
+                bandIdx < 20 -> 1.10f
+                else -> 1.0f
             }
-            val avgMag = sum / count
-
-            // Convert to dB scale with perceptual floor (-54dB to 0dB)
-            val db = 20f * log10(avgMag.coerceAtLeast(0.002f))
-            val normalized = ((db + 54f) / 54f).coerceIn(0f, 1f)
-
-            // Perceptual frequency weighting: slight boost to lower/mid bands
-            val weight = if (bandIdx < 8) 1.25f else if (bandIdx < 20) 1.15f else 1.0f
             val weighted = (normalized * weight).coerceIn(0f, 1f)
-
             rawBands[bandIdx] = weighted
-
-            val prev = smoothedBands[bandIdx]
-            if (weighted > prev) {
-                // Fast attack
-                smoothedBands[bandIdx] = prev + (weighted - prev) * 0.65f
+            val previous = smoothedBands[bandIdx]
+            smoothedBands[bandIdx] = if (weighted > previous) {
+                previous + (weighted - previous) * 0.72f
             } else {
-                // Smooth decay
-                smoothedBands[bandIdx] = prev * 0.84f
+                previous * 0.82f
             }
         }
 
-        // 7. Aggregate Bass, Mid, Treble
         var bassSum = 0f
-        for (i in 0 until 6) bassSum += smoothedBands[i]
-        val targetBass = (bassSum / 6f).coerceIn(0f, 1f)
-
+        for (i in 0 until 7) bassSum += smoothedBands[i]
+        val targetBass = (bassSum / 7f).coerceIn(0f, 1f)
         var midSum = 0f
-        for (i in 6 until 20) midSum += smoothedBands[i]
-        val targetMid = (midSum / 14f).coerceIn(0f, 1f)
-
+        for (i in 7 until 20) midSum += smoothedBands[i]
+        val targetMid = (midSum / 13f).coerceIn(0f, 1f)
         var trebleSum = 0f
         for (i in 20 until AudioVisualizerState.BAND_COUNT) trebleSum += smoothedBands[i]
         val targetTreble = (trebleSum / 12f).coerceIn(0f, 1f)
 
-        // Smooth metrics
-        val energyDelta = (rmsEnergy - previousEnergy).coerceAtLeast(0f)
+        // Kick-focused energy, roughly 35-160 Hz.
+        val hzPerBin = inputSampleRate.toFloat() / fftSize
+        val kickStart = max(1, floor(35f / hzPerBin).toInt())
+        val kickEnd = min(fftHalf - 1, ceil(160f / hzPerBin).toInt())
+        var kickSum = 0f
+        var kickCount = 0
+        for (bin in kickStart..kickEnd) {
+            kickSum += magnitudes[bin]
+            kickCount++
+        }
+        val kickEnergy = (kickSum / kickCount.coerceAtLeast(1) * 14f).coerceIn(0f, 1f)
+        val bassTransient = ((targetBass - previousBass) * 7f).coerceIn(0f, 1f)
+        val energyTransient = ((rmsEnergy - previousEnergy) * 4f).coerceIn(0f, 1f)
+        previousBass = targetBass
         previousEnergy = rmsEnergy
-        val beatTarget = ((energyDelta * 7f) + (targetBass * 0.35f)).coerceIn(0f, 1f)
 
-        smoothedBass = smoothedBass + (targetBass - smoothedBass) * 0.6f
-        smoothedMid = smoothedMid + (targetMid - smoothedMid) * 0.6f
-        smoothedTreble = smoothedTreble + (targetTreble - smoothedTreble) * 0.6f
-        smoothedEnergy = smoothedEnergy + (rmsEnergy - smoothedEnergy) * 0.6f
+        val beatScore = (fluxNovelty * 0.52f + bassTransient * 0.23f + kickEnergy * 0.17f + energyTransient * 0.08f).coerceIn(0f, 1f)
+        val now = System.currentTimeMillis()
+        val detectedBeat = if (beatScore > 0.20f && now - lastBeatTimestamp >= 95L) {
+            lastBeatTimestamp = now
+            beatScore
+        } else 0f
+
+        smoothedBass += (targetBass - smoothedBass) * 0.58f
+        smoothedMid += (targetMid - smoothedMid) * 0.58f
+        smoothedTreble += (targetTreble - smoothedTreble) * 0.58f
+        smoothedEnergy += (rmsEnergy - smoothedEnergy) * 0.52f
         smoothedPeak = if (peakVal > smoothedPeak) peakVal else smoothedPeak * 0.88f
-        smoothedBeat = max(beatTarget, smoothedBeat * 0.72f)
+        smoothedBeat = max(detectedBeat, smoothedBeat * 0.76f)
 
-        // Emit immutable state snapshot
         _state.value = AudioVisualizerState(
             bass = smoothedBass,
             mid = smoothedMid,
@@ -319,32 +292,27 @@ class AudioVisualizerEngine {
         )
     }
 
-    /**
-     * Decays current state towards zero when paused or silence.
-     * Returns true if non-zero values remain, false if fully zeroed.
-     */
     internal fun decayToZero(): Boolean {
-        var hasActiveValues = false
-        val decayFactor = 0.80f
-
+        var active = false
         for (i in 0 until AudioVisualizerState.BAND_COUNT) {
-            smoothedBands[i] *= decayFactor
-            if (smoothedBands[i] > 0.005f) hasActiveValues = true else smoothedBands[i] = 0f
+            smoothedBands[i] *= 0.80f
+            if (smoothedBands[i] > 0.005f) active = true else smoothedBands[i] = 0f
         }
         for (i in 0 until AudioVisualizerState.WAVE_COUNT) {
-            smoothedWave[i] *= decayFactor
-            if (abs(smoothedWave[i]) > 0.005f) hasActiveValues = true else smoothedWave[i] = 0f
+            smoothedWave[i] *= 0.80f
+            if (abs(smoothedWave[i]) > 0.005f) active = true else smoothedWave[i] = 0f
         }
-
-        smoothedBass *= decayFactor
-        smoothedMid *= decayFactor
-        smoothedTreble *= decayFactor
-        smoothedEnergy *= decayFactor
-        smoothedPeak *= decayFactor
-        smoothedBeat *= 0.68f
-        previousEnergy *= decayFactor
-
-        if (smoothedBass > 0.005f || smoothedEnergy > 0.005f || smoothedBeat > 0.005f) hasActiveValues = true
+        for (i in previousMagnitudes.indices) previousMagnitudes[i] *= 0.72f
+        smoothedBass *= 0.80f
+        smoothedMid *= 0.80f
+        smoothedTreble *= 0.80f
+        smoothedEnergy *= 0.80f
+        smoothedPeak *= 0.80f
+        smoothedBeat *= 0.66f
+        previousEnergy *= 0.80f
+        previousBass *= 0.80f
+        fluxBaseline *= 0.92f
+        if (smoothedBass > 0.005f || smoothedEnergy > 0.005f || smoothedBeat > 0.005f) active = true
 
         _state.value = AudioVisualizerState(
             bass = if (smoothedBass > 0.005f) smoothedBass else 0f,
@@ -357,8 +325,7 @@ class AudioVisualizerEngine {
             wave = smoothedWave.copyOf(),
             isPlaying = isPlaying
         )
-
-        return hasActiveValues
+        return active
     }
 
     fun release() {
@@ -368,9 +335,6 @@ class AudioVisualizerEngine {
         _state.value = AudioVisualizerState.EMPTY
     }
 
-    /**
-     * Media3 AudioProcessor that taps into the main player PCM stream transparently.
-     */
     class VisualizerAudioProcessor(private val engine: AudioVisualizerEngine) : AudioProcessor {
         private var inputFormat = AudioProcessor.AudioFormat.NOT_SET
         private var outputBuffer = AudioProcessor.EMPTY_BUFFER
@@ -392,7 +356,7 @@ class AudioVisualizerEngine {
             inputFormat = inputAudioFormat
             channelCount = inputAudioFormat.channelCount
             sampleRate = inputAudioFormat.sampleRate
-            isFloat = (encoding == C.ENCODING_PCM_FLOAT)
+            isFloat = encoding == C.ENCODING_PCM_FLOAT
             return inputAudioFormat
         }
 
@@ -401,42 +365,28 @@ class AudioVisualizerEngine {
         override fun queueInput(inputBuffer: ByteBuffer) {
             val remaining = inputBuffer.remaining()
             if (remaining <= 0 || !isActive()) return
-
-            // Feed samples to engine using a duplicate buffer (preserves inputBuffer position)
             engine.feedPcm(inputBuffer.duplicate(), channelCount, sampleRate, isFloat)
-
-            // Direct pass-through to output buffer
             val output = replaceOutputBuffer(remaining)
             output.put(inputBuffer)
             output.flip()
         }
 
         private fun replaceOutputBuffer(size: Int): ByteBuffer {
-            if (outputBuffer.capacity() < size) {
-                outputBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
-            } else {
-                outputBuffer.clear()
-            }
+            if (outputBuffer.capacity() < size) outputBuffer = ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder()) else outputBuffer.clear()
             return outputBuffer
         }
 
-        override fun queueEndOfStream() {
-            inputEnded = true
-        }
-
+        override fun queueEndOfStream() { inputEnded = true }
         override fun getOutput(): ByteBuffer {
             val out = outputBuffer
             outputBuffer = AudioProcessor.EMPTY_BUFFER
             return out
         }
-
         override fun isEnded(): Boolean = inputEnded && outputBuffer === AudioProcessor.EMPTY_BUFFER
-
         override fun flush() {
             outputBuffer = AudioProcessor.EMPTY_BUFFER
             inputEnded = false
         }
-
         override fun reset() {
             flush()
             inputFormat = AudioProcessor.AudioFormat.NOT_SET
