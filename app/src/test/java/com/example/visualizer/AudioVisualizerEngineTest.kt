@@ -30,6 +30,7 @@ class AudioVisualizerEngineTest {
         assertEquals(0f, initial.peak, 0.0001f)
         assertEquals(0f, initial.beat, 0.0001f)
         assertEquals(32, initial.bands.size)
+        assertEquals(32, initial.peakBands.size)
         assertEquals(64, initial.wave.size)
         assertFalse(initial.isPlaying)
 

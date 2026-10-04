@@ -232,52 +232,107 @@ fun SpectrumVisualizer(
 
         val width = size.width
         val height = size.height
-        val gap = (width * 0.008f).coerceAtLeast(2.dp.toPx())
-        val barWidth = ((width - gap * (barCount - 1)) / barCount).coerceAtLeast(2.dp.toPx())
-        val baseY = height * 0.96f
-        val beatScale = 1f + state.beat * 0.18f
+        val gap = (width * 0.009f).coerceIn(2.dp.toPx(), 4.dp.toPx())
+        val availableWidth = width - (gap * (barCount - 1))
+        val barWidth = (availableWidth / barCount).coerceAtLeast(2.5.dp.toPx())
+        val totalWidth = barCount * barWidth + (barCount - 1) * gap
+        val startX = (width - totalWidth) / 2f
+        val baseY = height * 0.94f
+        val maxHeight = height * 0.82f
+        val beatBoost = 1f + state.beat * 0.10f
 
+        // Draw baseline track
         drawRoundRect(
-            color = primary.copy(alpha = 0.07f + state.energy * 0.07f),
-            topLeft = Offset(0f, baseY - 3.dp.toPx()),
-            size = Size(width, 6.dp.toPx()),
-            cornerRadius = CornerRadius(3.dp.toPx())
+            color = primary.copy(alpha = 0.12f + state.energy * 0.10f),
+            topLeft = Offset(startX, baseY - 1.5.dp.toPx()),
+            size = Size(totalWidth, 3.dp.toPx()),
+            cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
         )
 
         for (i in 0 until barCount) {
             val value = state.bands[i].coerceIn(0f, 1f)
-            val shimmer = 1f + 0.06f * sin(phase * 1.5f + i * 0.55f)
-            val barHeight = (height * 0.80f * value * beatScale * shimmer)
-                .coerceIn(5.dp.toPx(), height * 0.88f)
-            val x = i * (barWidth + gap)
-            val y = baseY - barHeight
-            val glowWidth = barWidth * 1.5f
+            val peakVal = (if (state.peakBands.isNotEmpty() && i < state.peakBands.size) {
+                state.peakBands[i]
+            } else {
+                value
+            }).coerceIn(0f, 1f)
 
+            val shimmer = 1f + 0.035f * sin(phase * 2f + i * 0.45f)
+            val barHeight = (3.dp.toPx() + maxHeight * value * beatBoost * shimmer)
+                .coerceIn(3.dp.toPx(), maxHeight + 4.dp.toPx())
+            val x = startX + i * (barWidth + gap)
+            val y = baseY - barHeight
+
+            // Ambient bar glow
+            if (value > 0.05f) {
+                val glowWidth = barWidth * 1.6f
+                drawRoundRect(
+                    color = secondary.copy(alpha = (0.04f + value * 0.16f + state.beat * 0.05f).coerceIn(0f, 0.28f)),
+                    topLeft = Offset(x - (glowWidth - barWidth) / 2f, y - 2.dp.toPx()),
+                    size = Size(glowWidth, barHeight + 3.dp.toPx()),
+                    cornerRadius = CornerRadius(glowWidth / 2f, glowWidth / 2f)
+                )
+            }
+
+            // Main vertical frequency bar
             drawRoundRect(
-                color = secondary.copy(alpha = 0.08f + value * 0.20f + state.beat * 0.06f),
-                topLeft = Offset(x - (glowWidth - barWidth) / 2f, y - 2.dp.toPx()),
-                size = Size(glowWidth, barHeight + 4.dp.toPx()),
-                cornerRadius = CornerRadius(glowWidth / 2f, glowWidth / 2f)
-            )
-            drawRoundRect(
-                brush = Brush.verticalGradient(colors = listOf(tertiary, secondary, primary)),
+                brush = Brush.verticalGradient(
+                    colors = listOf(
+                        tertiary,
+                        secondary,
+                        primary
+                    ),
+                    startY = y,
+                    endY = baseY
+                ),
                 topLeft = Offset(x, y),
                 size = Size(barWidth, barHeight),
                 cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
             )
-            drawRoundRect(
-                color = primary.copy(alpha = 0.06f + value * 0.08f),
-                topLeft = Offset(x, baseY + 2.dp.toPx()),
-                size = Size(barWidth, min(height * 0.16f, barHeight * 0.18f)),
-                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
-            )
-            val capY = (y - 5.dp.toPx()).coerceAtLeast(0f)
-            drawRoundRect(
-                color = tertiary.copy(alpha = 0.70f + state.beat * 0.26f),
-                topLeft = Offset(x + barWidth * 0.18f, capY),
-                size = Size(barWidth * 0.64f, 3.dp.toPx()),
-                cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
-            )
+
+            // Subtle base reflection
+            if (value > 0.08f) {
+                val reflectionHeight = min(height * 0.12f, barHeight * 0.22f)
+                drawRoundRect(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            primary.copy(alpha = 0.18f * value),
+                            Color.Transparent
+                        ),
+                        startY = baseY,
+                        endY = baseY + reflectionHeight
+                    ),
+                    topLeft = Offset(x, baseY + 1.dp.toPx()),
+                    size = Size(barWidth, reflectionHeight),
+                    cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+                )
+            }
+
+            // Realistic Floating Peak Cap with physics
+            if (peakVal > 0.04f) {
+                val peakHeight = (3.dp.toPx() + maxHeight * peakVal * beatBoost)
+                    .coerceIn(3.dp.toPx(), maxHeight + 4.dp.toPx())
+                val capY = (baseY - peakHeight - 4.5.dp.toPx()).coerceAtLeast(2.dp.toPx())
+                val capHeight = 2.5.dp.toPx()
+                val capWidth = barWidth * 0.90f
+                val capX = x + (barWidth - capWidth) / 2f
+
+                // Cap glow
+                drawRoundRect(
+                    color = tertiary.copy(alpha = 0.35f + state.beat * 0.20f),
+                    topLeft = Offset(capX - 1.dp.toPx(), capY - 1.dp.toPx()),
+                    size = Size(capWidth + 2.dp.toPx(), capHeight + 2.dp.toPx()),
+                    cornerRadius = CornerRadius(1.5.dp.toPx(), 1.5.dp.toPx())
+                )
+
+                // Cap bar
+                drawRoundRect(
+                    color = Color.White.copy(alpha = 0.92f),
+                    topLeft = Offset(capX, capY),
+                    size = Size(capWidth, capHeight),
+                    cornerRadius = CornerRadius(1.2.dp.toPx(), 1.2.dp.toPx())
+                )
+            }
         }
     }
 }
