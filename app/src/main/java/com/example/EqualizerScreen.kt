@@ -20,7 +20,6 @@ import com.example.player.EqualizerController
 import com.example.ui.components.CustomVerticalSlider
 import com.example.ui.components.DjSurfaceCard
 import com.example.ui.components.PremiumBackdrop
-import com.example.ui.components.PremiumStatusPill
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -39,7 +38,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "MASTER EQUALIZER",
                     style = MaterialTheme.typography.titleLarge,
@@ -53,10 +52,6 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
-            PremiumStatusPill(
-                text = if (eqController.isEnabled) "DSP ACTIVE" else "DSP BYPASS",
-                active = eqController.isEnabled
-            )
             Switch(
                 checked = eqController.isEnabled,
                 onCheckedChange = { eqController.toggleEnable() },
