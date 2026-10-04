@@ -257,9 +257,8 @@ fun SpectrumVisualizer(
                 value
             }).coerceIn(0f, 1f)
 
-            val shimmer = 1f + 0.035f * sin(phase * 2f + i * 0.45f)
-            val barHeight = (3.dp.toPx() + maxHeight * value * beatBoost * shimmer)
-                .coerceIn(3.dp.toPx(), maxHeight + 4.dp.toPx())
+            val barHeight = (2.5.dp.toPx() + maxHeight * value * beatBoost)
+                .coerceIn(2.5.dp.toPx(), maxHeight + 4.dp.toPx())
             val x = startX + i * (barWidth + gap)
             val y = baseY - barHeight
 
@@ -309,11 +308,11 @@ fun SpectrumVisualizer(
             }
 
             // Realistic Floating Peak Cap with physics
-            if (peakVal > 0.04f) {
-                val peakHeight = (3.dp.toPx() + maxHeight * peakVal * beatBoost)
-                    .coerceIn(3.dp.toPx(), maxHeight + 4.dp.toPx())
-                val capY = (baseY - peakHeight - 4.5.dp.toPx()).coerceAtLeast(2.dp.toPx())
-                val capHeight = 2.5.dp.toPx()
+            if (peakVal > 0.03f) {
+                val peakHeight = (2.5.dp.toPx() + maxHeight * peakVal * beatBoost)
+                    .coerceIn(2.5.dp.toPx(), maxHeight + 4.dp.toPx())
+                val capY = (baseY - peakHeight - 3.5.dp.toPx()).coerceAtLeast(2.dp.toPx())
+                val capHeight = 2.dp.toPx()
                 val capWidth = barWidth * 0.90f
                 val capX = x + (barWidth - capWidth) / 2f
 

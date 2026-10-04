@@ -1,216 +1,284 @@
 package com.example
 
 import android.app.AlertDialog
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.provider.DocumentsContract
-import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.LinearLayout
-import android.widget.ProgressBar
-import android.widget.TextView
+import android.widget.Toast
+import androidx.core.app.NotificationCompat
 import com.example.model.AudioItem
 import com.example.onlinemusic.OnlineDownloadEngine
-import kotlinx.coroutines.CancellableContinuation
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import java.net.URI
 import java.net.URLConnection
 import java.util.Locale
 import kotlin.coroutines.resume
 
+/**
+ * Downloads online songs from the active queue completely in the background
+ * without freezing or blocking the user interface.
+ */
 object OnlineQueueDownloader {
     data class Result(val downloaded: Int, val skipped: Int, val failed: Int)
 
-    suspend fun download(context: Context, treeUri: Uri, songs: List<AudioItem>): Result {
+    private val downloadScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var activeJob: Job? = null
+
+    private val _isDownloading = MutableStateFlow(false)
+    val isDownloading: StateFlow<Boolean> = _isDownloading.asStateFlow()
+
+    private val _downloadStatus = MutableStateFlow<String?>(null)
+    val downloadStatus: StateFlow<String?> = _downloadStatus.asStateFlow()
+
+    private const val NOTIFICATION_CHANNEL_ID = "queue_downloads"
+    private const val NOTIFICATION_ID = 5055
+
+    fun startBackgroundDownload(context: Context, treeUri: Uri, songs: List<AudioItem>) {
+        val appContext = context.applicationContext
         val onlineSongs = songs.filter { isHttpSource(it.uri.toString()) }
-        if (onlineSongs.isEmpty()) return Result(0, songs.size, 0)
+        if (onlineSongs.isEmpty()) {
+            showToast(appContext, "لا توجد ملفات قابلة للتنزيل في قائمة الانتظار")
+            return
+        }
 
-        val selected = selectSongs(context, onlineSongs) ?: return Result(0, 0, 0)
-        if (selected.isEmpty()) return Result(0, 0, 0)
+        if (_isDownloading.value) {
+            showToast(appContext, "يوجد تنزيل جاري بالفعل في الخلفية")
+            return
+        }
 
-        return withContext(Dispatchers.IO) {
-            var downloaded = 0
-            var skipped = songs.count { !isHttpSource(it.uri.toString()) }
-            var failed = 0
-            val resolver = context.contentResolver
-            val progress = ProgressUi(context, selected.size)
+        // Show song selection dialog on UI thread
+        selectSongs(context, onlineSongs) { selected ->
+            if (selected.isNullOrEmpty()) return@selectSongs
 
-            try {
-                progress.show()
-                selected.forEachIndexed { index, song ->
-                    var documentUri: Uri? = null
-                    try {
-                        val fileName = fileNameFor(song)
-                        progress.startSong(index, song.title)
-                        findChildByName(resolver, treeUri, fileName)?.let { existing ->
-                            runCatching { DocumentsContract.deleteDocument(resolver, existing) }
-                        }
+            showToast(appContext, "بدء تنزيل ${selected.size} مقاطع في الخلفية...")
+            _isDownloading.value = true
+            _downloadStatus.value = "جاري التنزيل في الخلفية (0/${selected.size})..."
 
-                        val mime = URLConnection.guessContentTypeFromName(fileName) ?: "audio/mpeg"
-                        val treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
-                            ?: error("Invalid destination folder")
-                        documentUri = DocumentsContract.createDocument(
-                            resolver,
-                            DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId),
-                            mime,
-                            fileName
-                        ) ?: error("Unable to create $fileName")
+            activeJob?.cancel()
+            activeJob = downloadScope.launch {
+                val notificationManager = appContext.getSystemService(Context.NOTIFICATION_SERVICE) as? NotificationManager
+                createNotificationChannel(notificationManager)
 
-                        val referer = refererFor(song.uri.toString())
-                        OnlineDownloadEngine.downloadToUri(
-                            rawUrl = song.uri.toString(),
-                            resolver = resolver,
-                            destination = documentUri,
-                            referer = referer,
-                            onProgress = { bytes, total -> progress.updateBytes(bytes, total) }
+                var downloaded = 0
+                val skipped = songs.count { !isHttpSource(it.uri.toString()) }
+                var failed = 0
+                val resolver = appContext.contentResolver
+
+                val total = selected.size
+                try {
+                    selected.forEachIndexed { index, song ->
+                        if (!isActive) return@forEachIndexed
+                        var documentUri: Uri? = null
+                        val songTitle = song.title.ifBlank { "Track ${index + 1}" }
+
+                        _downloadStatus.value = "تنزيل (${index + 1}/$total): $songTitle"
+                        updateProgressNotification(
+                            appContext,
+                            notificationManager,
+                            title = "تنزيل قائمة الانتظار ($total/$index)",
+                            text = songTitle,
+                            progress = 0,
+                            max = 100,
+                            ongoing = true
                         )
-                        downloaded++
-                        progress.finishSong(index, true)
-                    } catch (e: Exception) {
-                        documentUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
-                        android.util.Log.w("OnlineQueueDownloader", "Download failed for ${song.title}", e)
-                        failed++
-                        progress.finishSong(index, false)
+
+                        try {
+                            val fileName = fileNameFor(song)
+                            findChildByName(resolver, treeUri, fileName)?.let { existing ->
+                                runCatching { DocumentsContract.deleteDocument(resolver, existing) }
+                            }
+
+                            val mime = URLConnection.guessContentTypeFromName(fileName) ?: "audio/mpeg"
+                            val treeDocumentId = DocumentsContract.getTreeDocumentId(treeUri)
+                                ?: error("مجلد الحفظ غير صالح")
+                            documentUri = DocumentsContract.createDocument(
+                                resolver,
+                                DocumentsContract.buildDocumentUriUsingTree(treeUri, treeDocumentId),
+                                mime,
+                                fileName
+                            ) ?: error("تعذر إنشاء الملف $fileName")
+
+                            val referer = refererFor(song.uri.toString())
+                            OnlineDownloadEngine.downloadToUri(
+                                rawUrl = song.uri.toString(),
+                                resolver = resolver,
+                                destination = documentUri,
+                                referer = referer,
+                                onProgress = { bytesWritten, totalBytes ->
+                                    val percent = if (totalBytes > 0) ((bytesWritten * 100L) / totalBytes).toInt().coerceIn(0, 100) else 0
+                                    updateProgressNotification(
+                                        appContext,
+                                        notificationManager,
+                                        title = "تنزيل (${index + 1}/$total): $songTitle",
+                                        text = "$percent%",
+                                        progress = percent,
+                                        max = 100,
+                                        ongoing = true
+                                    )
+                                }
+                            )
+                            downloaded++
+                        } catch (e: Exception) {
+                            documentUri?.let { runCatching { DocumentsContract.deleteDocument(resolver, it) } }
+                            android.util.Log.w("OnlineQueueDownloader", "Download failed for ${song.title}", e)
+                            failed++
+                        }
                     }
+
+                    val completionMessage = "اكتمل التنزيل: تم تنزيل $downloaded، وفشل $failed"
+                    _downloadStatus.value = completionMessage
+                    showToast(appContext, completionMessage)
+
+                    updateProgressNotification(
+                        appContext,
+                        notificationManager,
+                        title = "اكتمل تنزيل قائمة الانتظار",
+                        text = "تم تنزيل $downloaded مقطع بنجاح",
+                        progress = 100,
+                        max = 100,
+                        ongoing = false
+                    )
+                } catch (t: Throwable) {
+                    if (t !is CancellationException) {
+                        val errMsg = "فشل تنزيل القائمة: ${t.message}"
+                        _downloadStatus.value = errMsg
+                        showToast(appContext, errMsg)
+                    }
+                } finally {
+                    _isDownloading.value = false
                 }
-            } finally {
-                progress.dismiss()
             }
-            Result(downloaded, skipped, failed)
         }
     }
 
-    private suspend fun selectSongs(context: Context, songs: List<AudioItem>): List<AudioItem>? =
-        suspendCancellableCoroutine { continuation ->
-            val checked = BooleanArray(songs.size) { true }
-            val labels = songs.map { it.title }.toTypedArray()
+    suspend fun download(context: Context, treeUri: Uri, songs: List<AudioItem>): Result {
+        startBackgroundDownload(context, treeUri, songs)
+        return Result(0, 0, 0)
+    }
 
-            val box = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-                setPadding(24, 8, 24, 4)
-            }
-            val selectAll = CheckBox(context).apply {
-                text = "Select all (${songs.size})"
+    private fun selectSongs(context: Context, songs: List<AudioItem>, onResult: (List<AudioItem>?) -> Unit) {
+        val checked = BooleanArray(songs.size) { true }
+
+        val box = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 12, 24, 8)
+        }
+        val selectAll = CheckBox(context).apply {
+            text = "تحديد الكل (${songs.size})"
+            isChecked = true
+        }
+        box.addView(selectAll)
+
+        val list = LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        songs.forEachIndexed { index, song ->
+            val check = CheckBox(context).apply {
+                text = song.title
                 isChecked = true
+                setOnCheckedChangeListener { _, value -> checked[index] = value }
             }
-            box.addView(selectAll)
-
-            val list = LinearLayout(context).apply {
-                orientation = LinearLayout.VERTICAL
-            }
-            songs.forEachIndexed { index, song ->
-                val check = CheckBox(context).apply {
-                    text = song.title
-                    isChecked = true
-                    setOnCheckedChangeListener { _, value -> checked[index] = value }
-                }
-                list.addView(check)
-            }
-            box.addView(list)
-
-            selectAll.setOnCheckedChangeListener { _, value ->
-                songs.forEachIndexed { index, _ -> checked[index] = value }
-                for (i in 0 until list.childCount) {
-                    (list.getChildAt(i) as CheckBox).setOnCheckedChangeListener(null)
-                    (list.getChildAt(i) as CheckBox).isChecked = value
-                    (list.getChildAt(i) as CheckBox).setOnCheckedChangeListener { _, checkedValue -> checked[i] = checkedValue }
-                }
-            }
-
-            val dialog = AlertDialog.Builder(context)
-                .setTitle("Download from Queue")
-                .setMessage("Select the songs you want to download")
-                .setView(box)
-                .setNegativeButton("Cancel") { _, _ ->
-                    if (continuation.isActive) continuation.resume(null)
-                }
-                .setPositiveButton("Download selected", null)
-                .create()
-
-            dialog.setOnShowListener {
-                dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                    val result = songs.filterIndexed { index, _ -> checked[index] }
-                    if (result.isEmpty()) {
-                        dialog.setTitle("Download from Queue")
-                        dialog.setMessage("Select at least one song")
-                        return@setOnClickListener
-                    }
-                    if (continuation.isActive) continuation.resume(result)
-                    dialog.dismiss()
-                }
-            }
-            dialog.setOnDismissListener {
-                if (continuation.isActive) continuation.resume(null)
-            }
-            continuation.invokeOnCancellation { dialog.dismiss() }
-            dialog.show()
+            list.addView(check)
         }
+        box.addView(list)
 
-    private class ProgressUi(private val context: Context, private val totalSongs: Int) {
-        private var dialog: AlertDialog? = null
-        private var titleView: TextView? = null
-        private var detailView: TextView? = null
-        private var bar: ProgressBar? = null
-        private var currentIndex = 0
-
-        fun show() {
-            runOnMain {
-                val layout = LinearLayout(context).apply {
-                    orientation = LinearLayout.VERTICAL
-                    setPadding(28, 12, 28, 20)
-                }
-                titleView = TextView(context).apply { textSize = 17f; gravity = Gravity.START }
-                detailView = TextView(context).apply { textSize = 13f }
-                bar = ProgressBar(context, null, android.R.attr.progressBarStyleHorizontal)
-                bar?.max = 100
-                layout.addView(titleView)
-                layout.addView(detailView)
-                layout.addView(bar)
-                dialog = AlertDialog.Builder(context)
-                    .setTitle("Downloading Queue")
-                    .setView(layout)
-                    .setCancelable(false)
-                    .create()
-                dialog?.show()
+        selectAll.setOnCheckedChangeListener { _, value ->
+            songs.forEachIndexed { index, _ -> checked[index] = value }
+            for (i in 0 until list.childCount) {
+                val cb = list.getChildAt(i) as CheckBox
+                cb.setOnCheckedChangeListener(null)
+                cb.isChecked = value
+                cb.setOnCheckedChangeListener { _, checkedValue -> checked[i] = checkedValue }
             }
         }
 
-        fun startSong(index: Int, title: String) {
-            currentIndex = index
-            runOnMain {
-                titleView?.text = "${index + 1}/$totalSongs  $title"
-                detailView?.text = "Preparing download..."
-                bar?.progress = 0
+        var handled = false
+        val dialog = AlertDialog.Builder(context)
+            .setTitle("تنزيل من قائمة الانتظار")
+            .setMessage("اختر المقاطع المراد تنزيلها في الخلفية:")
+            .setView(box)
+            .setNegativeButton("إلغاء") { _, _ ->
+                if (!handled) { handled = true; onResult(null) }
             }
-        }
+            .setPositiveButton("تنزيل في الخلفية", null)
+            .create()
 
-        fun updateBytes(bytes: Long, total: Long) {
-            runOnMain {
-                val percent = if (total > 0) ((bytes * 100L) / total).toInt().coerceIn(0, 100) else 0
-                bar?.progress = percent
-                detailView?.text = if (total > 0) {
-                    "Song ${currentIndex + 1}/$totalSongs • $percent%"
-                } else {
-                    "Song ${currentIndex + 1}/$totalSongs • Downloading"
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val result = songs.filterIndexed { index, _ -> checked[index] }
+                if (result.isEmpty()) {
+                    showToast(context, "الرجاء اختيار مقطع واحد على الأقل")
+                    return@setOnClickListener
                 }
+                if (!handled) {
+                    handled = true
+                    onResult(result)
+                }
+                dialog.dismiss()
             }
         }
 
-        fun finishSong(index: Int, success: Boolean) {
-            runOnMain {
-                titleView?.text = "${index + 1}/$totalSongs"
-                detailView?.text = if (success) "Completed" else "Failed"
-                bar?.progress = if (success) 100 else 0
+        dialog.setOnDismissListener {
+            if (!handled) {
+                handled = true
+                onResult(null)
             }
         }
 
-        fun dismiss() = runOnMain { dialog?.dismiss() }
+        dialog.show()
+    }
 
-        private fun runOnMain(block: () -> Unit) {
-            android.os.Handler(android.os.Looper.getMainLooper()).post(block)
+    private fun createNotificationChannel(notificationManager: NotificationManager?) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && notificationManager != null) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                "تنزيلات قائمة الانتظار",
+                NotificationManager.IMPORTANCE_LOW
+            ).apply {
+                description = "إشعارات تنزيل ملفات الصوت في الخلفية"
+                setShowBadge(false)
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+    }
+
+    private fun updateProgressNotification(
+        context: Context,
+        notificationManager: NotificationManager?,
+        title: String,
+        text: String,
+        progress: Int,
+        max: Int,
+        ongoing: Boolean
+    ) {
+        if (notificationManager == null) return
+        val builder = NotificationCompat.Builder(context, NOTIFICATION_CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setOngoing(ongoing)
+            .setOnlyAlertOnce(true)
+
+        if (ongoing && max > 0) {
+            builder.setProgress(max, progress, false)
+        } else if (!ongoing) {
+            builder.setProgress(0, 0, false)
+            builder.setAutoCancel(true)
+        }
+
+        runCatching {
+            notificationManager.notify(NOTIFICATION_ID, builder.build())
         }
     }
 
@@ -248,6 +316,12 @@ object OnlineQueueDownloader {
         val cleaned = raw.replace(Regex("[\\\\/:*?\"<>|]"), "_").trim().ifBlank { "Unknown Track" }
         val lower = cleaned.lowercase(Locale.ROOT)
         return if (EXTENSIONS.any { lower.endsWith(it) }) cleaned else "$cleaned.mp3"
+    }
+
+    private fun showToast(context: Context, text: String) {
+        Handler(Looper.getMainLooper()).post {
+            Toast.makeText(context, text, Toast.LENGTH_SHORT).show()
+        }
     }
 
     private val EXTENSIONS = setOf(".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".opus", ".webm")

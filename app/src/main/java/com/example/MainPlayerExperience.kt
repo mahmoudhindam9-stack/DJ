@@ -557,7 +557,8 @@ fun QueueSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var downloading by remember { mutableStateOf(false) }
+    val isDownloadingQueue by OnlineQueueDownloader.isDownloading.collectAsState()
+    val queueDownloadStatus by OnlineQueueDownloader.downloadStatus.collectAsState()
     var message by remember { mutableStateOf<String?>(null) }
     var showSaveDialog by remember { mutableStateOf(false) }
     var showExistingDialog by remember { mutableStateOf(false) }
@@ -573,13 +574,7 @@ fun QueueSheet(
 
     val folderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
         if (uri == null) return@rememberLauncherForActivityResult
-        downloading = true
-        message = "Downloading queue..."
-        scope.launch {
-            val result = OnlineQueueDownloader.download(context, uri, onlineSongs)
-            downloading = false
-            message = "Downloaded ${result.downloaded}; skipped ${result.skipped}; failed ${result.failed}"
-        }
+        OnlineQueueDownloader.startBackgroundDownload(context, uri, onlineSongs)
     }
 
     suspend fun persistQueueItems() {
@@ -626,14 +621,15 @@ fun QueueSheet(
                     Text("UPCOMING QUEUE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
                     Text("${controller.playlist.size} item(s)", style = MaterialTheme.typography.bodySmall)
                 }
-                if (hasOnlineSongs || downloading) {
-                    Button(onClick = { if (!downloading) folderPicker.launch(null) }, enabled = !downloading) {
+                if (hasOnlineSongs || isDownloadingQueue) {
+                    Button(onClick = { if (!isDownloadingQueue) folderPicker.launch(null) }, enabled = !isDownloadingQueue) {
                         Icon(Icons.Filled.Download, null)
                         Spacer(Modifier.width(5.dp))
-                        Text(if (downloading) "Downloading..." else "Download List")
+                        Text(if (isDownloadingQueue) "جاري التنزيل..." else "Download List")
                     }
                 }
             }
+            queueDownloadStatus?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }
             Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {

@@ -32,7 +32,7 @@ class AudioVisualizerEngine {
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var analysisJob: Job? = null
 
-    // 1024-point FFT gives ~43 Hz bins at 44.1 kHz and makes kick detection much more reliable.
+    // 1024-point FFT provides ~43 Hz resolution at 44.1 kHz for accurate musical tracking
     private val ringBufferSize = 8192
     private val ringBufferMask = ringBufferSize - 1
     private val ringBuffer = FloatArray(ringBufferSize)
@@ -68,11 +68,16 @@ class AudioVisualizerEngine {
         sin(-2.0 * Math.PI * k / fftSize).toFloat()
     }
 
+    // 32 logarithmically distributed musical bands between 45 Hz and 14,500 Hz
     private val bandStartBins = IntArray(AudioVisualizerState.BAND_COUNT)
     private val bandEndBins = IntArray(AudioVisualizerState.BAND_COUNT)
+    private val bandWeights = FloatArray(AudioVisualizerState.BAND_COUNT)
 
     private val smoothedBands = FloatArray(AudioVisualizerState.BAND_COUNT)
+    private val peakBands = FloatArray(AudioVisualizerState.BAND_COUNT)
+    private val peakHoldFrames = IntArray(AudioVisualizerState.BAND_COUNT)
     private val smoothedWave = FloatArray(AudioVisualizerState.WAVE_COUNT)
+
     private var smoothedBass = 0f
     private var smoothedMid = 0f
     private var smoothedTreble = 0f
@@ -91,22 +96,40 @@ class AudioVisualizerEngine {
     @Volatile
     private var lastAudioFeedTimestamp = 0L
 
-    init { initBandBoundaries() }
+    init {
+        initBandBoundaries()
+    }
 
     private fun initBandBoundaries() {
-        val minBin = 1.0
-        val maxBin = (fftHalf - 1).toDouble()
-        val logMin = ln(minBin)
-        val logMax = ln(maxBin)
-        for (i in 0 until AudioVisualizerState.BAND_COUNT) {
-            val startRatio = i.toDouble() / AudioVisualizerState.BAND_COUNT
-            val endRatio = (i + 1).toDouble() / AudioVisualizerState.BAND_COUNT
-            var start = exp(logMin + startRatio * (logMax - logMin)).roundToInt()
-            var end = exp(logMin + endRatio * (logMax - logMin)).roundToInt()
-            start = start.coerceIn(1, fftHalf - 1)
-            end = end.coerceIn(start + 1, fftHalf)
-            bandStartBins[i] = start
-            bandEndBins[i] = end
+        val sampleRate = 44_100.0
+        val binFreqStep = sampleRate / fftSize // ~43.066 Hz per bin
+        val minFreq = 45.0
+        val maxFreq = 14500.0
+        val bandCount = AudioVisualizerState.BAND_COUNT
+        val logMin = ln(minFreq)
+        val logMax = ln(maxFreq)
+
+        for (i in 0 until bandCount) {
+            val startRatio = i.toDouble() / bandCount
+            val endRatio = (i + 1).toDouble() / bandCount
+
+            val freqStart = exp(logMin + startRatio * (logMax - logMin))
+            val freqEnd = exp(logMin + endRatio * (logMax - logMin))
+
+            var startBin = (freqStart / binFreqStep).roundToInt().coerceIn(1, fftHalf - 2)
+            var endBin = (freqEnd / binFreqStep).roundToInt().coerceIn(startBin + 1, fftHalf - 1)
+
+            if (endBin <= startBin) {
+                endBin = startBin + 1
+            }
+
+            bandStartBins[i] = startBin
+            bandEndBins[i] = endBin
+
+            // Perceptual tilt curve: compensates for the natural 1/f falloff in recorded sound.
+            // This ensures every frequency range (sub-bass, vocals, highs) has equal, vivid visual presence.
+            val normIdx = i.toFloat() / (bandCount - 1).toFloat()
+            bandWeights[i] = 0.88f + 2.15f * normIdx.pow(0.70f)
         }
     }
 
@@ -115,20 +138,23 @@ class AudioVisualizerEngine {
         inputSampleRate = sampleRate.coerceAtLeast(8_000)
         lastAudioFeedTimestamp = System.currentTimeMillis()
         var currentWrite = writePos.get()
+        val channels = channelCount.coerceIn(1, 8)
+        val dup = buffer.duplicate().order(ByteOrder.nativeOrder())
+
         if (isFloat) {
-            val floatBuffer = buffer.asFloatBuffer()
-            while (floatBuffer.remaining() >= channelCount) {
+            val floatBuffer = dup.asFloatBuffer()
+            while (floatBuffer.remaining() >= channels) {
                 var sum = 0f
-                for (ch in 0 until channelCount) sum += floatBuffer.get()
-                ringBuffer[currentWrite] = sum / channelCount
+                for (ch in 0 until channels) sum += floatBuffer.get()
+                ringBuffer[currentWrite] = sum / channels
                 currentWrite = (currentWrite + 1) and ringBufferMask
             }
         } else {
-            val shortBuffer = buffer.asShortBuffer()
-            while (shortBuffer.remaining() >= channelCount) {
+            val shortBuffer = dup.asShortBuffer()
+            while (shortBuffer.remaining() >= channels) {
                 var sum = 0f
-                for (ch in 0 until channelCount) sum += shortBuffer.get()
-                ringBuffer[currentWrite] = (sum / channelCount) / 32768.0f
+                for (ch in 0 until channels) sum += shortBuffer.get()
+                ringBuffer[currentWrite] = (sum / channels) / 32768.0f
                 currentWrite = (currentWrite + 1) and ringBufferMask
             }
         }
@@ -139,12 +165,12 @@ class AudioVisualizerEngine {
         if (analysisJob?.isActive == true) return
         analysisJob = scope.launch {
             while (isActive && isEngineActive.get()) {
-                val recent = System.currentTimeMillis() - lastAudioFeedTimestamp < 300L && isPlaying
+                val recent = System.currentTimeMillis() - lastAudioFeedTimestamp < 350L && isPlaying
                 if (recent) {
                     processFrame()
-                    delay(22L)
+                    delay(28L) // Smooth, paced frame rate (~36 FPS) for relaxed visual tracking
                 } else {
-                    if (decayToZero()) delay(22L) else delay(100L)
+                    if (decayToZero()) delay(28L) else delay(100L)
                 }
             }
         }
@@ -166,7 +192,7 @@ class AudioVisualizerEngine {
         val waveStep = fftSize / AudioVisualizerState.WAVE_COUNT
         for (i in 0 until AudioVisualizerState.WAVE_COUNT) {
             val target = rawSamples[i * waveStep].coerceIn(-1f, 1f)
-            smoothedWave[i] += (target - smoothedWave[i]) * 0.82f
+            smoothedWave[i] += (target - smoothedWave[i]) * 0.70f
         }
 
         for (i in 0 until fftSize) {
@@ -205,7 +231,7 @@ class AudioVisualizerEngine {
             magnitudes[i] = sqrt(r * r + im * im) / (fftSize / 2f)
         }
 
-        // Spectral flux reacts to newly arriving frequency energy instead of raw loudness.
+        // Spectral flux reacts to newly arriving frequency energy
         var fluxSum = 0f
         for (i in 1 until fftHalf) {
             val delta = magnitudes[i] - previousMagnitudes[i]
@@ -216,40 +242,63 @@ class AudioVisualizerEngine {
         fluxBaseline += (flux - fluxBaseline) * 0.045f
         val fluxNovelty = ((flux - fluxBaseline) * 8.5f).coerceIn(0f, 1f)
 
+        // Aggregate 32 musical frequency bands with perceptual equal loudness & smooth falloff
         for (bandIdx in 0 until AudioVisualizerState.BAND_COUNT) {
             val start = bandStartBins[bandIdx]
             val end = bandEndBins[bandIdx]
-            var sum = 0f
-            for (bin in start until end) sum += magnitudes[bin]
-            val avgMag = sum / (end - start).coerceAtLeast(1)
-            val db = 20f * log10(avgMag.coerceAtLeast(0.0015f))
-            val normalized = ((db + 56f) / 56f).coerceIn(0f, 1f)
-            val weight = when {
-                bandIdx < 7 -> 1.22f
-                bandIdx < 20 -> 1.10f
-                else -> 1.0f
+            var sumPower = 0.0
+            val count = (end - start).coerceAtLeast(1)
+            for (bin in start until end) {
+                val m = magnitudes[bin]
+                sumPower += (m * m)
             }
-            val weighted = (normalized * weight).coerceIn(0f, 1f)
-            rawBands[bandIdx] = weighted
+            val rmsMag = sqrt(sumPower / count).toFloat()
+
+            // Dynamic dB mapping: -48dB floor to 0dB max
+            val db = 20f * log10(rmsMag.coerceAtLeast(0.00008f))
+            val normalized = ((db + 48f) / 48f).coerceIn(0f, 1f)
+            val weighted = (normalized * bandWeights[bandIdx]).coerceIn(0f, 1.20f)
+
+            // Remove noise floor and scale cleanly
+            val targetVal = if (weighted > 0.06f) {
+                ((weighted - 0.06f) / 0.94f).coerceIn(0f, 1f)
+            } else 0f
+
+            rawBands[bandIdx] = targetVal
             val previous = smoothedBands[bandIdx]
-            smoothedBands[bandIdx] = if (weighted > previous) {
-                previous + (weighted - previous) * 0.72f
+
+            // Controlled attack and silky-smooth, slower decay for fluid movement
+            smoothedBands[bandIdx] = if (targetVal > previous) {
+                previous + (targetVal - previous) * 0.40f
             } else {
-                previous * 0.82f
+                previous * 0.90f
+            }
+
+            // Floating peak cap physics: hold peak then float down with gentle gravity
+            val currentVal = smoothedBands[bandIdx]
+            if (currentVal >= peakBands[bandIdx]) {
+                peakBands[bandIdx] = currentVal
+                peakHoldFrames[bandIdx] = 12 // Hold peak dot for ~330ms
+            } else if (peakHoldFrames[bandIdx] > 0) {
+                peakHoldFrames[bandIdx]--
+            } else {
+                peakBands[bandIdx] = max(currentVal, peakBands[bandIdx] - 0.016f)
             }
         }
 
         var bassSum = 0f
         for (i in 0 until 7) bassSum += smoothedBands[i]
         val targetBass = (bassSum / 7f).coerceIn(0f, 1f)
+
         var midSum = 0f
         for (i in 7 until 20) midSum += smoothedBands[i]
         val targetMid = (midSum / 13f).coerceIn(0f, 1f)
+
         var trebleSum = 0f
         for (i in 20 until AudioVisualizerState.BAND_COUNT) trebleSum += smoothedBands[i]
         val targetTreble = (trebleSum / 12f).coerceIn(0f, 1f)
 
-        // Kick-focused energy, roughly 35-160 Hz.
+        // Kick-focused energy, roughly 35-160 Hz
         val hzPerBin = inputSampleRate.toFloat() / fftSize
         val kickStart = max(1, floor(35f / hzPerBin).toInt())
         val kickEnd = min(fftHalf - 1, ceil(160f / hzPerBin).toInt())
@@ -267,17 +316,17 @@ class AudioVisualizerEngine {
 
         val beatScore = (fluxNovelty * 0.52f + bassTransient * 0.23f + kickEnergy * 0.17f + energyTransient * 0.08f).coerceIn(0f, 1f)
         val now = System.currentTimeMillis()
-        val detectedBeat = if (beatScore > 0.20f && now - lastBeatTimestamp >= 95L) {
+        val detectedBeat = if (beatScore > 0.20f && now - lastBeatTimestamp >= 120L) {
             lastBeatTimestamp = now
             beatScore
         } else 0f
 
-        smoothedBass += (targetBass - smoothedBass) * 0.58f
-        smoothedMid += (targetMid - smoothedMid) * 0.58f
-        smoothedTreble += (targetTreble - smoothedTreble) * 0.58f
-        smoothedEnergy += (rmsEnergy - smoothedEnergy) * 0.52f
-        smoothedPeak = if (peakVal > smoothedPeak) peakVal else smoothedPeak * 0.88f
-        smoothedBeat = max(detectedBeat, smoothedBeat * 0.76f)
+        smoothedBass += (targetBass - smoothedBass) * 0.45f
+        smoothedMid += (targetMid - smoothedMid) * 0.45f
+        smoothedTreble += (targetTreble - smoothedTreble) * 0.45f
+        smoothedEnergy += (rmsEnergy - smoothedEnergy) * 0.45f
+        smoothedPeak = if (peakVal > smoothedPeak) peakVal else smoothedPeak * 0.90f
+        smoothedBeat = max(detectedBeat, smoothedBeat * 0.80f)
 
         _state.value = AudioVisualizerState(
             bass = smoothedBass,
@@ -287,6 +336,7 @@ class AudioVisualizerEngine {
             peak = smoothedPeak,
             beat = smoothedBeat,
             bands = smoothedBands.copyOf(),
+            peakBands = peakBands.copyOf(),
             wave = smoothedWave.copyOf(),
             isPlaying = isPlaying
         )
@@ -294,24 +344,32 @@ class AudioVisualizerEngine {
 
     internal fun decayToZero(): Boolean {
         var active = false
+        val decayFactor = 0.78f
         for (i in 0 until AudioVisualizerState.BAND_COUNT) {
-            smoothedBands[i] *= 0.80f
-            if (smoothedBands[i] > 0.005f) active = true else smoothedBands[i] = 0f
+            smoothedBands[i] *= decayFactor
+            peakBands[i] *= decayFactor
+            peakHoldFrames[i] = 0
+            if (smoothedBands[i] > 0.005f || peakBands[i] > 0.005f) {
+                active = true
+            } else {
+                smoothedBands[i] = 0f
+                peakBands[i] = 0f
+            }
         }
         for (i in 0 until AudioVisualizerState.WAVE_COUNT) {
-            smoothedWave[i] *= 0.80f
+            smoothedWave[i] *= decayFactor
             if (abs(smoothedWave[i]) > 0.005f) active = true else smoothedWave[i] = 0f
         }
-        for (i in previousMagnitudes.indices) previousMagnitudes[i] *= 0.72f
-        smoothedBass *= 0.80f
-        smoothedMid *= 0.80f
-        smoothedTreble *= 0.80f
-        smoothedEnergy *= 0.80f
-        smoothedPeak *= 0.80f
-        smoothedBeat *= 0.66f
-        previousEnergy *= 0.80f
-        previousBass *= 0.80f
-        fluxBaseline *= 0.92f
+        for (i in previousMagnitudes.indices) previousMagnitudes[i] *= 0.70f
+        smoothedBass *= decayFactor
+        smoothedMid *= decayFactor
+        smoothedTreble *= decayFactor
+        smoothedEnergy *= decayFactor
+        smoothedPeak *= decayFactor
+        smoothedBeat *= 0.65f
+        previousEnergy *= decayFactor
+        previousBass *= decayFactor
+        fluxBaseline *= 0.88f
         if (smoothedBass > 0.005f || smoothedEnergy > 0.005f || smoothedBeat > 0.005f) active = true
 
         _state.value = AudioVisualizerState(
@@ -322,6 +380,7 @@ class AudioVisualizerEngine {
             peak = if (smoothedPeak > 0.005f) smoothedPeak else 0f,
             beat = if (smoothedBeat > 0.005f) smoothedBeat else 0f,
             bands = smoothedBands.copyOf(),
+            peakBands = peakBands.copyOf(),
             wave = smoothedWave.copyOf(),
             isPlaying = isPlaying
         )
