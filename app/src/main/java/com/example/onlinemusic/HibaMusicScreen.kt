@@ -122,7 +122,7 @@ private class HibaMusicRepository {
             val looksLikeTrack = listOf("/titre/", "/chanson/", "/track/", "/song/", "/ar/t/").any { path.contains(it, true) }
             if (!looksLikeTrack || !absolute.startsWith(base)) return@mapNotNull null
             HibaTrackLink(title, absolute)
-        }.distinctBy { it.url }.take(150)
+        }.distinctBy { it.url }.take(150).toList()
     }
 
 }
