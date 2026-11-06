@@ -279,4 +279,19 @@ fun HibaMusicScreen(
             }
         }
     }
+
+    deckTrack?.let { selected ->
+        AlertDialog(
+            onDismissRequest = { deckTrack = null },
+            title = { Text("إرسال الأغنية إلى DJ") },
+            text = { Text(selected.title + " — اختر Deck") },
+            confirmButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.A) }) { Text("Deck A") }
+                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.B) }) { Text("Deck B") }
+                }
+            },
+            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text("إلغاء") } }
+        )
+    }
 }
