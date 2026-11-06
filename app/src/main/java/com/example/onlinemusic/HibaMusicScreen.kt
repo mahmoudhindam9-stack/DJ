@@ -162,10 +162,9 @@ fun HibaMusicScreen(
         loading = false
     }
 
-    LaunchedEffect(Unit) { refresh("") }
     LaunchedEffect(query) {
         delay(400)
-        if (query.trim().isNotEmpty()) refresh(query.trim()) else if (tracks.isEmpty()) refresh("")
+        refresh(query.trim())
     }
 
     fun play(track: HibaTrackLink) {
