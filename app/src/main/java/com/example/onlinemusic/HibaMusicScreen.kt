@@ -24,7 +24,6 @@ import androidx.compose.ui.unit.dp
 import androidx.media3.common.util.UnstableApi
 import com.example.model.AudioItem
 import com.example.player.AudioPlayerController
-import com.example.onlinemusic.OnlineDjBridge
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -76,8 +75,7 @@ private class HibaMusicRepository {
             Regex("""https?://[^\s"'<>]+\.mp3(?:\?[^\s"'<>]*)?""", RegexOption.IGNORE_CASE)
         )
         for (pattern in candidates) {
-            val match = pattern.find(page) ?: continue
-            val raw = match.groupValues.getOrNull(1)?.takeIf { it.isNotBlank() } ?: match.value
+            val raw = pattern.find(page)?.groupValues?.getOrNull(1) ?: continue
             val absolute = when {
                 raw.startsWith("http", true) -> raw
                 raw.startsWith("//") -> "https:" + raw
@@ -124,21 +122,6 @@ private class HibaMusicRepository {
             HibaTrackLink(title, absolute)
         }.distinctBy { it.url }.take(150)
     }
-
-    deckTrack?.let { selected ->
-        AlertDialog(
-            onDismissRequest = { deckTrack = null },
-            title = { Text("إرسال الأغنية إلى DJ") },
-            text = { Text(selected.title + " — اختر Deck") },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.A) }) { Text("Deck A") }
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.B) }) { Text("Deck B") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text("إلغاء") } }
-        )
-    }
 }
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -155,7 +138,6 @@ fun HibaMusicScreen(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var deckTrack by remember { mutableStateOf<HibaTrackLink?>(null) }
     var deckTrack by remember { mutableStateOf<HibaTrackLink?>(null) }
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri ->
         val item = pending
@@ -223,18 +205,6 @@ fun HibaMusicScreen(
         }
     }
 
-    fun sendToDeck(track: HibaTrackLink, deck: OnlineDeckTarget) {
-        scope.launch {
-            runCatching {
-                val url = repository.resolve(track)
-                AudioItem("hiba:" + track.url, track.title, "Hiba Music", "Oldies & Classics", 0L, Uri.parse(url))
-            }.onSuccess { item ->
-                OnlineDjBridge.send(item, deck)
-                message = "تم إرسال الأغنية إلى Deck " + deck.name
-            }.onFailure { message = it.message ?: "تعذر إرسال الأغنية إلى DJ" }
-        }
-    }
-
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.LibraryMusic, null, Modifier.size(28.dp))
@@ -270,7 +240,6 @@ fun HibaMusicScreen(
                             Text(track.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                             IconButton(onClick = { play(track) }) { Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play") }
                             IconButton(onClick = { queue(track) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to queue") }
-                            IconButton(onClick = { deckTrack = track }) { Icon(Icons.Filled.Headset, "Send to DJ Deck") }
                             IconButton(onClick = { download(track) }) { Icon(Icons.Filled.Download, "Download") }
                         }
                     }
@@ -278,20 +247,5 @@ fun HibaMusicScreen(
                 message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall) } }
             }
         }
-    }
-
-    deckTrack?.let { selected ->
-        AlertDialog(
-            onDismissRequest = { deckTrack = null },
-            title = { Text("إرسال الأغنية إلى DJ") },
-            text = { Text(selected.title + " — اختر Deck") },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.A) }) { Text("Deck A") }
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.B) }) { Text("Deck B") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text("إلغاء") } }
-        )
     }
 }
