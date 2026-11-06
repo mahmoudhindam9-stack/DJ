@@ -143,13 +143,12 @@ object RadioBrowserRepository {
                             station.name.contains("القرآن الكريم من القاهرة", ignoreCase = true) ||
                                 station.name.contains("إذاعة القرآن الكريم", ignoreCase = true)
                         }
-                        return@withContext buildList {
-                            add(EGYPT_QURAN_STATION)
-                            addAll(withoutQuranDuplicate)
-                        }
+                        return@withContext deduplicateRadioStations(
+                            listOf(EGYPT_QURAN_STATION) + withoutQuranDuplicate
+                        )
                     }
 
-                    return@withContext parsedStations
+                    return@withContext deduplicateRadioStations(parsedStations)
                 } else {
                     connection.disconnect()
                 }
@@ -172,6 +171,28 @@ object RadioBrowserRepository {
         } else {
             emptyList()
         }
+    }
+}
+
+/**
+ * Radio Browser hosts are mirrors of one directory, not independent station sources.
+ * Keep the first healthy record and collapse duplicate UUIDs, stream URLs and names.
+ */
+internal fun deduplicateRadioStations(input: List<RadioStation>): List<RadioStation> {
+    val ids = HashSet<String>()
+    val streams = HashSet<String>()
+    val names = HashSet<String>()
+    return input.filter { station ->
+        val id = station.id.trim().lowercase()
+        val name = station.name.trim().lowercase()
+            .replace(Regex("\\s+"), " ")
+        val streamKeys = station.streamUrls.map {
+            it.trim().lowercase().substringBefore("#").substringBefore("?").trimEnd('/')
+        }.filter { it.isNotBlank() }
+        val duplicate = (id.isNotBlank() && !ids.add(id)) ||
+            streamKeys.any { !streams.add(it) } ||
+            (name.isNotBlank() && !names.add(name + "|" + station.countryCode.trim().uppercase()))
+        !duplicate
     }
 }
 

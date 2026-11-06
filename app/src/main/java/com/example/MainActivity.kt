@@ -328,6 +328,18 @@ fun MainApp() {
                         }
                     }
                 )
+                NavigationBarItem(
+                    icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
+                    label = { Text("Quran", maxLines = 1, softWrap = false) },
+                    selected = currentDestination?.route == "quran",
+                    onClick = {
+                        navController.navigate("quran") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
             }
             }
         },
@@ -381,6 +393,14 @@ fun MainApp() {
                 val vm = remember { com.example.onlinemusic.OnlineMusicViewModel(repo) }
                 com.example.onlinemusic.OnlineMusicScreen(
                     viewModel = vm,
+                    playerController = playerController,
+                    playlists = playlists,
+                    audioLibrary = audioLibrary,
+                    playlistRepo = playlistRepo
+                )
+            }
+            composable("quran") {
+                com.example.quran.QuranScreen(
                     playerController = playerController,
                     playlists = playlists,
                     audioLibrary = audioLibrary,

@@ -55,14 +55,40 @@ fun OnlineMusicScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var foreign by rememberSaveable { mutableStateOf(false) }
+    var selectedSource by rememberSaveable { mutableStateOf("albumaty") }
     var showQueue by remember { mutableStateOf(false) }
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = !foreign, onClick = { foreign = false }, label = { Text("🇦🇪 Arabic") }, modifier = Modifier.weight(1f))
-            FilterChip(selected = foreign, onClick = { foreign = true }, label = { Text("🌎 Foreign") }, modifier = Modifier.weight(1f))
+        Row(
+            Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            FilterChip(
+                selected = selectedSource == "albumaty",
+                onClick = { selectedSource = "albumaty" },
+                label = { Text("🇦🇪 Arabic") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedSource == "hiba",
+                onClick = { selectedSource = "hiba" },
+                label = { Text("🎼 Classics") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = selectedSource == "audius",
+                onClick = { selectedSource = "audius" },
+                label = { Text("🌎 Foreign") },
+                modifier = Modifier.weight(1f)
+            )
         }
-        if (foreign) AudiusOnlineScreen(viewModel, playerController, scope) { showQueue = true } else AlbumatyOnlineScreen(viewModel, playerController, scope) { showQueue = true }
+        when (selectedSource) {
+            "audius" -> AudiusOnlineScreen(viewModel, playerController, scope) { showQueue = true }
+            "hiba" -> com.example.onlinemusic.HibaMusicScreen(
+                playerController = playerController,
+                onShowQueue = { showQueue = true }
+            )
+            else -> AlbumatyOnlineScreen(viewModel, playerController, scope) { showQueue = true }
+        }
     }
     if (showQueue) {
         QueueSheet(
