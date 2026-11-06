@@ -125,22 +125,7 @@ private class HibaMusicRepository {
         }.distinctBy { it.url }.take(150)
     }
 
-    deckTrack?.let { selected ->
-        AlertDialog(
-            onDismissRequest = { deckTrack = null },
-            title = { Text("إرسال الأغنية إلى DJ") },
-            text = { Text(selected.title + " — اختر Deck") },
-            confirmButton = {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.A) }) { Text("Deck A") }
-                    TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.B) }) { Text("Deck B") }
-                }
-            },
-            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text("إلغاء") } }
-        )
-    }
 }
-
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 fun HibaMusicScreen(
@@ -155,7 +140,6 @@ fun HibaMusicScreen(
     var loading by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
     var pending by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var deckTrack by remember { mutableStateOf<HibaTrackLink?>(null) }
     var deckTrack by remember { mutableStateOf<HibaTrackLink?>(null) }
     val saveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri ->
         val item = pending
