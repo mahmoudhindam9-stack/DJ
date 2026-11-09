@@ -82,8 +82,10 @@ class OnlineMusicViewModel(
         }
     }
 
-    fun downloadAssistantModel() {
-        val assistant = localAssistant ?: return
+    fun downloadAssistantModel(context: Context) {
+        val assistant = localAssistant ?: LocalMusicAssistant(context.applicationContext).also {
+            localAssistant = it
+        }
         if (isAssistantDownloading || isAssistantReady) return
         viewModelScope.launch {
             isAssistantDownloading = true

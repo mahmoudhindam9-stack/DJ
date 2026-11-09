@@ -261,7 +261,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             assistantDownloading = viewModel.isAssistantDownloading,
             assistantDownloadProgress = viewModel.assistantDownloadProgress,
             assistantStatus = viewModel.assistantStatusMessage,
-            onDownloadAssistant = viewModel::downloadAssistantModel,
+            onDownloadAssistant = { viewModel.downloadAssistantModel(context.applicationContext) },
             onAskAssistant = viewModel::askMusicAssistant
         )
 
@@ -348,7 +348,6 @@ private fun MoodPlaylistPanel(
     var assistantQuery by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("AI Mood Playlists", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("اختر حالتك أو اكتب طلبك بالعربية أو الإنجليزية", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(
             value = assistantQuery,
             onValueChange = { assistantQuery = it },
@@ -373,13 +372,11 @@ private fun MoodPlaylistPanel(
         }
         if (assistantDownloading) {
             LinearProgressIndicator(progress = assistantDownloadProgress, modifier = Modifier.fillMaxWidth())
-            Text("تنزيل النموذج: " + (assistantDownloadProgress * 100).toInt() + "%", style = MaterialTheme.typography.labelSmall)
         } else if (assistantLoading) {
             LinearProgressIndicator(Modifier.fillMaxWidth())
-            Text("جاري تجهيز المساعد المحلي...", style = MaterialTheme.typography.labelSmall)
         }
-        assistantStatus?.let {
-            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        assistantStatus?.takeIf { it.contains("تعذر") || it.contains("فشل") || it.contains("خطأ") }?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(MoodCategory.entries, key = { it.id }) { category ->

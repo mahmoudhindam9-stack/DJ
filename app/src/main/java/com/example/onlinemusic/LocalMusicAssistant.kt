@@ -21,6 +21,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.io.FileOutputStream
+import java.security.MessageDigest
+import java.util.concurrent.TimeUnit
 
 /**
  * Runs Qwen3-0.6B completely on-device through Google's LiteRT-LM runtime.
@@ -30,7 +32,8 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
     companion object {
         private const val MODEL_URL =
             "https://huggingface.co/litert-community/Qwen3-0.6B/resolve/main/Qwen3-0.6B_dynamic_wi4b32_afp32.litertlm"
-        private const val MIN_MODEL_BYTES = 300L * 1024L * 1024L
+        private const val MODEL_BYTES = 344_686_592L
+        private const val MODEL_SHA256 = "96491bb0f78fa68098bf8f1d3628194c97041aff7894f8cc29303b3acdb877a9"
         private const val SYSTEM_INSTRUCTION = """
 You are the private, on-device music discovery assistant inside the DJ Android app.
 Understand Arabic (including Egyptian colloquial Arabic) and English music requests.
@@ -47,7 +50,12 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
     private val appContext = context.applicationContext
     private val client = OkHttpClient.Builder()
         .followRedirects(true)
+        .followSslRedirects(true)
         .retryOnConnectionFailure(true)
+        .connectTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.MINUTES)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.MINUTES)
         .build()
     private val inferenceMutex = Mutex()
     private val modelDirectory = File(appContext.filesDir, "on_device_ai")
@@ -60,7 +68,11 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
 
     suspend fun initializeIfDownloaded(): Boolean {
         if (isReady) return true
-        if (!modelFile.isFile || modelFile.length() < MIN_MODEL_BYTES) return false
+        val valid = withContext(Dispatchers.IO) { modelFile.isFile && isValidModelFile(modelFile) }
+        if (!valid) {
+            modelFile.delete()
+            return false
+        }
         ensureDeviceMemory()
         initializeEngine(modelFile)
         return isReady
@@ -85,10 +97,11 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
 
     private suspend fun downloadModel(onProgress: suspend (Float) -> Unit): File =
         withContext(Dispatchers.IO) {
-            if (modelFile.isFile && modelFile.length() >= MIN_MODEL_BYTES) {
+            if (modelFile.isFile && isValidModelFile(modelFile)) {
                 withContext(Dispatchers.Main.immediate) { onProgress(1f) }
                 return@withContext modelFile
             }
+            modelFile.delete()
             modelDirectory.mkdirs()
             partialFile.delete()
 
@@ -102,12 +115,13 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                 check(response.isSuccessful) { "فشل تنزيل النموذج: HTTP " + response.code }
                 val body = response.body ?: error("ملف النموذج فارغ")
                 val totalBytes = body.contentLength()
-                check(totalBytes <= 0L || totalBytes >= MIN_MODEL_BYTES) {
-                    "حجم ملف النموذج غير متوقع؛ أوقفنا التنزيل لحماية مساحة الهاتف."
+                check(totalBytes <= 0L || totalBytes == MODEL_BYTES) {
+                    "حجم ملف Qwen3 تغيّر عن النسخة المعتمدة؛ أوقفنا التنزيل لحماية الهاتف."
                 }
                 val job = currentCoroutineContext()
                 var downloadedBytes = 0L
                 var lastReportedBytes = 0L
+                val digest = MessageDigest.getInstance("SHA-256")
                 FileOutputStream(partialFile).use { output ->
                     body.byteStream().use { input ->
                         val buffer = ByteArray(64 * 1024)
@@ -116,12 +130,11 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                             val count = input.read(buffer)
                             if (count < 0) break
                             output.write(buffer, 0, count)
+                            digest.update(buffer, 0, count)
                             downloadedBytes += count
-                            if (totalBytes > 0L &&
-                                (downloadedBytes - lastReportedBytes >= 1024L * 1024L || downloadedBytes >= totalBytes)
-                            ) {
+                            if (downloadedBytes - lastReportedBytes >= 1024L * 1024L || downloadedBytes >= MODEL_BYTES) {
                                 lastReportedBytes = downloadedBytes
-                                val progress = (downloadedBytes.toFloat() / totalBytes).coerceIn(0f, 1f)
+                                val progress = (downloadedBytes.toFloat() / MODEL_BYTES).coerceIn(0f, 0.999f)
                                 withContext(Dispatchers.Main.immediate) { onProgress(progress) }
                             }
                         }
@@ -130,21 +143,37 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                 }
             }
 
-            check(partialFile.isFile && partialFile.length() >= MIN_MODEL_BYTES) {
+            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+            check(partialFile.isFile && partialFile.length() == MODEL_BYTES && actualHash == MODEL_SHA256) {
                 partialFile.delete()
-                "اكتمل تنزيل ملف أصغر من المتوقع؛ لم يتم اعتماد الملف."
+                "لم يطابق ملف Qwen3 الحجم أو البصمة الرسمية؛ حُذف الملف غير السليم تلقائيًا."
             }
             if (modelFile.exists()) modelFile.delete()
             if (!partialFile.renameTo(modelFile)) {
                 partialFile.copyTo(modelFile, overwrite = true)
                 partialFile.delete()
             }
-            check(modelFile.isFile && modelFile.length() >= MIN_MODEL_BYTES) {
-                "تعذر حفظ ملف النموذج كاملًا."
+            check(modelFile.isFile && isValidModelFile(modelFile)) {
+                modelFile.delete()
+                "تعذر التحقق من ملف النموذج بعد حفظه."
             }
             withContext(Dispatchers.Main.immediate) { onProgress(1f) }
             modelFile
         }
+
+    private fun isValidModelFile(file: File): Boolean {
+        if (!file.isFile || file.length() != MODEL_BYTES) return false
+        val digest = MessageDigest.getInstance("SHA-256")
+        file.inputStream().buffered().use { input ->
+            val buffer = ByteArray(256 * 1024)
+            while (true) {
+                val count = input.read(buffer)
+                if (count < 0) break
+                digest.update(buffer, 0, count)
+            }
+        }
+        return digest.digest().joinToString("") { "%02x".format(it) } == MODEL_SHA256
+    }
 
     private suspend fun initializeEngine(file: File) {
         if (isReady) return
