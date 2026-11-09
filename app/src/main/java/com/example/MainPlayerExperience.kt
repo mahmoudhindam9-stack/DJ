@@ -508,6 +508,11 @@ private fun NowPlayingFullScreenV2(
                 color = MaterialTheme.colorScheme.primary
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
+                if (song.id.startsWith("quran:")) {
+                    IconButton(onClick = { navController.navigate("quran_reader") { launchSingleTop = true } }) {
+                        Icon(Icons.Filled.MenuBook, contentDescription = "Open Quran")
+                    }
+                }
                 IconButton(onClick = onQueue) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue")
                 }
