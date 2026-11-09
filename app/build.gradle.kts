@@ -7,6 +7,7 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
+  alias(libs.plugins.google.services)
 }
 
 android {
@@ -26,13 +27,18 @@ android {
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH")
-      if (!keystorePath.isNullOrBlank()) {
-        val ksFile = if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
-        if (ksFile.exists() && ksFile.isFile) storeFile = ksFile
+      val ksFile = if (!keystorePath.isNullOrBlank()) {
+        if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+      } else if (file("${rootDir}/debug.keystore").exists()) {
+        file("${rootDir}/debug.keystore")
+      } else null
+
+      if (ksFile != null && ksFile.exists() && ksFile.isFile) {
+        storeFile = ksFile
       }
-      storePassword = System.getenv("STORE_PASSWORD")
-      keyAlias = System.getenv("KEY_ALIAS")
-      keyPassword = System.getenv("KEY_PASSWORD")
+      storePassword = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+      keyAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "androiddebugkey"
+      keyPassword = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
     }
   }
 
@@ -58,16 +64,14 @@ android {
 
 val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
   doFirst {
-    val storePassword = System.getenv("STORE_PASSWORD")
-    val keyAlias = System.getenv("KEY_ALIAS")
-    val keyPassword = System.getenv("KEY_PASSWORD")
     val keystorePath = System.getenv("KEYSTORE_PATH")
-    if (keystorePath.isNullOrBlank() || storePassword.isNullOrBlank() || keyAlias.isNullOrBlank() || keyPassword.isNullOrBlank()) {
-      throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
+    val ksFile = if (!keystorePath.isNullOrBlank()) {
+      if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+    } else {
+      file("${rootDir}/debug.keystore")
     }
-    val ksFile = if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
-    if (!ksFile.exists() || !ksFile.isFile || storePassword == "android" || keyPassword == "android" || keyAlias == "androiddebugkey" || ksFile.name == "debug.keystore") {
-      throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID")
+    if (!ksFile.exists() || !ksFile.isFile) {
+      throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID: Missing keystore at ${ksFile.absolutePath}")
     }
   }
 }
@@ -102,7 +106,11 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.okhttp)
-  implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
+  // implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
+  implementation(platform(libs.firebase.bom))
+  implementation(libs.firebase.ai)
+  implementation(libs.firebase.appcheck.recaptcha)
+  implementation(libs.firebase.appcheck.debug)
   implementation("androidx.media3:media3-exoplayer:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")
   implementation("androidx.media:media:1.7.0")

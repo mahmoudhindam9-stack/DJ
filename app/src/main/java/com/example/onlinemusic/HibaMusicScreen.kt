@@ -219,36 +219,42 @@ fun HibaMusicScreen(
     }
 
     Column(Modifier.fillMaxSize()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.LibraryMusic, null, Modifier.size(28.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Oldies & Classics", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
-            IconButton(onClick = { scope.launch { refresh(query.trim()) } }) { Icon(Icons.Filled.Refresh, "Refresh") }
-            IconButton(onClick = onShowQueue) { Icon(Icons.Filled.QueueMusic, "Queue") }
-        }
         OutlinedTextField(
-            value = query, onValueChange = { query = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
-            singleLine = true, label = { Text("ابحث في أرشيف الأغاني القديمة") },
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 2.dp),
+            singleLine = true,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
+            placeholder = { Text("ابحث في أرشيف الأغاني القديمة") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
+            trailingIcon = if (query.isNotBlank()) {
+                {
+                    IconButton(onClick = { query = "" }) {
+                        Icon(Icons.Filled.Close, contentDescription = "مسح")
+                    }
+                }
+            } else null,
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
         )
         if (loading && tracks.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (tracks.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(message ?: "لا توجد نتائج متاحة")
-                    TextButton(onClick = { scope.launch { refresh(query.trim()) } }) { Text("إعادة المحاولة") }
-                }
+                TextButton(onClick = { scope.launch { refresh(query.trim()) } }) { Text("إعادة المحاولة") }
             }
         } else {
-            LazyColumn(Modifier.fillMaxSize().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+            LazyColumn(
+                Modifier.fillMaxSize().padding(horizontal = 8.dp),
+                contentPadding = PaddingValues(vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
                 items(tracks, key = { it.url }) { track ->
                     val active = playerController.currentSong?.id == "hiba:" + track.url
                     Card(Modifier.fillMaxWidth()) {
-                        Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Filled.MusicNote, null, Modifier.size(30.dp))
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Filled.MusicNote, null, Modifier.size(24.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(track.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
                             IconButton(onClick = { play(track) }) { Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play") }
@@ -258,7 +264,6 @@ fun HibaMusicScreen(
                         }
                     }
                 }
-                message?.let { item { Text(it, style = MaterialTheme.typography.bodySmall) } }
             }
         }
     }

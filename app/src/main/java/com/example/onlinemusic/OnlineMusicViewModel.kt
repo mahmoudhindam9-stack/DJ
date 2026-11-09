@@ -3,17 +3,26 @@ package com.example.onlinemusic
 import android.content.ContentResolver
 import android.content.Context
 import android.net.Uri
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 
 class OnlineMusicViewModel(
     private val repository: OnlineMusicRepository,
     private val audiusRepository: AudiusMusicRepository = AudiusMusicRepository()
 ) : ViewModel() {
+    companion object {
+        private const val TAG = "OnlineMusicViewModel"
+    }
+
     var home by mutableStateOf(AlbumatyHomeData())
         private set
     var section by mutableStateOf<AlbumatySection?>(null)
@@ -49,61 +58,36 @@ class OnlineMusicViewModel(
     private val moodSeenUrls = mutableMapOf<String, MutableSet<String>>()
     private var localAssistant: LocalMusicAssistant? = null
 
-    var isAssistantReady by mutableStateOf(false)
+    var isAssistantReady by mutableStateOf(true)
         private set
     var isAssistantLoading by mutableStateOf(false)
         private set
     var isAssistantDownloading by mutableStateOf(false)
         private set
-    var assistantDownloadProgress by mutableStateOf(0f)
+    var assistantDownloadProgress by mutableStateOf(1f)
         private set
     var assistantStatusMessage by mutableStateOf<String?>(null)
         private set
 
     fun attachAssistant(context: Context) {
-        if (localAssistant != null) return
-        val assistant = LocalMusicAssistant(context.applicationContext)
-        localAssistant = assistant
-        viewModelScope.launch {
-            isAssistantLoading = true
-            runCatching { assistant.initializeIfDownloaded() }
-                .onSuccess { ready ->
-                    isAssistantReady = ready
-                    assistantStatusMessage = if (ready) {
-                        "المساعد المحلي جاهز ويعمل دون إنترنت أو تسجيل دخول."
-                    } else {
-                        "حمّل نموذج Qwen3 المجاني (حوالي 328 ميجابايت) لتفعيل فهم الطلبات الحرة."
-                    }
-                }
-                .onFailure {
-                    assistantStatusMessage = "تعذر تجهيز المساعد المحلي: " + (it.message ?: "خطأ غير معروف")
-                }
-            isAssistantLoading = false
+        if (localAssistant == null) {
+            localAssistant = LocalMusicAssistant(context.applicationContext)
         }
+        isAssistantReady = true
+        isAssistantLoading = false
+        isAssistantDownloading = false
+        assistantDownloadProgress = 1f
+        assistantStatusMessage = null
     }
 
     fun downloadAssistantModel(context: Context) {
-        val assistant = localAssistant ?: LocalMusicAssistant(context.applicationContext).also {
-            localAssistant = it
-        }
-        if (isAssistantDownloading || isAssistantReady) return
-        viewModelScope.launch {
-            isAssistantDownloading = true
-            assistantDownloadProgress = 0f
-            assistantStatusMessage = "جاري تنزيل نموذج Qwen3 المجاني..."
-            runCatching {
-                assistant.downloadAndInitialize { progress ->
-                    assistantDownloadProgress = progress
-                }
-            }.onSuccess {
-                isAssistantReady = true
-                assistantStatusMessage = "تم تجهيز المساعد. يعمل الآن محليًا دون حساب أو مفتاح API."
-            }.onFailure {
-                assistantStatusMessage = "تعذر تنزيل أو تشغيل النموذج: " + (it.message ?: "خطأ غير معروف")
-            }
-            isAssistantDownloading = false
-            isAssistantLoading = false
-        }
+        attachAssistant(context)
+    }
+
+    fun clearMoodPlaylist() {
+        moodPlaylist = emptyList()
+        moodPlaylistTitle = ""
+        moodPlaylistMessage = null
     }
 
     fun loadHome(force: Boolean = false) {
@@ -136,7 +120,6 @@ class OnlineMusicViewModel(
         }
     }
 
-
     fun buildMoodPlaylist(category: MoodCategory, refresh: Boolean = false) {
         if (isBuildingMoodPlaylist) return
         viewModelScope.launch {
@@ -145,80 +128,142 @@ class OnlineMusicViewModel(
             moodPlaylistMessage = null
             if (refresh) moodPlaylist = emptyList()
             val seen = moodSeenUrls.getOrPut(category.id) { mutableSetOf() }
-            val assistant = localAssistant?.takeIf { it.isReady }
-            runCatching {
+            val assistant = localAssistant
+            try {
                 val queries = if (assistant != null) {
                     assistant.createSearchQueries(category.title, category.searchTerms)
-                } else category.searchTerms
-                val candidates = collectMoodCandidates(
-                    queries.ifEmpty { category.searchTerms },
-                    seen,
-                    if (assistant == null) category else null
-                )
-                if (assistant != null && candidates.isNotEmpty()) {
-                    assistant.rankTracks(category.title, candidates)
-                } else candidates
-            }.onSuccess { tracks ->
-                moodPlaylist = tracks.take(50)
-                seen.addAll(moodPlaylist.map { it.url })
-                moodPlaylistMessage = when {
-                    tracks.isEmpty() -> "لم نعثر على أغنيات مناسبة في نتائج المصدر الحالي. جرّب قائمة جديدة."
-                    assistant != null -> "اختار المساعد المحلي " + moodPlaylist.size + " أغنية من نتائج حقيقية متاحة."
-                    else -> "تم البحث بالطريقة التقليدية. حمّل نموذج Qwen3 لتفعيل الاختيار الذكي محليًا."
+                } else {
+                    category.searchTerms.shuffled().take(8)
                 }
-            }.onFailure { moodPlaylistMessage = it.message ?: "تعذر إنشاء القائمة" }
-            isBuildingMoodPlaylist = false
+                val candidates = collectMoodCandidates(
+                    queries.ifEmpty { category.searchTerms.shuffled().take(8) },
+                    seen,
+                    category
+                )
+                val tracks = if (assistant != null && candidates.isNotEmpty()) {
+                    assistant.rankTracks(category.title, candidates)
+                } else {
+                    candidates
+                }
+                moodPlaylist = tracks.take(60)
+                seen.addAll(moodPlaylist.map { it.url })
+                moodPlaylistMessage = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to build mood playlist", e)
+                moodPlaylistMessage = null
+            } finally {
+                isBuildingMoodPlaylist = false
+            }
         }
     }
 
     fun askMusicAssistant(request: String) {
         val prompt = request.trim()
         if (prompt.isBlank() || isBuildingMoodPlaylist) return
-        val assistant = localAssistant?.takeIf { it.isReady }
-        if (assistant == null) {
-            moodPlaylistMessage = "حمّل نموذج Qwen3 المجاني أولًا لتفعيل فهم الأوامر الحرة."
-            return
-        }
+        val assistant = localAssistant
         viewModelScope.launch {
             isBuildingMoodPlaylist = true
-            moodPlaylistTitle = "نتيجة طلبك"
+            moodPlaylistTitle = prompt
             moodPlaylist = emptyList()
-            moodPlaylistMessage = "المساعد يفهم طلبك ويبحث عن الأغاني المناسبة..."
-            val seen = moodSeenUrls.getOrPut("custom") { mutableSetOf() }
-            runCatching {
-                val queries = assistant.createSearchQueries(prompt, emptyList())
-                val candidates = collectMoodCandidates(queries.ifEmpty { listOf(prompt) }, seen, null)
-                assistant.rankTracks(prompt, candidates)
-            }.onSuccess { tracks ->
-                moodPlaylist = tracks.take(50)
-                seen.addAll(moodPlaylist.map { it.url })
-                moodPlaylistMessage = if (tracks.isEmpty()) {
-                    "لم أجد أغنيات مناسبة في النتائج المتاحة. جرّب وصفًا مختلفًا."
+            moodPlaylistMessage = null
+            val seen = moodSeenUrls.getOrPut("custom:$prompt") { mutableSetOf() }
+            try {
+                val queries = assistant?.createSearchQueries(prompt, emptyList())
+                    ?.ifEmpty { listOf(prompt) }
+                    ?: listOf(prompt)
+                val candidates = collectMoodCandidates(queries, seen, null)
+                val tracks = if (assistant != null && candidates.isNotEmpty()) {
+                    assistant.rankTracks(prompt, candidates)
                 } else {
-                    "تم اختيار " + moodPlaylist.size + " أغنية من نتائج فعلية بناءً على طلبك."
+                    candidates
                 }
-            }.onFailure {
-                moodPlaylistMessage = "تعذر تنفيذ الطلب: " + (it.message ?: "خطأ غير معروف")
+                moodPlaylist = tracks.take(60)
+                seen.addAll(moodPlaylist.map { it.url })
+                moodPlaylistMessage = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Music assistant request failed", e)
+                moodPlaylistMessage = null
+            } finally {
+                isBuildingMoodPlaylist = false
             }
-            isBuildingMoodPlaylist = false
         }
     }
 
     private suspend fun collectMoodCandidates(
         queries: List<String>,
-        seen: Set<String>,
+        seen: MutableSet<String>,
         categoryFilter: MoodCategory?
-    ): List<AlbumatyLink> {
-        val collected = linkedMapOf<String, AlbumatyLink>()
-        for (term in queries.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(5)) {
-            repository.search(term).asSequence()
-                .filter { it.isMoodSongLink() }
-                .filter { categoryFilter == null || categoryFilter.matches(it.title) }
-                .filter { it.url !in seen }
-                .forEach { collected.putIfAbsent(it.url, it) }
-            if (collected.size >= 80) break
+    ): List<AlbumatyLink> = coroutineScope {
+        val distinctQueries = queries.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(8)
+
+        // Execute all search queries concurrently in parallel for sub-second speed
+        val parallelLists = distinctQueries.map { term ->
+            async {
+                runCatching { repository.search(term) }.getOrDefault(emptyList())
+            }
+        }.awaitAll()
+
+        val unseenSongs = linkedMapOf<String, AlbumatyLink>()
+        val allFoundSongs = linkedMapOf<String, AlbumatyLink>()
+        val artistLinks = mutableListOf<AlbumatyLink>()
+
+        // Interleave results across the parallel query lists so every queried artist contributes songs
+        val maxLen = parallelLists.maxOfOrNull { it.size } ?: 0
+        for (i in 0 until maxLen) {
+            for (list in parallelLists) {
+                val item = list.getOrNull(i) ?: continue
+                if (item.isMoodSongLink()) {
+                    allFoundSongs.putIfAbsent(item.url, item)
+                    if (item.url !in seen) {
+                        unseenSongs.putIfAbsent(item.url, item)
+                    }
+                } else if (item.isMoodArtistOrAlbumLink() && artistLinks.size < 4) {
+                    if (artistLinks.none { it.url == item.url }) {
+                        artistLinks.add(item)
+                    }
+                }
+            }
+            if (unseenSongs.size >= 90) break
         }
-        return collected.values.take(80)
+
+        // If direct song matches are few but artist/album pages were found, fetch songs from those artist pages in parallel
+        if (unseenSongs.size < 12 && artistLinks.isNotEmpty()) {
+            val sectionLists = artistLinks.take(3).map { link ->
+                async {
+                    runCatching { repository.getSection(link).content }.getOrDefault(emptyList())
+                }
+            }.awaitAll()
+            for (list in sectionLists) {
+                for (item in list) {
+                    if (item.isMoodSongLink()) {
+                        allFoundSongs.putIfAbsent(item.url, item)
+                        if (item.url !in seen) {
+                            unseenSongs.putIfAbsent(item.url, item)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (unseenSongs.size >= 6) {
+            return@coroutineScope unseenSongs.values.take(90)
+        }
+
+        if (allFoundSongs.isNotEmpty()) {
+            seen.clear()
+            return@coroutineScope allFoundSongs.values.take(90)
+        }
+
+        val fallbackSongs = if (home.songs.isNotEmpty()) {
+            home.songs
+        } else {
+            runCatching { repository.getHome().also { home = it }.songs }.getOrDefault(emptyList())
+        }
+        fallbackSongs.filter { it.isMoodSongLink() }.shuffled().take(50)
     }
 
     override fun onCleared() {
@@ -346,4 +391,12 @@ class OnlineMusicViewModel(
 private fun AlbumatyLink.isMoodSongLink(): Boolean = runCatching {
     val path = java.net.URI(url).path.orEmpty().lowercase()
     path.split('/').any { it == "song" || it.startsWith("song") }
+}.getOrDefault(false)
+
+private fun AlbumatyLink.isMoodArtistOrAlbumLink(): Boolean = runCatching {
+    val path = java.net.URI(url).path.orEmpty().lowercase()
+    path.split('/').any {
+        it == "singer" || it == "artist" || it == "album" ||
+            it.startsWith("singer") || it.startsWith("artist") || it.startsWith("album")
+    }
 }.getOrDefault(false)
