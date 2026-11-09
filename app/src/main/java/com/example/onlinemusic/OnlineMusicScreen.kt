@@ -121,7 +121,10 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
                 .onFailure { message = it.message ?: "فشل تنزيل الأغنية" }
         }
     }
-    LaunchedEffect(Unit) { viewModel.loadHome() }
+    LaunchedEffect(Unit) {
+        viewModel.attachAssistant(context.applicationContext)
+        viewModel.loadHome()
+    }
     LaunchedEffect(query) {
         val trimmed = query.trim()
         if (trimmed.length >= 2) {
@@ -252,7 +255,14 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             onPlay = ::playSong,
             onQueue = ::queueSong,
             onDeck = ::sendToDeck,
-            playerController = playerController
+            playerController = playerController,
+            assistantReady = viewModel.isAssistantReady,
+            assistantLoading = viewModel.isAssistantLoading,
+            assistantDownloading = viewModel.isAssistantDownloading,
+            assistantDownloadProgress = viewModel.assistantDownloadProgress,
+            assistantStatus = viewModel.assistantStatusMessage,
+            onDownloadAssistant = viewModel::downloadAssistantModel,
+            onAskAssistant = viewModel::askMusicAssistant
         )
 
         if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
@@ -326,11 +336,51 @@ private fun MoodPlaylistPanel(
     onPlay: (AlbumatyLink) -> Unit,
     onQueue: (AlbumatyLink) -> Unit,
     onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit,
-    playerController: AudioPlayerController
+    playerController: AudioPlayerController,
+    assistantReady: Boolean,
+    assistantLoading: Boolean,
+    assistantDownloading: Boolean,
+    assistantDownloadProgress: Float,
+    assistantStatus: String?,
+    onDownloadAssistant: () -> Unit,
+    onAskAssistant: (String) -> Unit
 ) {
+    var assistantQuery by rememberSaveable { mutableStateOf("") }
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("AI Mood Playlists", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text("اختر حالتك لتكوين قائمة عربية جديدة", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("اختر حالتك أو اكتب طلبك بالعربية أو الإنجليزية", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            value = assistantQuery,
+            onValueChange = { assistantQuery = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("مثال: شغّل لي مزيكا حماسية مصرية") },
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Go),
+            keyboardActions = KeyboardActions(onGo = {
+                if (assistantQuery.isNotBlank() && assistantReady && !isLoading) onAskAssistant(assistantQuery)
+            })
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Button(
+                onClick = { onAskAssistant(assistantQuery) },
+                enabled = assistantReady && assistantQuery.isNotBlank() && !isLoading,
+                modifier = Modifier.weight(1f)
+            ) { Text("نفّذ طلب الموسيقى") }
+            OutlinedButton(
+                onClick = onDownloadAssistant,
+                enabled = !assistantReady && !assistantDownloading && !assistantLoading
+            ) { Text(if (assistantReady) "المساعد جاهز" else "تحميل Qwen3 • 328 MB") }
+        }
+        if (assistantDownloading) {
+            LinearProgressIndicator(progress = assistantDownloadProgress, modifier = Modifier.fillMaxWidth())
+            Text("تنزيل النموذج: " + (assistantDownloadProgress * 100).toInt() + "%", style = MaterialTheme.typography.labelSmall)
+        } else if (assistantLoading) {
+            LinearProgressIndicator(Modifier.fillMaxWidth())
+            Text("جاري تجهيز المساعد المحلي...", style = MaterialTheme.typography.labelSmall)
+        }
+        assistantStatus?.let {
+            Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
             items(MoodCategory.entries, key = { it.id }) { category ->
                 FilterChip(selected = selectedTitle == category.title, onClick = { onChoose(category) }, label = { Text(category.title) })

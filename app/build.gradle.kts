@@ -18,8 +18,8 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 62
-    versionName = "3.9.4" // Auto-release trigger
+    versionCode = 63
+    versionName = "3.9.5" // Auto-release trigger
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
@@ -102,6 +102,7 @@ dependencies {
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)
   implementation(libs.okhttp)
+  implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
   implementation("androidx.media3:media3-exoplayer:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")
   implementation("androidx.media:media:1.7.0")
