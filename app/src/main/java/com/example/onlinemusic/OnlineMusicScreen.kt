@@ -225,6 +225,35 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             })
         )
 
+        MoodPlaylistPanel(
+            selectedTitle = viewModel.moodPlaylistTitle,
+            tracks = viewModel.moodPlaylist,
+            isLoading = viewModel.isBuildingMoodPlaylist,
+            message = viewModel.moodPlaylistMessage,
+            onChoose = { viewModel.buildMoodPlaylist(it, refresh = true) },
+            onRefresh = {
+                MoodCategory.entries.firstOrNull { it.title == viewModel.moodPlaylistTitle }
+                    ?.let { viewModel.buildMoodPlaylist(it, refresh = true) }
+            },
+            onAddAll = {
+                scope.launch {
+                    var added = 0
+                    viewModel.moodPlaylist.forEach { link ->
+                        runCatching {
+                            val resolved = viewModel.resolveTrack(link)
+                            val audio = resolved.streamUrl ?: error("No stream")
+                            playerController.enqueueOnlineSong(AudioItem(link.url, resolved.title, resolved.artist.ifBlank { "Albumaty" }, resolved.album ?: "Mood Mix", 0L, Uri.parse(audio)))
+                            added++
+                        }
+                    }
+                    message = "تمت إضافة $added أغنية إلى قائمة التشغيل"
+                }
+            },
+            onPlay = ::playSong,
+            onQueue = ::queueSong,
+            playerController = playerController
+        )
+
         if (viewModel.isLoading && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (viewModel.errorMessage != null && viewModel.home.albums.isEmpty() && viewModel.home.songs.isEmpty()) {
