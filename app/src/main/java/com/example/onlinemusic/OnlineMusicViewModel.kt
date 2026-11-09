@@ -37,6 +37,15 @@ class OnlineMusicViewModel(
         private set
 
     private val resolvedTracks = mutableMapOf<String, OnlineMusicTrack>()
+    var moodPlaylist by mutableStateOf<List<AlbumatyLink>>(emptyList())
+        private set
+    var moodPlaylistTitle by mutableStateOf("")
+        private set
+    var isBuildingMoodPlaylist by mutableStateOf(false)
+        private set
+    var moodPlaylistMessage by mutableStateOf<String?>(null)
+        private set
+    private val moodSeenUrls = mutableMapOf<String, MutableSet<String>>()
 
     fun loadHome(force: Boolean = false) {
         if (isLoading) return
@@ -65,6 +74,39 @@ class OnlineMusicViewModel(
                 .onSuccess { albumatySearchResults = it }
                 .onFailure { errorMessage = it.message ?: "Search failed" }
             isSearchingAlbumaty = false
+        }
+    }
+
+
+    fun buildMoodPlaylist(category: MoodCategory, refresh: Boolean = false) {
+        if (isBuildingMoodPlaylist) return
+        viewModelScope.launch {
+            isBuildingMoodPlaylist = true
+            moodPlaylistTitle = category.title
+            moodPlaylistMessage = null
+            if (refresh) moodPlaylist = emptyList()
+            val seen = moodSeenUrls.getOrPut(category.id) { mutableSetOf() }
+            runCatching {
+                val collected = linkedMapOf<String, AlbumatyLink>()
+                for (term in category.searchTerms) {
+                    repository.search(term).asSequence()
+                        .filter { it.isMoodSongLink() }
+                        .filter { category.matches(it.title) }
+                        .filter { it.url !in seen }
+                        .forEach { collected.putIfAbsent(it.url, it) }
+                    if (collected.size >= 50) break
+                }
+                collected.values.take(50)
+            }.onSuccess { tracks ->
+                moodPlaylist = tracks
+                seen.addAll(tracks.map { it.url })
+                moodPlaylistMessage = if (tracks.isEmpty()) {
+                    "لم نعثر على أغنيات تطابق هذا التصنيف بدقة. جرّب التجديد لاحقًا."
+                } else {
+                    "تم العثور على ${tracks.size} أغنية مطابقة. لم نضف نتائج غير مؤكدة."
+                }
+            }.onFailure { moodPlaylistMessage = it.message ?: "تعذر إنشاء القائمة" }
+            isBuildingMoodPlaylist = false
         }
     }
 
@@ -183,3 +225,8 @@ class OnlineMusicViewModel(
     suspend fun downloadAudiusTrack(audioUrl: String, resolver: ContentResolver, destination: Uri): Long =
         OnlineDownloadEngine.downloadToUri(audioUrl, resolver, destination, referer = "https://audius.co/")
 }
+
+private fun AlbumatyLink.isMoodSongLink(): Boolean = runCatching {
+    val path = java.net.URI(url).path.orEmpty().lowercase()
+    path.split('/').any { it == "song" || it.startsWith("song") }
+}.getOrDefault(false)
