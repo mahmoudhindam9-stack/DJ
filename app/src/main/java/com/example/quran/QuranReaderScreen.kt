@@ -200,17 +200,17 @@ fun QuranReaderScreen(playerController: AudioPlayerController, onBack: () -> Uni
             var previousSurah = -1
             displayedVerses.forEachIndexed { index, verse ->
                 if (verse.surahNumber != previousSurah) {
-                    if (index > 0) append("\\n\\n")
+                    if (index > 0) append("\n\n")
                     if (verse.numberInSurah == 1) {
                         pushStyle(SpanStyle(color = mushafGreen, fontWeight = FontWeight.Bold, fontSize = 22.sp))
                         append("۞  " + verse.surahName + "  ۞")
                         pop()
-                        append("\\n")
+                        append("\n")
                         if (verse.surahNumber != 1 && verse.surahNumber != 9) {
                             pushStyle(SpanStyle(color = mushafGold, fontWeight = FontWeight.Medium, fontSize = 21.sp))
                             append("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ")
                             pop()
-                            append("\\n")
+                            append("\n")
                         }
                     }
                     previousSurah = verse.surahNumber
