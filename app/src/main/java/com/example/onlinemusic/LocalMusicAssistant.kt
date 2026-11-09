@@ -46,60 +46,60 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
         // Semantic mood & vibe repertoire pools (actual songs & artists with that musical character, NEVER literal category labels)
         val semanticVibePools: List<Pair<List<String>, List<String>>> = listOf(
             listOf("حزين", "حزينه", "فراق", "دموع", "وجع", "جرح", "كئيب", "زعلان", "وداع", "خذلان", "موجوع", "بكي", "sad") to listOf(
-                "تامر عاشور", "هيجيلي موجوع", "شيرين كده يا قلبي", "رامي جمال",
-                "مسلم اتنسيت", "حمزة نمرة فاضي شوية", "أحمد كامل", "وائل جسار خليني ذكرى",
-                "أنغام ياريتك فاهمني", "تامر عاشور بقول عادي", "شيرين جرح تاني",
-                "مصطفى كامل", "هاني شاكر", "تامر حسني نسيانك صعب", "أصالة", "آدم"
+                "تامر عاشور هيجيلي موجوع", "تامر عاشور بقول عادي", "شيرين كده يا قلبي", "رامي جمال سقف",
+                "مسلم اتنسيت", "حمزة نمرة فاضي شوية", "احمد كامل", "وائل جسار خليني ذكرى",
+                "انغام ياريتك فاهمني", "انغام اكتبلك تعهد", "شيرين جرح تاني",
+                "مصطفى كامل", "هاني شاكر", "تامر حسني نسيانك صعب", "اصالة", "ادم"
             ),
             listOf("فرح", "سعاده", "بهجه", "مبهجه", "مبسوط", "فرحان", "انبساط", "happy", "joy") to listOf(
-                "أحمد سعد اليوم الحلو", "عمرو دياب", "حماقي", "تامر حسني حلو المكان",
-                "نانسي عجرم", "حسين الجسمي", "راغب علامة", "أحمد سعد اختياراتي",
-                "سعد لمجرد", "محمود العسيلي", "بهاء سلطان", "روبي"
+                "احمد سعد اليوم الحلو", "احمد سعد اختياراتي", "عمرو دياب يا انا يا لا", "حماقي يا ستار",
+                "تامر حسني حلو المكان", "تامر حسني هدلعني", "نانسي عجرم صح صح", "حسين الجسمي بالبنط العريض",
+                "راغب علامة اللي باعنا", "سعد لمجرد لمعلم", "محمود العسيلي", "بهاء سلطان دلعنا", "روبي حته تانيه"
             ),
             listOf("حماس", "حماسيه", "جيم", "رياضه", "طاقه", "نشاط", "تمرين", "باور", "تشجيع", "workout", "gym", "sport") to listOf(
-                "ويجز", "مروان بابلو", "مروان موسى", "عفروتو",
-                "أحمد سعد", "كايروكي", "شارموفرز", "عصام صاصا",
+                "ويجز دورك جاي", "ويجز", "مروان بابلو", "مروان موسى بطل عالم", "عفروتو",
+                "احمد سعد وسع وسع", "كايروكي", "شارموفرز", "عصام صاصا",
                 "حسن شاكوش", "تامر حسني", "ديسكو مصر"
             ),
             listOf("رقص", "افراح", "زفه", "شعبي", "مهرجان", "مهرجانات", "حفله", "خطوبه", "دخله", "حنه", "party", "dance") to listOf(
-                "محمود الليثي", "حكيم", "أحمد سعد", "رضا البحراوي",
-                "حسن شاكوش", "عمر كمال", "بوسي", "عبد الباسط حمودة",
+                "محمود الليثي", "حكيم حلاوة روح", "احمد سعد وسع وسع", "رضا البحراوي",
+                "حسن شاكوش بنت الجيران", "عمر كمال", "بوسي اه يا دنيا", "عبد الباسط حمودة",
                 "عصام صاصا", "سعد الصغير", "فارس كرم", "حمو بيكا"
             ),
             listOf("حب", "رومانسي", "رومانسيه", "عشق", "غزل", "حبيبي", "حبيبتي", "مشاعر", "love", "romance") to listOf(
-                "إليسا", "عمرو دياب", "تامر حسني", "وائل جسار",
-                "فضل شاكر", "ماجد المهندس", "تامر عاشور", "شيرين",
-                "حماقي", "نانسي عجرم", "رامي صبري", "كاظم الساهر", "وائل كفوري", "أنغام"
+                "اليسا اجمل احساس", "اليسا حالة حب", "عمرو دياب تملي معاك", "تامر حسني بحبك",
+                "وائل جسار مليون احبك", "فضل شاكر يا غايب", "ماجد المهندس", "تامر عاشور تيجي نتراهن",
+                "شيرين حبه جنة", "حماقي ما بلاش", "نانسي عجرم", "رامي صبري", "كاظم الساهر", "انغام"
             ),
-            listOf("هادئ", "هادئه", "هدوء", "ليل", "ليليه", "روقان", "استرخاء", "نوم", "رايق", "رايقه", "سكون", "راحة", "chill", "relax", "sleep") to listOf(
-                "فيروز", "عمر خيرت", "كاظم الساهر", "فضل شاكر",
-                "مروان خوري", "إليسا", "أنغام", "عبادي الجوهر",
+            listOf("هادئ", "هادئه", "هدوء", "ليل", "ليليه", "روقان", "استرخاء", "نوم", "رايق", "رايقه", "سكون", "راحه", "chill", "relax", "sleep") to listOf(
+                "فيروز انا لحبيبي", "فيروز سكن الليل", "عمر خيرت", "كاظم الساهر", "فضل شاكر",
+                "مروان خوري كل القصايد", "اليسا", "انغام", "عبادي الجوهر",
                 "ماجدة الرومي", "عبير نعمة", "فايا يونان", "حمزة نمرة"
             ),
             listOf("سفر", "طريق", "قياده", "عربيه", "سياره", "مشوار", "رحله", "drive", "road") to listOf(
-                "كايروكي", "عمرو دياب", "ويجز", "حماقي",
-                "شارموفرز", "مسار إجباري", "محمود العسيلي", "توليت",
-                "مروان موسى", "تامر حسني", "أمير عيد"
+                "كايروكي روما", "كايروكي", "عمرو دياب", "ويجز البخت", "حماقي",
+                "شارموفرز", "مسار اجباري", "محمود العسيلي", "توليت",
+                "مروان موسى", "تامر حسني عيش بشوقك", "امير عيد"
             ),
             listOf("ميلاد", "عيد ميلاد", "بيرثداي", "birthday") to listOf(
-                "تامر حسني كل سنة", "نانسي عجرم سنة حلوة", "وليد توفيق انزل يا جميل",
-                "حماقي", "عمرو دياب", "راغب علامة", "حسين الجسمي"
+                "تامر حسني كل سنة وانت طيب", "نانسي عجرم سنة حلوة يا جميل", "وليد توفيق انزل يا جميل",
+                "حمادة هلال عيد ميلاد", "احمد سعد اليوم الحلو", "تامر حسني حلو المكان", "حسين الجسمي"
             ),
             listOf("قديم", "طرب", "كلاسيك", "الزمن الجميل", "اصاله", "عمالقه", "تراث", "classic") to listOf(
-                "أم كلثوم", "عبد الحليم حافظ", "وردة الجزائرية", "فريد الأطرش",
-                "محمد عبد الوهاب", "فايزة أحمد", "نجاة الصغيرة", "شادية",
+                "ام كلثوم", "عبد الحليم حافظ", "وردة الجزائرية", "فريد الاطرش",
+                "محمد عبد الوهاب", "فايزة احمد", "نجاة الصغيرة", "شادية",
                 "جورج وسوف", "ميادة الحناوي", "صباح فخري", "وديع الصافي"
             ),
             listOf("موال", "مواويل", "صعيدي", "شجن") to listOf(
-                "رضا البحراوي", "عبد الباسط حمودة", "طارق الشيخ", "جورج وسوف",
-                "أحمد عدوية", "حكيم", "وديع الصافي", "صباح فخري", "محمد رشدي"
+                "موال", "رضا البحراوي", "عبد الباسط حمودة", "طارق الشيخ", "جورج وسوف",
+                "احمد عدوية", "حكيم", "وديع الصافي", "صباح فخري", "محمد رشدي"
             ),
             listOf("خليجي", "خليجيه", "سعودي", "سعوديه", "كويتي", "اماراتي", "قطري", "بحريني", "عماني", "يمني") to listOf(
                 "محمد عبده", "راشد الماجد", "ماجد المهندس", "عبد المجيد عبد الله",
-                "طلال مداح", "عبادي الجوهر", "حسين الجسمي", "أصالة", "أحلام", "نبيل شعيل"
+                "طلال مداح", "عبادي الجوهر", "حسين الجسمي", "ابو بكر سالم", "خالد عبد الرحمن", "نبيل شعيل"
             ),
             listOf("شامي", "شاميه", "لبناني", "لبنانيه", "سوري", "سوريه", "اردني", "فلسطيني", "دبكه") to listOf(
-                "فيروز", "جورج وسوف", "وائل كفوري", "نانسي عجرم", "إليسا",
+                "فيروز", "جورج وسوف", "وائل كفوري", "نانسي عجرم", "اليسا",
                 "ناصيف زيتون", "وديع الصافي", "صباح فخري", "ملحم بركات", "الشامي", "عاصي الحلاني"
             ),
             listOf("عراقي", "عراقيه", "بغدادي") to listOf(
@@ -111,20 +111,22 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
                 "سميرة سعيد", "صابر الرباعي", "لطفي بوشناق", "ذكرى", "الشاب مامي"
             ),
             listOf("مصري", "مصريه", "مصر") to listOf(
-                "عمرو دياب", "تامر حسني", "شيرين", "أحمد سعد",
-                "تامر عاشور", "أنغام", "حماقي", "كايروكي", "بهاء سلطان"
+                "عمرو دياب", "تامر حسني", "شيرين", "احمد سعد",
+                "تامر عاشور", "انغام", "حماقي", "كايروكي", "بهاء سلطان"
             ),
             listOf("راب", "تراب", "هيب هوب", "اندرجراوند", "rap", "trap") to listOf(
-                "ويجز", "مروان بابلو", "مروان موسى", "عفروتو", "أبيوسف", "كايروكي", "الجوكر"
+                "ويجز", "مروان بابلو", "مروان موسى", "عفروتو", "ابيوسف", "كايروكي", "الجوكر"
             ),
             listOf("جديد", "جديده", "احدث", "ترند", "2026", "2025", "حصري", "new", "trending") to listOf(
-                "أحمد سعد", "عمرو دياب", "تامر عاشور", "توليت", "تامر حسني", "ويجز", "شيرين", "أنغام"
+                "احمد سعد", "عمرو دياب", "تامر عاشور", "توليت", "تامر حسني", "ويجز", "شيرين", "انغام"
             )
         )
 
-        for ((triggers, repertoire) in semanticVibePools) {
-            if (triggers.any { normalized.contains(normalizeArabic(it)) }) {
-                matchedPool.addAll(repertoire.shuffled())
+        if (matchedPool.isEmpty()) {
+            for ((triggers, repertoire) in semanticVibePools) {
+                if (triggers.any { normalized.contains(normalizeArabic(it)) }) {
+                    matchedPool.addAll(repertoire.shuffled())
+                }
             }
         }
 
@@ -154,7 +156,6 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
         val specificPhrase = userSpecificTerms.joinToString(" ").trim()
         val finalQueries = mutableListOf<String>()
 
-        // If the user explicitly named an artist or specific song title (not just a mood word), put it first
         if (specificPhrase.isNotBlank()) {
             finalQueries.add(specificPhrase)
         }
@@ -163,27 +164,38 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
 
         if (finalQueries.isEmpty()) {
             finalQueries.addAll(
-                listOf("عمرو دياب", "تامر عاشور", "أحمد سعد", "شيرين", "تامر حسني", "أنغام", "كاظم الساهر", "فيروز").shuffled()
+                listOf("عمرو دياب", "تامر عاشور", "احمد سعد", "شيرين", "تامر حسني", "انغام", "كاظم الساهر", "فيروز").shuffled()
             )
         }
 
         return finalQueries
-            .map { it.trim() }
+            .map { it.trim().replace(Regex("[أإآ]"), "ا") }
             .filter { it.isNotBlank() }
             .distinct()
-            .take(8)
+            .take(10)
     }
 
     /**
-     * Ranks and interleaves candidate songs so the playlist has rich artist diversity
-     * and avoids clumping songs that merely contain the literal category label.
+     * Ranks, filters, and interleaves candidate songs so the playlist has rich artist diversity,
+     * excludes contradictory mood tracks, and avoids clumping songs that merely contain the literal category label.
      */
     internal fun rankAndDiversifyTracks(request: String, candidates: List<AlbumatyLink>): List<AlbumatyLink> {
         val normRequest = normalizeArabic(request)
 
+        // Apply mood-specific negative filter even for free-form requests
+        val matchedCategory = MoodCategory.entries.firstOrNull {
+            normalizeArabic(it.title) == normRequest || normRequest.contains(normalizeArabic(it.title))
+        }
+        val filteredCandidates = candidates
+            .distinctBy { it.url }
+            .filter { track ->
+                matchedCategory?.isAllowed(track.title) ?: isFreeFormTrackAllowed(normRequest, track.title)
+            }
+            .ifEmpty { candidates.distinctBy { it.url } }
+
         // Group candidates by inferred artist/bucket so we interleave artists smoothly
         val buckets = linkedMapOf<String, MutableList<AlbumatyLink>>()
-        for (track in candidates.distinctBy { it.url }) {
+        for (track in filteredCandidates) {
             val cleanTitle = track.title
                 .replace(Regex("^(?:اغنية|أغنية|تحميل|استماع)\\s+"), "")
                 .trim()
@@ -210,7 +222,7 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
         }
 
         // De-prioritize tracks whose title ONLY matches a literal mood word like "حزين"
-        val literalMoodWords = setOf("حزين", "حزينه", "سفر", "نوم", "استرخاء", "هدوء", "رياضه")
+        val literalMoodWords = setOf("حزين", "حزينه", "سفر", "نوم", "استرخاء", "هدوء", "رياضه", "سعاده", "بهجه")
         val isGenericMoodRequest = literalMoodWords.any { normRequest == it || normRequest.contains(it) }
 
         return if (isGenericMoodRequest) {
@@ -228,6 +240,23 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
         } else {
             interleaved
         }
+    }
+
+    private fun isFreeFormTrackAllowed(normRequest: String, title: String): Boolean {
+        val normTitle = normalizeArabic(title)
+        val isSadQuery = listOf("حزين", "فراق", "دموع", "وجع", "جرح").any { normRequest.contains(it) }
+        if (isSadQuery && listOf("مهرجان", "فرح", "رقص", "زفه", "سنه حلوه", "اليوم الحلو").any { normTitle.contains(it) }) {
+            return false
+        }
+        val isHappyOrPartyQuery = listOf("فرح", "سعاده", "بهجه", "رقص", "ميلاد").any { normRequest.contains(it) }
+        if (isHappyOrPartyQuery && listOf("حزين", "دموع", "فراق", "جرح", "موجوع", "وداع").any { normTitle.contains(it) }) {
+            return false
+        }
+        val isCalmQuery = listOf("هدوء", "نوم", "استرخاء", "ليل", "هادئ").any { normRequest.contains(it) }
+        if (isCalmQuery && listOf("مهرجان", "رقص", "زفه", "وسع وسع", "شاكوش", "بيكا", "صاصا").any { normTitle.contains(it) }) {
+            return false
+        }
+        return true
     }
 
     private fun normalizeArabic(text: String): String {

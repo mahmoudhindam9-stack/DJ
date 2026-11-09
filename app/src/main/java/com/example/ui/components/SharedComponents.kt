@@ -1,77 +1,56 @@
 package com.example.ui.components
 
-import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlin.math.cos
-import kotlin.math.sin
 
-/**
- * Premium global background: subtle animated light fields create depth without
- * adding a heavyweight 3D engine or changing any app behaviour.
- */
 @Composable
-fun PremiumBackdrop(content: @Composable BoxScope.() -> Unit) {
-    val transition = rememberInfiniteTransition(label = "premium-backdrop")
-    val phase by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(12000, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "premium-phase"
-    )
-
-    val backgroundColor = MaterialTheme.colorScheme.background
-    val primaryColor = MaterialTheme.colorScheme.primary
-    val secondaryColor = MaterialTheme.colorScheme.secondary
-    val tertiaryColor = MaterialTheme.colorScheme.tertiary
+fun PremiumBackdrop(
+    modifier: Modifier = Modifier,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val bgTop = MaterialTheme.colorScheme.background
+    val bgMid = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f)
+    val bgBottom = MaterialTheme.colorScheme.background
+    val primaryGlow = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+    val secondaryGlow = MaterialTheme.colorScheme.secondary.copy(alpha = 0.09f)
 
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
-            .drawBehind {
-                drawRect(backgroundColor)
-                val w = size.width
-                val h = size.height
-                val x = w * (0.18f + 0.12f * sin(phase * Math.PI * 2.0).toFloat())
-                val y = h * (0.18f + 0.08f * cos(phase * Math.PI * 2.0).toFloat())
-                drawCircle(
-                    color = primaryColor.copy(alpha = 0.12f),
-                    radius = maxOf(w, h) * 0.42f,
-                    center = Offset(x, y)
+            .background(
+                Brush.verticalGradient(colors = listOf(bgTop, bgMid, bgBottom))
+            )
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(primaryGlow, Color.Transparent),
+                    center = Offset(900f, 180f),
+                    radius = 780f
                 )
-                drawCircle(
-                    color = secondaryColor.copy(alpha = 0.08f),
-                    radius = maxOf(w, h) * 0.34f,
-                    center = Offset(w * 0.84f - x * 0.14f, h * 0.76f)
+            )
+            .background(
+                Brush.radialGradient(
+                    colors = listOf(secondaryGlow, Color.Transparent),
+                    center = Offset(120f, 1500f),
+                    radius = 820f
                 )
-                drawCircle(
-                    color = tertiaryColor.copy(alpha = 0.045f),
-                    radius = maxOf(w, h) * 0.25f,
-                    center = Offset(w * 0.54f, h * 0.42f)
-                )
-            },
+            ),
         content = content
     )
 }
@@ -79,178 +58,135 @@ fun PremiumBackdrop(content: @Composable BoxScope.() -> Unit) {
 @Composable
 fun DjSurfaceCard(
     modifier: Modifier = Modifier,
-    color: Color = MaterialTheme.colorScheme.surface,
-    borderColor: Color = MaterialTheme.colorScheme.outline.copy(alpha = 0.22f),
+    tonal: Boolean = false,
+    color: Color = if (tonal) {
+        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.88f)
+    } else {
+        MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+    },
+    borderColor: Color = MaterialTheme.colorScheme.primary.copy(alpha = if (tonal) 0.36f else 0.20f),
+    shape: Shape = RoundedCornerShape(20.dp),
+    elevation: Dp = if (tonal) 6.dp else 4.dp,
     onClick: (() -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.985f else 1f,
-        animationSpec = tween(140),
-        label = "card-scale"
-    )
-    val rotationY = if (pressed) 1.2f else 0f
-    val rotationX = if (pressed) -1.2f else 0f
-
-    val clickModifier = if (onClick != null) {
-        Modifier.clickable(
-            interactionSource = interactionSource,
-            indication = null,
-            onClick = onClick
+    val borderBrush = Brush.linearGradient(
+        colors = listOf(
+            borderColor,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.14f),
+            borderColor.copy(alpha = (borderColor.alpha * 0.75f).coerceIn(0f, 1f))
         )
-    } else Modifier
+    )
+    val finalModifier = if (onClick != null) {
+        modifier.clip(shape).clickable(onClick = onClick)
+    } else {
+        modifier
+    }
+    Card(
+        modifier = finalModifier,
+        shape = shape,
+        colors = CardDefaults.cardColors(containerColor = color),
+        border = BorderStroke(1.dp, borderBrush),
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+        content = content
+    )
+}
 
+@Composable
+fun PremiumStatusPill(
+    text: String,
+    active: Boolean = false,
+    color: Color = MaterialTheme.colorScheme.primary
+) {
+    val activeColor = if (active) color else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
-        modifier = modifier
-            .then(clickModifier)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                this.rotationX = rotationX
-                this.rotationY = rotationY
-                cameraDistance = 28f * density
-                shadowElevation = if (pressed) 18f else 9f
-            },
-        shape = RoundedCornerShape(22.dp),
-        color = color.copy(alpha = if (pressed) 0.98f else 0.97f),
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, borderColor.copy(alpha = if (pressed) 0.46f else 0.32f)),
-        tonalElevation = 3.dp,
-        shadowElevation = if (pressed) 18.dp else 9.dp
+        shape = RoundedCornerShape(999.dp),
+        color = activeColor.copy(alpha = if (active) 0.16f else 0.10f),
+        border = BorderStroke(1.dp, activeColor.copy(alpha = if (active) 0.45f else 0.22f))
     ) {
-        Column(content = content)
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(7.dp)
+                    .clip(CircleShape)
+                    .background(activeColor)
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.ExtraBold,
+                letterSpacing = 0.8.sp,
+                color = activeColor
+            )
+        }
     }
 }
 
 @Composable
 fun DjSectionHeader(
     title: String,
-    modifier: Modifier = Modifier
+    subtitle: String? = null,
+    badge: String? = null
 ) {
-    val headerPrimary = MaterialTheme.colorScheme.primary
-    val headerSecondary = MaterialTheme.colorScheme.secondary
-
     Row(
-        modifier = modifier.fillMaxWidth().padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.ExtraBold,
-            color = MaterialTheme.colorScheme.primary,
-            letterSpacing = 1.2.sp,
-            modifier = Modifier.weight(1f)
-        )
-        Box(
-            modifier = Modifier
-                .width(54.dp)
-                .height(3.dp)
-                .clip(RoundedCornerShape(50))
-                .drawBehind {
-                    drawRect(
-                        Brush.horizontalGradient(
-                            listOf(
-                                headerPrimary,
-                                headerSecondary,
-                                Color.Transparent
-                            )
-                        )
-                    )
-                }
-        )
-    }
-}
-
-@Composable
-fun DjIconButton(
-    icon: ImageVector,
-    contentDescription: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-    size: Int = 48
-) {
-    val interactionSource = remember { MutableInteractionSource() }
-    val pressed by interactionSource.collectIsPressedAsState()
-    val scale by animateFloatAsState(
-        if (pressed) 0.92f else 1f,
-        animationSpec = tween(120),
-        label = "icon-scale"
-    )
-
-    Surface(
-        modifier = modifier
-            .size(size.dp)
-            .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
-                rotationX = if (pressed) -4f else 0f
-                rotationY = if (pressed) 4f else 0f
-                cameraDistance = 24f * density
-                shadowElevation = if (pressed) 16f else 6f
-            }
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            ),
-        shape = RoundedCornerShape(17.dp),
-        color = containerColor.copy(alpha = 0.92f),
-        contentColor = contentColor,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.30f)),
-        shadowElevation = if (pressed) 14.dp else 6.dp
-    ) {
-        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-            Icon(imageVector = icon, contentDescription = contentDescription)
-        }
-    }
-}
-
-@Composable
-fun PremiumStatusPill(
-    text: String,
-    active: Boolean = true,
-    modifier: Modifier = Modifier
-) {
-    val transition = rememberInfiniteTransition(label = "status-pulse")
-    val pulse by transition.animateFloat(
-        initialValue = 0.70f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(tween(1400), RepeatMode.Reverse),
-        label = "status-alpha"
-    )
-    Surface(
-        modifier = modifier,
-        shape = RoundedCornerShape(50),
-        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-        border = BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.primary.copy(alpha = if (active) pulse else 0.25f)
-        )
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+            modifier = Modifier.weight(1f),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                Modifier
-                    .size(7.dp)
-                    .clip(RoundedCornerShape(50))
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(22.dp)
+                    .clip(RoundedCornerShape(99.dp))
                     .background(
-                        if (active) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant
+                        Brush.verticalGradient(
+                            listOf(
+                                MaterialTheme.colorScheme.primary,
+                                MaterialTheme.colorScheme.secondary
+                            )
+                        )
                     )
             )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text,
-                style = MaterialTheme.typography.labelMedium,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = MaterialTheme.colorScheme.onBackground
+                )
+                if (!subtitle.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+        if (!badge.isNullOrBlank()) {
+            Surface(
+                shape = RoundedCornerShape(999.dp),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.38f))
+            ) {
+                Text(
+                    text = badge,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
         }
     }
 }

@@ -7,7 +7,6 @@ on:
       - master
     paths-ignore:
       - 'README.md'
-      - '.github/**'
 
 jobs:
   build-and-release:
@@ -36,37 +35,51 @@ jobs:
         run: |
           if [ -f gradlew ]; then chmod +x gradlew; fi
 
-      - name: Read Version Name
+      - name: Determine Release Version & Bump If Tag Exists
         id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          VERSION_NAME=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
-          VERSION="v$VERSION_NAME"
+          BASE_VERSION=$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts)
+          BASE_CODE=$(grep -oP 'versionCode\s*=\s*\K[0-9]+' app/build.gradle.kts)
+          CANDIDATE_TAG="v$BASE_VERSION"
+          if gh release view "$CANDIDATE_TAG" > /dev/null 2>&1; then
+            NEW_VERSION="${BASE_VERSION}.${{ github.run_number }}"
+            NEW_CODE=$((BASE_CODE + ${{ github.run_number }}))
+            sed -i "s/versionName = \"$BASE_VERSION\"/versionName = \"$NEW_VERSION\"/" app/build.gradle.kts
+            sed -i "s/versionCode = $BASE_CODE/versionCode = $NEW_CODE/" app/build.gradle.kts
+            VERSION="v$NEW_VERSION"
+            echo "Tag $CANDIDATE_TAG already exists; auto-incremented to $VERSION (versionCode $NEW_CODE)"
+          else
+            VERSION="$CANDIDATE_TAG"
+            echo "Using version $VERSION (versionCode $BASE_CODE)"
+          fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "Generated version: $VERSION"
 
-      - name: Setup Keystore
+      - name: Setup Production Keystore
         run: |
-          KEYSTORE_PATH="${{ github.workspace }}/release.keystore"
+          KEYSTORE_PATH="${{ github.workspace }}/my-upload-key.jks"
           if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
           elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
-          elif [ -f "debug.keystore.base64" ]; then
-            base64 --decode debug.keystore.base64 > "$KEYSTORE_PATH"
-          elif [ -f "debug.keystore" ]; then
-            cp debug.keystore "$KEYSTORE_PATH"
+          elif [ -n "${{ secrets.SIGNING_KEY }}" ]; then
+            echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > "$KEYSTORE_PATH"
+          elif [ -f "app/release-key.jks" ]; then
+            cp app/release-key.jks "$KEYSTORE_PATH"
           else
-            echo "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" | base64 --decode > "$KEYSTORE_PATH"
+            echo "Restoring persistent production keystore from embedded Base64 track."
+            echo "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" | base64 --decode > "$KEYSTORE_PATH"
           fi
           echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> $GITHUB_ENV
 
       - name: Build Release APK
         env:
-          KEYSTORE_PATH: ${{ github.workspace }}/release.keystore
-          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD || 'android' }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || 'androiddebugkey' }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD || 'android' }}
-        run: ./gradlew :app:assembleRelease
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD || 'dummy_store_pass' }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.RELEASE_KEY_ALIAS || 'production-release-key' }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD || 'dummy_store_pass' }}
+        run: ./gradlew :app:assembleRelease --stacktrace --warning-mode none
 
       - name: Prepare Release APKs
         run: |
@@ -80,22 +93,12 @@ jobs:
             exit 1
           fi
 
-      - name: Check if Release Exists
-        id: check_release
+      - name: Publish or Update Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh release view ${{ steps.version.outputs.version }} > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-            echo "Release ${{ steps.version.outputs.version }} already exists. Skipping release creation to avoid immutable tag errors."
+          if gh release view "${{ steps.version.outputs.version }}" > /dev/null 2>&1; then
+            gh release upload "${{ steps.version.outputs.version }}" app-update.apk app-release.apk --clobber
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "Release ${{ steps.version.outputs.version }} does not exist. Proceeding with creation."
+            gh release create "${{ steps.version.outputs.version }}" app-update.apk app-release.apk --title "Release ${{ steps.version.outputs.version }}" --notes "Automated release generated by GitHub Actions on push to main branch."
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create Release
-        if: steps.check_release.outputs.exists == 'false'
-        run: |
-          gh release create ${{ steps.version.outputs.version }} app-update.apk app-release.apk --title "Release ${{ steps.version.outputs.version }}" --notes "Automated release generated by GitHub Actions on push to main branch."
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

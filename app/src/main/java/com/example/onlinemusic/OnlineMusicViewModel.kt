@@ -198,7 +198,7 @@ class OnlineMusicViewModel(
         seen: MutableSet<String>,
         categoryFilter: MoodCategory?
     ): List<AlbumatyLink> = coroutineScope {
-        val distinctQueries = queries.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(8)
+        val distinctQueries = queries.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(10)
 
         // Execute all search queries concurrently in parallel for sub-second speed
         val parallelLists = distinctQueries.map { term ->
@@ -211,35 +211,56 @@ class OnlineMusicViewModel(
         val allFoundSongs = linkedMapOf<String, AlbumatyLink>()
         val artistLinks = mutableListOf<AlbumatyLink>()
 
+        // For "new" and "trending" categories, also include fresh releases directly from Albumaty home
+        if (categoryFilter?.id == "new" || categoryFilter?.id == "trending") {
+            val homeSongs = if (home.songs.isNotEmpty()) {
+                home.songs
+            } else {
+                runCatching { repository.getHome().also { home = it }.songs }.getOrDefault(emptyList())
+            }
+            for (song in homeSongs.shuffled()) {
+                if (song.isMoodSongLink() && (categoryFilter.isAllowed(song.title))) {
+                    allFoundSongs.putIfAbsent(song.url, song)
+                    if (song.url !in seen) {
+                        unseenSongs.putIfAbsent(song.url, song)
+                    }
+                }
+            }
+        }
+
         // Interleave results across the parallel query lists so every queried artist contributes songs
         val maxLen = parallelLists.maxOfOrNull { it.size } ?: 0
         for (i in 0 until maxLen) {
             for (list in parallelLists) {
                 val item = list.getOrNull(i) ?: continue
                 if (item.isMoodSongLink()) {
-                    allFoundSongs.putIfAbsent(item.url, item)
-                    if (item.url !in seen) {
-                        unseenSongs.putIfAbsent(item.url, item)
+                    if (categoryFilter == null || categoryFilter.isAllowed(item.title)) {
+                        allFoundSongs.putIfAbsent(item.url, item)
+                        if (item.url !in seen) {
+                            unseenSongs.putIfAbsent(item.url, item)
+                        }
                     }
-                } else if (item.isMoodArtistOrAlbumLink() && artistLinks.size < 4) {
+                } else if (item.isMoodArtistOrAlbumLink() && artistLinks.size < 6) {
                     if (artistLinks.none { it.url == item.url }) {
                         artistLinks.add(item)
                     }
                 }
             }
-            if (unseenSongs.size >= 90) break
+            if (unseenSongs.size >= 100) break
         }
 
-        // If direct song matches are few but artist/album pages were found, fetch songs from those artist pages in parallel
-        if (unseenSongs.size < 12 && artistLinks.isNotEmpty()) {
-            val sectionLists = artistLinks.take(3).map { link ->
+        // Expand top artist/album pages in parallel when more variety is needed (especially for classic/regional/mawwal artists)
+        if (unseenSongs.size < 24 && artistLinks.isNotEmpty()) {
+            val sectionLists = artistLinks.take(4).map { link ->
                 async {
                     runCatching { repository.getSection(link).content }.getOrDefault(emptyList())
                 }
             }.awaitAll()
-            for (list in sectionLists) {
-                for (item in list) {
-                    if (item.isMoodSongLink()) {
+            val maxSecLen = sectionLists.maxOfOrNull { it.size } ?: 0
+            for (i in 0 until maxSecLen) {
+                for (list in sectionLists) {
+                    val item = list.getOrNull(i) ?: continue
+                    if (item.isMoodSongLink() && (categoryFilter == null || categoryFilter.isAllowed(item.title))) {
                         allFoundSongs.putIfAbsent(item.url, item)
                         if (item.url !in seen) {
                             unseenSongs.putIfAbsent(item.url, item)
@@ -263,7 +284,10 @@ class OnlineMusicViewModel(
         } else {
             runCatching { repository.getHome().also { home = it }.songs }.getOrDefault(emptyList())
         }
-        fallbackSongs.filter { it.isMoodSongLink() }.shuffled().take(50)
+        fallbackSongs
+            .filter { it.isMoodSongLink() && (categoryFilter == null || categoryFilter.isAllowed(it.title)) }
+            .shuffled()
+            .take(50)
     }
 
     override fun onCleared() {

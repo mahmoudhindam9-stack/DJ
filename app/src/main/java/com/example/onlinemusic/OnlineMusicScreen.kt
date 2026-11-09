@@ -881,31 +881,37 @@ private fun OnlineSectionScreen(
 
 @Composable
 private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) {
-    Card(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
+    com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 Modifier
-                    .size(38.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)),
+                    .size(40.dp)
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f), RoundedCornerShape(10.dp)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Folder, null, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Filled.Folder,
+                    null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            Spacer(Modifier.size(8.dp))
+            Spacer(Modifier.size(10.dp))
             Text(
                 link.title,
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.SemiBold
+                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.bodyMedium
             )
             TextButton(onClick = { onOpen(link) }) {
-                Text("فتح")
+                Text("فتح", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -922,39 +928,82 @@ private fun OnlineSongCard(
 ) {
     val active = playerController.currentSong?.id == link.url
     val playing = active && playerController.isPlaying
-    com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth()) {
+    val cleanFull = remember(link.title) {
+        link.title
+            .replace(Regex("^(?:اغنية|أغنية|تحميل|استماع)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s*MP3\\s*$", RegexOption.IGNORE_CASE), "")
+            .trim()
+    }
+    val songName = remember(cleanFull) {
+        if (cleanFull.contains(" - ")) cleanFull.substringBefore(" - ").trim() else cleanFull
+    }
+    val artistName = remember(cleanFull) {
+        if (cleanFull.contains(" - ")) cleanFull.substringAfter(" - ").trim() else ""
+    }
+
+    com.example.ui.components.DjSurfaceCard(
+        modifier = Modifier.fillMaxWidth().clickable { onPlay(link) },
+        tonal = active
+    ) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+                .padding(horizontal = 10.dp, vertical = 7.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 Modifier
-                    .size(38.dp)
-                    .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(8.dp)),
+                    .size(40.dp)
+                    .background(
+                        if (active) MaterialTheme.colorScheme.primary.copy(alpha = 0.24f)
+                        else MaterialTheme.colorScheme.surfaceVariant,
+                        RoundedCornerShape(10.dp)
+                    ),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.MusicNote, null, modifier = Modifier.size(20.dp))
+                Icon(
+                    Icons.Filled.MusicNote,
+                    null,
+                    tint = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
+                )
             }
-            Spacer(Modifier.size(8.dp))
-            Text(
-                link.title,
-                modifier = Modifier.weight(1f),
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                fontWeight = FontWeight.SemiBold,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            IconButton(onClick = { onPlay(link) }) {
-                Icon(if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (playing) "Pause" else "Play")
+            Spacer(Modifier.size(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    songName.ifBlank { link.title },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    fontWeight = FontWeight.Bold,
+                    color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                if (artistName.isNotBlank()) {
+                    Text(
+                        artistName,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
             }
-            IconButton(onClick = { onQueue(link) }) {
-                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist")
+            FilledTonalIconButton(
+                onClick = { onPlay(link) },
+                modifier = Modifier.size(36.dp)
+            ) {
+                Icon(
+                    if (playing) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                    if (playing) "Pause" else "Play",
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            IconButton(onClick = { onQueue(link) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to Playlist", modifier = Modifier.size(20.dp))
             }
             OnlineDeckButton { onDeck(link, it) }
-            IconButton(onClick = { onDownload(link) }) {
-                Icon(Icons.Filled.Download, "Download")
+            IconButton(onClick = { onDownload(link) }, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.Filled.Download, "Download", modifier = Modifier.size(18.dp))
             }
         }
     }

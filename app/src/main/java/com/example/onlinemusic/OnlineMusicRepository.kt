@@ -41,7 +41,7 @@ class OnlineMusicRepository {
     suspend fun getSection(link: AlbumatyLink): AlbumatySection = withContext(Dispatchers.IO) {
         val html = getHtml(link.url)
         val type = pageType(link.url)
-        val content = parseSectionContent(html, type)
+        val rawContent = parseSectionContent(html, type)
             .ifEmpty {
                 parseLinks(html).filter {
                     when (type) {
@@ -56,6 +56,23 @@ class OnlineMusicRepository {
             .filterNot { it.url.trimEnd('/') == link.url.trimEnd('/') }
             .distinctBy { it.url }
             .take(500)
+
+        val cleanContextTitle = link.title
+            .replace(Regex("^(?:اغاني|أغاني|البوم|ألبوم|جميع اغاني|جميع أغاني)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s*MP3\\s*$", RegexOption.IGNORE_CASE), "")
+            .trim()
+
+        val content = if ((type == "singer" || type == "artist" || type == "album") && cleanContextTitle.isNotBlank()) {
+            rawContent.map { item ->
+                if (item.isSong() && !item.title.contains("-") && !normalizeArabicText(item.title).contains(normalizeArabicText(cleanContextTitle))) {
+                    item.copy(title = "${item.title} - $cleanContextTitle")
+                } else {
+                    item
+                }
+            }
+        } else {
+            rawContent
+        }
         AlbumatySection(link.title, link.url, content)
     }
 
@@ -130,24 +147,34 @@ class OnlineMusicRepository {
     }
 
     suspend fun search(query: String): List<AlbumatyLink> = withContext(Dispatchers.IO) {
-        val q = query.trim()
-        if (q.isBlank()) return@withContext getHome().songs
+        val rawQ = query.trim()
+        if (rawQ.isBlank()) return@withContext getHome().songs
+
+        val qForServer = rawQ.replace(Regex("[أإآ]"), "ا")
+        val normQ = normalizeArabicText(rawQ)
 
         val remoteResults = runCatching {
-            val encodedQuery = URLEncoder.encode(q, StandardCharsets.UTF_8.name())
+            val encodedQuery = URLEncoder.encode(qForServer, StandardCharsets.UTF_8.name())
             val searchUrl = "$BASE_URL/search.php?q=$encodedQuery"
             val html = getHtml(searchUrl)
 
-            val searchBlocks = Regex(
-                "<div[^>]*class=[\"']search-block[\"'][^>]*>(.*?)</div>\\s*</div>",
-                setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)
-            ).findAll(html).map { it.groupValues[1] }.joinToString("\n")
+            val mainHtml = extractMainContentHtml(html)
+            val targetHtml = if (mainHtml.isNotBlank()) mainHtml else html
+            val links = parseLinks(targetHtml)
+                .filter { it.isSong() || it.isAlbum() || it.isArtist() }
+                .distinctBy { it.url }
 
-            val targetHtml = if (searchBlocks.isNotBlank()) searchBlocks else html
-            val links = parseLinks(targetHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }
+            val songs = links.filter { it.isSong() }
+            val artistsAndAlbums = links.filter { it.isArtist() || it.isAlbum() }
 
-            if (searchBlocks.isBlank()) {
-                links.filter { it.title.contains(q, ignoreCase = true) }
+            // If search returned an artist/album link (e.g. searching for a classic/regional singer) and few direct songs,
+            // also expand the top matching artist/album page so songs are immediately returned.
+            if (songs.size < 8 && artistsAndAlbums.isNotEmpty()) {
+                val bestContainer = artistsAndAlbums.firstOrNull {
+                    normalizeArabicText(it.title).contains(normQ) || normQ.contains(normalizeArabicText(it.title))
+                } ?: artistsAndAlbums.first()
+                val expandedSongs = runCatching { getSection(bestContainer).content.filter { it.isSong() } }.getOrDefault(emptyList())
+                (songs + expandedSongs + artistsAndAlbums).distinctBy { it.url }
             } else {
                 links
             }
@@ -159,9 +186,16 @@ class OnlineMusicRepository {
 
         val home = getHome()
         (home.albums + home.songs + home.artists + home.categories)
-            .filter { it.title.contains(q, true) }
+            .filter { normalizeArabicText(it.title).contains(normQ) }
             .distinctBy { it.url }
     }
+
+    private fun normalizeArabicText(text: String): String = text.lowercase()
+        .replace(Regex("[أإآ]"), "ا")
+        .replace("ة", "ه")
+        .replace("ى", "ي")
+        .replace(Regex("[ًٌٍَُِّْ]"), "")
+        .trim()
 
     private fun parseHome(html: String): AlbumatyHomeData {
         val links = parseLinks(html)
@@ -179,7 +213,7 @@ class OnlineMusicRepository {
 
         return when (type) {
             "album" -> parseLinks(mainHtml).filter { it.isSong() }
-            "singer", "artist" -> parseLinks(mainHtml).filter { it.isAlbum() || it.isSong() }
+            "singer", "artist" -> parseLinks(mainHtml).filter { it.isSong() || it.isAlbum() }
             "lastalbums" -> parseLinks(mainHtml).filter { it.isAlbum() }
             "cat", "category" -> parseLinks(mainHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }
             else -> parseLinks(mainHtml).filter { it.isSong() || it.isAlbum() || it.isArtist() }

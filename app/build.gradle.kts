@@ -7,7 +7,6 @@ plugins {
   alias(libs.plugins.google.devtools.ksp)
   alias(libs.plugins.roborazzi)
   alias(libs.plugins.secrets)
-  alias(libs.plugins.google.services)
 }
 
 android {
@@ -19,26 +18,29 @@ android {
     applicationId = "com.aistudio.musicplayer.abcde"
     minSdk = 24
     targetSdk = 36
-    versionCode = 66
-    versionName = "3.9.8" // Auto-release trigger
+    versionCode = 67
+    versionName = "4.0.0" // Auto-release trigger
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }
 
   signingConfigs {
     create("release") {
       val keystorePath = System.getenv("KEYSTORE_PATH")
-      val ksFile = if (!keystorePath.isNullOrBlank()) {
-        if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
-      } else if (file("${rootDir}/debug.keystore").exists()) {
-        file("${rootDir}/debug.keystore")
-      } else null
+      val ksFile = when {
+        !keystorePath.isNullOrBlank() -> if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+        file("${rootDir}/app/release-key.jks").exists() -> file("${rootDir}/app/release-key.jks")
+        file("${rootDir}/my-upload-key.jks").exists() -> file("${rootDir}/my-upload-key.jks")
+        file("${rootDir}/debug.keystore").exists() -> file("${rootDir}/debug.keystore")
+        else -> null
+      }
 
       if (ksFile != null && ksFile.exists() && ksFile.isFile) {
         storeFile = ksFile
       }
-      storePassword = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
-      keyAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: "androiddebugkey"
-      keyPassword = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: "android"
+      val isDebugFallback = ksFile?.name == "debug.keystore"
+      storePassword = System.getenv("STORE_PASSWORD").takeIf { !it.isNullOrBlank() } ?: if (isDebugFallback) "android" else "dummy_store_pass"
+      keyAlias = System.getenv("KEY_ALIAS").takeIf { !it.isNullOrBlank() } ?: if (isDebugFallback) "androiddebugkey" else "production-release-key"
+      keyPassword = System.getenv("KEY_PASSWORD").takeIf { !it.isNullOrBlank() } ?: if (isDebugFallback) "android" else "dummy_store_pass"
     }
   }
 
@@ -65,10 +67,11 @@ android {
 val verifyReleaseSigning = tasks.register("verifyReleaseSigning") {
   doFirst {
     val keystorePath = System.getenv("KEYSTORE_PATH")
-    val ksFile = if (!keystorePath.isNullOrBlank()) {
-      if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
-    } else {
-      file("${rootDir}/debug.keystore")
+    val ksFile = when {
+      !keystorePath.isNullOrBlank() -> if (keystorePath.startsWith("/")) file(keystorePath) else file("${rootDir}/$keystorePath")
+      file("${rootDir}/app/release-key.jks").exists() -> file("${rootDir}/app/release-key.jks")
+      file("${rootDir}/my-upload-key.jks").exists() -> file("${rootDir}/my-upload-key.jks")
+      else -> file("${rootDir}/debug.keystore")
     }
     if (!ksFile.exists() || !ksFile.isFile) {
       throw GradleException("RELEASE SIGNING CONFIGURATION IS INVALID: Missing keystore at ${ksFile.absolutePath}")
@@ -83,7 +86,6 @@ tasks.configureEach {
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"
-  ignoreList.add("FIREBASE_APPCHECK_DEBUG_TOKEN")
 }
 
 dependencies {
@@ -107,10 +109,6 @@ dependencies {
   implementation(libs.logging.interceptor)
   implementation(libs.okhttp)
   // implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
-  implementation(platform(libs.firebase.bom))
-  implementation(libs.firebase.ai)
-  implementation(libs.firebase.appcheck.recaptcha)
-  implementation(libs.firebase.appcheck.debug)
   implementation("androidx.media3:media3-exoplayer:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")
   implementation("androidx.media:media:1.7.0")
