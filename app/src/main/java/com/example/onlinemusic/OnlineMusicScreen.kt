@@ -251,6 +251,7 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
             },
             onPlay = ::playSong,
             onQueue = ::queueSong,
+            onDeck = ::sendToDeck,
             playerController = playerController
         )
 
@@ -324,6 +325,7 @@ private fun MoodPlaylistPanel(
     onAddAll: () -> Unit,
     onPlay: (AlbumatyLink) -> Unit,
     onQueue: (AlbumatyLink) -> Unit,
+    onDeck: (AlbumatyLink, OnlineDeckTarget) -> Unit,
     playerController: AudioPlayerController
 ) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -341,7 +343,7 @@ private fun MoodPlaylistPanel(
                 TextButton(onClick = onRefresh, enabled = !isLoading) { Text("قائمة جديدة") }
                 Button(onClick = onAddAll, enabled = !isLoading) { Text("إضافة الكل") }
             }
-            tracks.forEach { link -> OnlineSongCard(link, onPlay, {}, onQueue, {}, playerController) }
+            tracks.forEach { link -> OnlineSongCard(link, onPlay, {}, onQueue, onDeck, playerController) }
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
