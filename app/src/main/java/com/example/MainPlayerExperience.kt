@@ -508,11 +508,6 @@ private fun NowPlayingFullScreenV2(
                 color = MaterialTheme.colorScheme.primary
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                if (song.id.startsWith("quran:")) {
-                    IconButton(onClick = { navController.navigate("quran_reader") { launchSingleTop = true } }) {
-                        Icon(Icons.Filled.MenuBook, contentDescription = "Open Quran")
-                    }
-                }
                 IconButton(onClick = onQueue) {
                     Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue")
                 }
@@ -536,7 +531,7 @@ private fun NowPlayingFullScreenV2(
         Slider(current, { playerController.seekTo(it.toLong()) }, valueRange = 0f..maxPos)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(MusicScanner.formatMs(playerController.currentPositionMs), style = MaterialTheme.typography.labelSmall); Text(MusicScanner.formatMs(playerController.durationMs), style = MaterialTheme.typography.labelSmall) }
         Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.playPrevious() }) { Icon(Icons.Filled.SkipPrevious, "Previous") }; FilledIconButton(onClick = { onPauseDJ(); playerController.togglePlayPause() }, Modifier.size(66.dp)) { Icon(if (playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause", Modifier.size(36.dp)) }; IconButton(onClick = { playerController.playNext() }) { Icon(Icons.Filled.SkipNext, "Next") } }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; OutlinedButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text("Queue") } }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; OutlinedButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text("Queue") }; if (song.id.startsWith("quran:")) { IconButton(onClick = { navController.navigate("quran_reader") { launchSingleTop = true } }) { Icon(Icons.Filled.MenuBook, contentDescription = "Open Quran", tint = MaterialTheme.colorScheme.primary) } } }
 
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
