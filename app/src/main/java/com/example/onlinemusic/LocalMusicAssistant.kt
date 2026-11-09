@@ -105,6 +105,7 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
             modelDirectory.mkdirs()
             partialFile.delete()
 
+            val digest = MessageDigest.getInstance("SHA-256")
             val request = Request.Builder()
                 .url(MODEL_URL)
                 .header("User-Agent", "DJ-OnDevice-Music-Assistant")
@@ -121,7 +122,6 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                 val job = currentCoroutineContext()
                 var downloadedBytes = 0L
                 var lastReportedBytes = 0L
-                val digest = MessageDigest.getInstance("SHA-256")
                 FileOutputStream(partialFile).use { output ->
                     body.byteStream().use { input ->
                         val buffer = ByteArray(64 * 1024)
