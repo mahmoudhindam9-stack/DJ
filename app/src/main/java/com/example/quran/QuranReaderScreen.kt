@@ -2,6 +2,9 @@ package com.example.quran
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -63,13 +66,17 @@ private val readerSurahNames = listOf(
     "المسد","الإخلاص","الفلق","الناس"
 )
 
+private fun arabicDigits(value: Int): String = value.toString().map { ch ->
+    if (ch in '0'..'9') ('٠'.code + (ch - '0')).toChar() else ch
+}.joinToString("")
+
 @Composable
 fun QuranReaderScreen(playerController: AudioPlayerController, onBack: () -> Unit) {
     BackHandler(onBack = onBack)
     val song = playerController.currentSong
     val surahNumber = remember(song?.id) { song?.id?.takeIf { it.startsWith("quran:") }?.substringAfterLast(":")?.toIntOrNull()?.takeIf { it in 1..114 } }
     val repository = remember { QuranReaderRepository() }
-    val listState = rememberLazyListState()
+    val scrollState = rememberScrollState()
     var verses by remember(surahNumber) { mutableStateOf<List<ReaderVerse>>(emptyList()) }
     var loading by remember(surahNumber) { mutableStateOf(true) }
     var error by remember(surahNumber) { mutableStateOf<String?>(null) }
@@ -94,8 +101,7 @@ fun QuranReaderScreen(playerController: AudioPlayerController, onBack: () -> Uni
         }
     }
 
-    // MP3Quran's full-surah stream has no verse timestamps. This weighted
-    // progress guide is approximate, not exact word-level synchronization.
+    // Full-surah streams do not provide verified ayah timestamps; highlighting remains approximate.
     val activeVerseIndex = remember(verses, positionMs, durationMs) {
         if (verses.isEmpty() || durationMs <= 0L) -1 else {
             val totalWeight = verses.sumOf { it.weight }.coerceAtLeast(1)
@@ -104,39 +110,68 @@ fun QuranReaderScreen(playerController: AudioPlayerController, onBack: () -> Uni
             verses.indexOfFirst { verse -> accumulated += verse.weight; accumulated >= target }.coerceIn(0, verses.lastIndex)
         }
     }
-    LaunchedEffect(activeVerseIndex) { if (activeVerseIndex >= 0) listState.animateScrollToItem(activeVerseIndex + 1) }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 3.dp) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "رجوع") }
-                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(surahNumber?.let { readerSurahNames[it - 1] } ?: "المصحف الشريف", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                    Text(song?.artist.orEmpty(), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Icon(Icons.Filled.MenuBook, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp))
+    val pageText = remember(verses, activeVerseIndex) {
+        buildAnnotatedString {
+            verses.forEachIndexed { index, verse ->
+                if (index > 0) append("  ")
+                val verseText = verse.text + " "
+                if (index == activeVerseIndex) {
+                    pushStyle(SpanStyle(color = Color(0xFFB3261E), fontWeight = FontWeight.Bold, textDecoration = TextDecoration.Underline))
+                    append(verseText)
+                    pop()
+                } else append(verseText)
+                pushStyle(SpanStyle(color = Color(0xFF9A7136), fontWeight = FontWeight.Bold))
+                append("﴿" + arabicDigits(verse.number) + "﴾")
+                pop()
+                append("  ")
             }
         }
-        if (durationMs > 0L && verses.isNotEmpty()) LinearProgressIndicator(progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-        when {
-            loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
-            error != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(error.orEmpty(), color = MaterialTheme.colorScheme.error) }
-            else -> LazyColumn(state = listState, modifier = Modifier.fillMaxSize(), contentPadding = PaddingValues(horizontal = 18.dp, vertical = 18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                item {
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)) {
-                        Column(Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("بِسْمِ اللَّهِ الرَّحْمَٰنِ الرَّحِيمِ", fontSize = 24.sp, fontWeight = FontWeight.Medium)
-                            Text("استمع واقرأ مع التلاوة", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+    }
+
+    LaunchedEffect(activeVerseIndex, verses, scrollState.maxValue) {
+        if (activeVerseIndex >= 0 && verses.isNotEmpty()) {
+            val offset = verses.take(activeVerseIndex).sumOf { it.text.length + 9 }.coerceAtMost((pageText.length - 1).coerceAtLeast(0))
+            scrollState.animateScrollTo((offset * 1.2f).toInt().coerceIn(0, scrollState.maxValue))
+        }
+    }
+
+    Box(Modifier.fillMaxSize().background(Color.Black).padding(vertical = 10.dp)) {
+        Surface(modifier = Modifier.fillMaxSize(), color = Color(0xFFFFFBEA), shape = RoundedCornerShape(2.dp)) {
+            when {
+                loading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator(color = Color(0xFF9A7136)) }
+                error != null -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) { Text(error.orEmpty(), color = Color(0xFF8B1E16), textAlign = TextAlign.Center) }
+                else -> Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 14.dp)) {
+                    Text(
+                        surahNumber?.let { readerSurahNames[it - 1] } ?: "المصحف الشريف",
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                        color = Color(0xFF8C672F),
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
+                    Box(Modifier.weight(1f).fillMaxWidth().verticalScroll(scrollState)) {
+                        BasicText(
+                            text = pageText,
+                            modifier = Modifier.fillMaxWidth(),
+                            style = TextStyle(
+                                color = Color(0xFF17130F),
+                                fontFamily = FontFamily.Serif,
+                                fontSize = 28.sp,
+                                lineHeight = 58.sp,
+                                fontWeight = FontWeight.Medium,
+                                textAlign = TextAlign.Justify,
+                                textDirection = TextDirection.ContentOrRtl
+                            )
+                        )
                     }
-                }
-                itemsIndexed(verses, key = { _, verse -> verse.number }) { index, verse ->
-                    val active = index == activeVerseIndex
-                    Surface(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), color = if (active) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.72f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.55f), tonalElevation = if (active) 3.dp else 0.dp) {
-                        Column(Modifier.padding(horizontal = 14.dp, vertical = 13.dp)) {
-                            Text(verse.text, modifier = Modifier.fillMaxWidth(), fontSize = 25.sp, lineHeight = 48.sp, fontWeight = if (active) FontWeight.Bold else FontWeight.Normal, color = if (active) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurface, textDecoration = if (active) TextDecoration.Underline else TextDecoration.None)
-                            Text("۞ ${verse.number}", modifier = Modifier.align(Alignment.End).padding(top = 5.dp), style = MaterialTheme.typography.labelSmall, color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+                    if (durationMs > 0L) {
+                        LinearProgressIndicator(
+                            progress = { (positionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                            color = Color(0xFF9A7136),
+                            trackColor = Color(0xFFE7DCC0)
+                        )
                     }
                 }
             }
