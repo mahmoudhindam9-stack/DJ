@@ -314,6 +314,40 @@ private fun AlbumatyOnlineScreen(viewModel: OnlineMusicViewModel, playerControll
 }
 
 @Composable
+private fun MoodPlaylistPanel(
+    selectedTitle: String,
+    tracks: List<AlbumatyLink>,
+    isLoading: Boolean,
+    message: String?,
+    onChoose: (MoodCategory) -> Unit,
+    onRefresh: () -> Unit,
+    onAddAll: () -> Unit,
+    onPlay: (AlbumatyLink) -> Unit,
+    onQueue: (AlbumatyLink) -> Unit,
+    playerController: AudioPlayerController
+) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("AI Mood Playlists", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text("اختر حالتك لتكوين قائمة عربية جديدة", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+            items(MoodCategory.entries, key = { it.id }) { category ->
+                FilterChip(selected = selectedTitle == category.title, onClick = { onChoose(category) }, label = { Text(category.title) })
+            }
+        }
+        if (isLoading) LinearProgressIndicator(Modifier.fillMaxWidth())
+        if (tracks.isNotEmpty()) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("${tracks.size} أغنية", modifier = Modifier.weight(1f), style = MaterialTheme.typography.labelLarge)
+                TextButton(onClick = onRefresh, enabled = !isLoading) { Text("قائمة جديدة") }
+                Button(onClick = onAddAll, enabled = !isLoading) { Text("إضافة الكل") }
+            }
+            tracks.forEach { link -> OnlineSongCard(link, onPlay, {}, onQueue, {}, playerController) }
+        }
+        message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
 private fun AudiusOnlineScreen(viewModel: OnlineMusicViewModel, playerController: AudioPlayerController, scope: CoroutineScope, onShowQueue: () -> Unit) {
     val context = LocalContext.current
     var query by remember { mutableStateOf("") }
