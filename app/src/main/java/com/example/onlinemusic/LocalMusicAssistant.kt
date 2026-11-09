@@ -75,6 +75,12 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
         }
         ensureDeviceMemory()
         initializeEngine(modelFile)
+        try {
+            verifyInference()
+        } catch (error: Throwable) {
+            close()
+            throw error
+        }
         return isReady
     }
 
@@ -83,6 +89,12 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
         ensureDeviceMemory()
         val downloaded = downloadModel(onProgress)
         initializeEngine(downloaded)
+        try {
+            verifyInference()
+        } catch (error: Throwable) {
+            close()
+            throw error
+        }
     }
 
     private fun ensureDeviceMemory() {
@@ -90,9 +102,24 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
         val info = ActivityManager.MemoryInfo()
         manager.getMemoryInfo(info)
         val minimumRam = 4L * 1024L * 1024L * 1024L
-        check(info.totalMem >= minimumRam) {
-            "يحتاج تشغيل نموذج Qwen3 إلى هاتف بذاكرة RAM فعلية لا تقل عن 4 جيجابايت. سيظل مشغل الموسيقى يعمل بصورة طبيعية."
+        val minimumAvailable = 2_500L * 1024L * 1024L
+        check(info.totalMem >= minimumRam && info.availMem >= minimumAvailable) {
+            "تشغيل Qwen3 يحتاج 4 جيجابايت RAM على الأقل ونحو 2.5 جيجابايت ذاكرة متاحة حاليًا. أغلق التطبيقات الثقيلة ثم حاول مجددًا."
         }
+    }
+
+    private fun ensureStorageAvailable() {
+        modelDirectory.mkdirs()
+        val stats = android.os.StatFs(modelDirectory.absolutePath)
+        val requiredBytes = MODEL_BYTES + 96L * 1024L * 1024L
+        check(stats.availableBytes >= requiredBytes) {
+            "يلزم توفير مساحة فارغة لا تقل عن 425 ميجابايت لتنزيل نموذج Qwen3 والتحقق منه."
+        }
+    }
+
+    private suspend fun verifyInference() {
+        val reply = generate("Reply with exactly READY and nothing else.", 12)
+        check(reply.isNotBlank()) { "تم تحميل النموذج لكن اختبار الاستدلال لم يُرجع أي نتيجة." }
     }
 
     private suspend fun downloadModel(onProgress: suspend (Float) -> Unit): File =
@@ -101,28 +128,59 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                 withContext(Dispatchers.Main.immediate) { onProgress(1f) }
                 return@withContext modelFile
             }
-            modelFile.delete()
+            ensureStorageAvailable()
             modelDirectory.mkdirs()
-            partialFile.delete()
+            var resumeOffset = partialFile.takeIf { it.isFile }?.length() ?: 0L
+            if (resumeOffset < 0L || resumeOffset >= MODEL_BYTES) {
+                partialFile.delete()
+                resumeOffset = 0L
+            }
 
-            val digest = MessageDigest.getInstance("SHA-256")
-            val request = Request.Builder()
+            val requestBuilder = Request.Builder()
                 .url(MODEL_URL)
                 .header("User-Agent", "DJ-OnDevice-Music-Assistant")
                 .header("Accept", "application/octet-stream")
-                .build()
+            if (resumeOffset > 0L) requestBuilder.header("Range", "bytes=$resumeOffset-")
 
-            client.newCall(request).execute().use { response ->
+            client.newCall(requestBuilder.build()).execute().use { response ->
                 check(response.isSuccessful) { "فشل تنزيل النموذج: HTTP " + response.code }
-                val body = response.body ?: error("ملف النموذج فارغ")
-                val totalBytes = body.contentLength()
-                check(totalBytes <= 0L || totalBytes == MODEL_BYTES) {
-                    "حجم ملف Qwen3 تغيّر عن النسخة المعتمدة؛ أوقفنا التنزيل لحماية الهاتف."
+                val append = resumeOffset > 0L && response.code == 206
+                if (resumeOffset > 0L && response.code == 200) {
+                    partialFile.delete()
+                    resumeOffset = 0L
                 }
+                if (append) {
+                    val contentRange = response.header("Content-Range").orEmpty()
+                    check(
+                        contentRange.startsWith("bytes $resumeOffset-") &&
+                            contentRange.substringAfterLast('/').toLongOrNull() == MODEL_BYTES
+                    ) { "استجابة استكمال التنزيل غير مطابقة؛ أعد المحاولة." }
+                } else {
+                    check(response.code == 200) { "تعذر استكمال تنزيل Qwen3: HTTP " + response.code }
+                }
+
+                val body = response.body ?: error("ملف النموذج فارغ")
+                val expectedBodyBytes = MODEL_BYTES - resumeOffset
+                val totalBytes = body.contentLength()
+                check(totalBytes <= 0L || totalBytes == expectedBodyBytes) {
+                    "حجم ملف Qwen3 غير مطابق للنسخة المعتمدة؛ أوقفنا التنزيل."
+                }
+
                 val job = currentCoroutineContext()
-                var downloadedBytes = 0L
-                var lastReportedBytes = 0L
-                FileOutputStream(partialFile).use { output ->
+                var downloadedBytes = resumeOffset
+                var lastReportedBytes = resumeOffset
+                val digest = MessageDigest.getInstance("SHA-256")
+                if (append && partialFile.isFile) {
+                    partialFile.inputStream().buffered().use { input ->
+                        val existingBuffer = ByteArray(256 * 1024)
+                        while (true) {
+                            val count = input.read(existingBuffer)
+                            if (count < 0) break
+                            digest.update(existingBuffer, 0, count)
+                        }
+                    }
+                }
+                FileOutputStream(partialFile, append).use { output ->
                     body.byteStream().use { input ->
                         val buffer = ByteArray(64 * 1024)
                         while (true) {
@@ -140,14 +198,18 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
                         }
                     }
                     output.flush()
+                    output.fd.sync()
+                }
+                check(downloadedBytes == MODEL_BYTES) {
+                    "انقطع تنزيل النموذج قبل اكتماله. اضغط تحميل مرة أخرى لاستكماله من حيث توقف."
+                }
+                val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
+                check(actualHash == MODEL_SHA256) {
+                    partialFile.delete()
+                    "فشل التحقق من بصمة Qwen3 الرسمية؛ حُذف الملف غير السليم تلقائيًا."
                 }
             }
 
-            val actualHash = digest.digest().joinToString("") { "%02x".format(it) }
-            check(partialFile.isFile && partialFile.length() == MODEL_BYTES && actualHash == MODEL_SHA256) {
-                partialFile.delete()
-                "لم يطابق ملف Qwen3 الحجم أو البصمة الرسمية؛ حُذف الملف غير السليم تلقائيًا."
-            }
             if (modelFile.exists()) modelFile.delete()
             if (!partialFile.renameTo(modelFile)) {
                 partialFile.copyTo(modelFile, overwrite = true)
@@ -155,7 +217,7 @@ Do not explain your reasoning. Do not use Markdown fences or extra text.
             }
             check(modelFile.isFile && isValidModelFile(modelFile)) {
                 modelFile.delete()
-                "تعذر التحقق من ملف النموذج بعد حفظه."
+                "تعذر التحقق من ملف النموذج بعد حفظه في مجلد التطبيق."
             }
             withContext(Dispatchers.Main.immediate) { onProgress(1f) }
             modelFile
