@@ -240,7 +240,7 @@ fun MainApp() {
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         bottomBar = {
-            if (currentRoute != "full_player") {
+            if (currentRoute != "full_player" && currentRoute != "quran_reader") {
                 NavigationBar(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -347,7 +347,7 @@ fun MainApp() {
         NavHost(
             navController = navController,
             startDestination = "player",
-            modifier = if (currentRoute == "full_player") Modifier else Modifier.padding(innerPadding)
+            modifier = if (currentRoute == "full_player" || currentRoute == "quran_reader") Modifier else Modifier.padding(innerPadding)
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)
@@ -378,6 +378,9 @@ fun MainApp() {
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
+            }
+            composable("quran_reader") {
+                com.example.quran.QuranReaderScreen(playerController = playerController, onBack = { navController.popBackStack() })
             }
             
             composable("radio") {
