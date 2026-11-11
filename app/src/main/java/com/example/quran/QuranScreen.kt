@@ -116,7 +116,8 @@ fun QuranScreen(
     playerController: AudioPlayerController,
     playlists: List<Playlist>,
     audioLibrary: androidx.compose.runtime.snapshots.SnapshotStateList<AudioItem>,
-    playlistRepo: PlaylistRepository
+    playlistRepo: PlaylistRepository,
+    onOpenReader: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -172,6 +173,8 @@ fun QuranScreen(
         message = "تشغيل " + quranSurahNames[surah - 1] + " بصوت " + reciter.name
     }
 
+    val isQuranPlaying = playerController.currentSong?.id?.startsWith("quran:") == true
+
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             if (selectedMoshaf != null || selectedReciter != null) {
@@ -191,6 +194,15 @@ fun QuranScreen(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            }
+            if (isQuranPlaying) {
+                FilledTonalIconButton(onClick = onOpenReader) {
+                    Icon(
+                        Icons.Filled.MenuBook,
+                        contentDescription = "قراءة المصحف مع المقرئ",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             IconButton(onClick = { showQueue = true }) { Icon(Icons.Filled.QueueMusic, "قائمة التشغيل") }
             IconButton(onClick = { scope.launch { loadReciters() } }) { Icon(Icons.Filled.Refresh, "تحديث") }
@@ -218,6 +230,15 @@ fun QuranScreen(
                                 Column(Modifier.weight(1f)) {
                                     Text(quranSurahNames[surah - 1], fontWeight = FontWeight.SemiBold)
                                     Text(reciter.name + " • " + moshaf.name, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
+                                if (active) {
+                                    IconButton(onClick = onOpenReader) {
+                                        Icon(
+                                            Icons.Filled.MenuBook,
+                                            contentDescription = "فتح المصحف",
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
                                 }
                                 IconButton(onClick = { playSurah(reciter, moshaf, surah) }) {
                                     Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "تشغيل")

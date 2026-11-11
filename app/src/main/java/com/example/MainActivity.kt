@@ -422,7 +422,12 @@ fun MainApp() {
                     playerController = playerController,
                     playlists = playlists,
                     audioLibrary = audioLibrary,
-                    playlistRepo = playlistRepo
+                    playlistRepo = playlistRepo,
+                    onOpenReader = {
+                        navController.navigate("quran_reader") {
+                            launchSingleTop = true
+                        }
+                    }
                 )
             }
         }
