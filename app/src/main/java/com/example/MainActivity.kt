@@ -7,6 +7,10 @@ import android.Manifest
 import android.content.Context
 import android.os.Build
 import android.os.Bundle
+import android.content.Intent
+import android.graphics.Rect
+import android.util.DisplayMetrics
+import android.view.WindowManager
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import com.example.updater.GitHubUpdater
@@ -73,6 +77,34 @@ class MainActivity : ComponentActivity() {
     companion object {
         val incomingAudioUri = mutableStateOf<android.net.Uri?>(null)
         val activeVideoUri = mutableStateOf<android.net.Uri?>(null)
+    }
+
+    fun relaunchInWindowMode(mode: AppWindowMode) {
+        val metrics = DisplayMetrics()
+        @Suppress("DEPRECATION")
+        windowManager.defaultDisplay.getRealMetrics(metrics)
+        val density = metrics.density.coerceAtLeast(1f)
+
+        val launchBounds = if (mode == AppWindowMode.FULLSCREEN) {
+            Rect()
+        } else {
+            val requestedWidth = (mode.windowWidthDp * density).toInt()
+                .coerceAtMost(metrics.widthPixels)
+            val requestedHeight = (mode.windowHeightDp * density).toInt()
+                .coerceAtMost(metrics.heightPixels)
+            val left = ((metrics.widthPixels - requestedWidth) / 2).coerceAtLeast(0)
+            val top = ((metrics.heightPixels - requestedHeight) / 2).coerceAtLeast(0)
+            Rect(left, top, left + requestedWidth, top + requestedHeight)
+        }
+
+        val restartIntent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        }
+        val options = android.app.ActivityOptions.makeBasic()
+            .setLaunchBounds(launchBounds)
+        startActivity(restartIntent, options.toBundle())
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,11 +184,28 @@ class MainActivity : ComponentActivity() {
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 fun MainApp() {
     val context = LocalContext.current
+    val windowPreferences = remember {
+        context.getSharedPreferences("dj_window_preferences", Context.MODE_PRIVATE)
+    }
+    var windowMode by remember {
+        mutableStateOf(
+            AppWindowMode.fromName(windowPreferences.getString("window_mode", null))
+        )
+    }
+    val showWindowModeControl = remember { isDesktopWindowDevice(context) }
+    val initialRoute = remember {
+        windowPreferences.getString("last_route", "player")
+            ?.takeIf { it in setOf("player", "dj", "equalizer", "mic", "radio", "online_music", "quran", "weather") }
+            ?: "player"
+    }
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     LaunchedEffect(currentRoute) {
         RuntimeDiagnostics.setScreen(currentRoute)
+        if (currentRoute in setOf("player", "dj", "equalizer", "mic", "radio", "online_music", "quran", "weather")) {
+            windowPreferences.edit().putString("last_route", currentRoute).apply()
+        }
     }
 
     var appVersion by remember { mutableStateOf("1.0") }
@@ -273,9 +322,34 @@ fun MainApp() {
     }
 
     PremiumBackdrop {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val appFrameWidth = when (windowMode) {
+            AppWindowMode.FULLSCREEN -> maxWidth
+            AppWindowMode.PHONE -> minOf(maxWidth, AppWindowMode.PHONE.contentMaxWidthDp.dp)
+            AppWindowMode.COMPACT -> minOf(maxWidth, AppWindowMode.COMPACT.contentMaxWidthDp.dp)
+        }
+        Box(
+            modifier = Modifier
+                .width(appFrameWidth)
+                .fillMaxHeight()
+                .align(Alignment.Center)
+        ) {
     Scaffold(
+        modifier = Modifier.fillMaxSize(),
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
+        topBar = {
+            if (showWindowModeControl && currentRoute !in setOf("full_player", "quran_reader", "video_player")) {
+                WindowModeToolbar(
+                    currentMode = windowMode,
+                    onModeSelected = { nextMode ->
+                        windowPreferences.edit().putString("window_mode", nextMode.name).apply()
+                        windowMode = nextMode
+                        (context as? MainActivity)?.relaunchInWindowMode(nextMode)
+                    }
+                )
+            }
+        },
         bottomBar = {
             if (currentRoute != "full_player" && currentRoute != "quran_reader" && currentRoute != "video_player") {
                 val navItemColors = NavigationBarItemDefaults.colors(
@@ -289,7 +363,7 @@ fun MainApp() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = if (windowMode == AppWindowMode.COMPACT) 4.dp else 10.dp, vertical = 4.dp)
                     .shadow(24.dp, RoundedCornerShape(28.dp))
                     .clip(RoundedCornerShape(28.dp)),
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
@@ -300,7 +374,7 @@ fun MainApp() {
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Player") },
-                    label = { Text("Player", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Player", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "player",
                     colors = navItemColors,
                     onClick = {
@@ -314,7 +388,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Headset, contentDescription = "DJ Mixer") },
-                    label = { Text("DJ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("DJ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "dj",
                     colors = navItemColors,
                     onClick = {
@@ -328,7 +402,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
-                    label = { Text("EQ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("EQ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "equalizer",
                     colors = navItemColors,
                     onClick = {
@@ -341,7 +415,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
-                    label = { Text("Mic", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Mic", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "mic",
                     colors = navItemColors,
                     onClick = {
@@ -355,7 +429,7 @@ fun MainApp() {
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
-                    label = { Text("Radio", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Radio", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "radio",
                     colors = navItemColors,
                     onClick = {
@@ -368,7 +442,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
-                    label = { Text("Online", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Online", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "online_music",
                     colors = navItemColors,
                     onClick = {
@@ -381,7 +455,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
-                    label = { Text("Quran", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Quran", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
                     selected = currentDestination?.route == "quran",
                     colors = navItemColors,
                     onClick = {
@@ -398,8 +472,12 @@ fun MainApp() {
     ) { innerPadding ->
         NavHost(
             navController = navController,
-            startDestination = "player",
-            modifier = if (currentRoute == "full_player" || currentRoute == "quran_reader" || currentRoute == "video_player") Modifier else Modifier.padding(innerPadding)
+            startDestination = initialRoute,
+            modifier = if (currentRoute == "full_player" || currentRoute == "quran_reader" || currentRoute == "video_player") {
+                Modifier.fillMaxSize()
+            } else {
+                Modifier.fillMaxSize().padding(innerPadding)
+            }
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)
@@ -482,6 +560,8 @@ fun MainApp() {
             }
         }
     }
+        }
+    }
     }
 }
 // KARAOKE_MIC_PAGE_V5
@@ -509,3 +589,93 @@ fun MainApp() {
 
 
 
+
+@Composable
+private fun WindowModeToolbar(
+    currentMode: AppWindowMode,
+    onModeSelected: (AppWindowMode) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+        tonalElevation = 2.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(44.dp)
+                .padding(horizontal = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "DJ",
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = FontWeight.Black,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.weight(1f))
+            Box {
+                TextButton(onClick = { expanded = true }) {
+                    Icon(Icons.Filled.AspectRatio, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("حجم النافذة")
+                    Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+                }
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("ملء الشاشة") },
+                        leadingIcon = { Icon(Icons.Filled.Fullscreen, contentDescription = null) },
+                        trailingIcon = if (currentMode == AppWindowMode.FULLSCREEN) {
+                            { Icon(Icons.Filled.Check, contentDescription = null) }
+                        } else null,
+                        onClick = {
+                            expanded = false
+                            onModeSelected(AppWindowMode.FULLSCREEN)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("وضع الهاتف") },
+                        leadingIcon = { Icon(Icons.Filled.Smartphone, contentDescription = null) },
+                        trailingIcon = if (currentMode == AppWindowMode.PHONE) {
+                            { Icon(Icons.Filled.Check, contentDescription = null) }
+                        } else null,
+                        onClick = {
+                            expanded = false
+                            onModeSelected(AppWindowMode.PHONE)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("الشاشة الصغيرة المختصرة") },
+                        leadingIcon = { Icon(Icons.Filled.PhoneAndroid, contentDescription = null) },
+                        trailingIcon = if (currentMode == AppWindowMode.COMPACT) {
+                            { Icon(Icons.Filled.Check, contentDescription = null) }
+                        } else null,
+                        onClick = {
+                            expanded = false
+                            onModeSelected(AppWindowMode.COMPACT)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+private fun isDesktopWindowDevice(context: Context): Boolean {
+    val buildIdentity = listOf(Build.MANUFACTURER, Build.BRAND, Build.DEVICE, Build.PRODUCT)
+        .joinToString(" ")
+        .lowercase()
+    val fydeDevice = buildIdentity.contains("fyde") || buildIdentity.contains("chromebook")
+    val pcFeature = context.packageManager.hasSystemFeature("android.software.pc")
+    val metrics = DisplayMetrics()
+    @Suppress("DEPRECATION")
+    (context.getSystemService(Context.WINDOW_SERVICE) as WindowManager)
+        .defaultDisplay.getRealMetrics(metrics)
+    val wideDesktopDisplay = metrics.widthPixels / metrics.density.coerceAtLeast(1f) >= 760f
+    return fydeDevice || pcFeature || wideDesktopDisplay
+}

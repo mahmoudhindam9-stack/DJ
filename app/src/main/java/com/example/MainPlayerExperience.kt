@@ -319,14 +319,21 @@ fun PlayerScreenV2(
             if (playlists.isNotEmpty()) {
                 com.example.ui.components.DjSectionHeader("PLAYLISTS")
                 Spacer(Modifier.height(5.dp))
-                Column(
+                BoxWithConstraints(
                     Modifier
                         .fillMaxWidth()
                         .weight(0.42f)
-                        .verticalScroll(rememberScrollState()),
-                    verticalArrangement = Arrangement.spacedBy(7.dp)
                 ) {
-                    playlists.chunked(3).forEach { rowPlaylists ->
+                    val playlistColumns = when {
+                        maxWidth < 380.dp -> 1
+                        maxWidth < 560.dp -> 2
+                        else -> 3
+                    }
+                    Column(
+                        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(7.dp)
+                    ) {
+                    playlists.chunked(playlistColumns).forEach { rowPlaylists ->
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                             rowPlaylists.forEach { playlist ->
                                 val songs = playlist.songIds.mapNotNull { id -> audioLibrary.firstOrNull { it.id == id } }
@@ -387,8 +394,9 @@ fun PlayerScreenV2(
                                     }
                                 }
                             }
-                            repeat(3 - rowPlaylists.size) { Spacer(Modifier.weight(1f)) }
+                            repeat(playlistColumns - rowPlaylists.size) { Spacer(Modifier.weight(1f)) }
                         }
+                    }
                     }
                 }
             }

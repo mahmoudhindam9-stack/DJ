@@ -121,14 +121,14 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 )
                 Spacer(modifier = Modifier.height(16.dp))
                 
-                Row(
+                LazyRow(
                     modifier = Modifier.fillMaxWidth().height(250.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    eqController.bands.forEach { band ->
+                    items(eqController.bands) { band ->
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.width(52.dp)
                         ) {
                             Text(
                                 text = "${band.currentLevelDb} dB",
