@@ -72,12 +72,13 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 class MainActivity : ComponentActivity() {
     companion object {
         val incomingAudioUri = mutableStateOf<android.net.Uri?>(null)
+        val activeVideoUri = mutableStateOf<android.net.Uri?>(null)
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) {
-            handleAudioIntent(intent)
+            handleMediaIntent(intent)
         }
         RuntimeDiagnostics.initialize(applicationContext)
         com.example.ui.theme.ThemeManager.init(this)
@@ -103,19 +104,47 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: android.content.Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        handleAudioIntent(intent)
+        handleMediaIntent(intent)
     }
 
-    private fun handleAudioIntent(intent: android.content.Intent?) {
-        if (intent == null) return
-        val action = intent.action
-        val dataUri = intent.data
-        if (action == android.content.Intent.ACTION_VIEW && dataUri != null) {
+    private fun handleMediaIntent(intent: android.content.Intent?) {
+        if (intent == null || intent.action != android.content.Intent.ACTION_VIEW) return
+        val dataUri = intent.data ?: return
+
+        val mimeTypes = listOf(
+            intent.type,
+            runCatching { contentResolver.getType(dataUri) }.getOrNull()
+        )
+        val displayName = runCatching {
+            contentResolver.query(
+                dataUri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                if (cursor.moveToFirst()) cursor.getString(0) else null
+            }
+        }.getOrNull().orEmpty()
+        val fileName = (displayName.ifBlank { dataUri.lastPathSegment.orEmpty() }).lowercase()
+        val videoExtensions = setOf(
+            "mp4", "m4v", "mkv", "webm", "avi", "mov", "3gp",
+            "ts", "mpg", "mpeg", "wmv", "flv", "ogv"
+        )
+        val isVideo = mimeTypes.any { it?.startsWith("video/", ignoreCase = true) == true } ||
+            videoExtensions.any { fileName.endsWith(".$it") }
+
+        if (isVideo) {
+            activeVideoUri.value = dataUri
+            incomingAudioUri.value = null
+        } else {
             incomingAudioUri.value = dataUri
-            // Consume the intent so activity recreation, screen lock/unlock, or returning from background never re-triggers it
-            intent.data = null
-            intent.action = android.content.Intent.ACTION_MAIN
+            activeVideoUri.value = null
         }
+
+        // Consume the external intent so Activity recreation cannot replay it.
+        intent.data = null
+        intent.action = android.content.Intent.ACTION_MAIN
     }
 }
 
@@ -184,6 +213,14 @@ fun MainApp() {
         }
     }
 
+    LaunchedEffect(MainActivity.activeVideoUri.value) {
+        if (MainActivity.activeVideoUri.value != null) {
+            navController.navigate("video_player") {
+                launchSingleTop = true
+            }
+        }
+    }
+
     // Persist the library the moment it changes (song imported, removed, etc.)
     // so it survives closing and reopening the app instead of only ever living
     // in memory. Without this, every import was lost as soon as the process died.
@@ -240,7 +277,7 @@ fun MainApp() {
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
         bottomBar = {
-            if (currentRoute != "full_player" && currentRoute != "quran_reader") {
+            if (currentRoute != "full_player" && currentRoute != "quran_reader" && currentRoute != "video_player") {
                 val navItemColors = NavigationBarItemDefaults.colors(
                     selectedIconColor = MaterialTheme.colorScheme.primary,
                     selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -362,7 +399,7 @@ fun MainApp() {
         NavHost(
             navController = navController,
             startDestination = "player",
-            modifier = if (currentRoute == "full_player" || currentRoute == "quran_reader") Modifier else Modifier.padding(innerPadding)
+            modifier = if (currentRoute == "full_player" || currentRoute == "quran_reader" || currentRoute == "video_player") Modifier else Modifier.padding(innerPadding)
         ) {
             composable("weather") {
                 WeatherScreen(navController = navController)
@@ -393,6 +430,19 @@ fun MainApp() {
             }
             composable("full_player") {
                 FullPlayerScreen(playerController = playerController, onBack = { navController.popBackStack() })
+            }
+
+            composable("video_player") {
+                val videoUri = MainActivity.activeVideoUri.value
+                if (videoUri != null) {
+                    VideoPlayerScreen(
+                        videoUri = videoUri,
+                        onBack = {
+                            MainActivity.activeVideoUri.value = null
+                            navController.popBackStack()
+                        }
+                    )
+                }
             }
             composable("quran_reader") {
                 com.example.quran.QuranReaderScreen(playerController = playerController, onBack = { navController.popBackStack() })
