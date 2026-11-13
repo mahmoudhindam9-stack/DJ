@@ -374,7 +374,7 @@ fun MainApp() {
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Player") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Player", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("Player", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "player",
                     colors = navItemColors,
                     onClick = {
@@ -388,7 +388,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Headset, contentDescription = "DJ Mixer") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("DJ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("DJ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "dj",
                     colors = navItemColors,
                     onClick = {
@@ -402,7 +402,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("EQ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("EQ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "equalizer",
                     colors = navItemColors,
                     onClick = {
@@ -415,7 +415,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Mic", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("Mic", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "mic",
                     colors = navItemColors,
                     onClick = {
@@ -429,7 +429,7 @@ fun MainApp() {
                 
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Radio", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("Radio", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "radio",
                     colors = navItemColors,
                     onClick = {
@@ -442,7 +442,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Online", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("Online", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "online_music",
                     colors = navItemColors,
                     onClick = {
@@ -455,7 +455,7 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
-                    label = if (windowMode == AppWindowMode.COMPACT) null else { { Text("Quran", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }, },
+                    label = if (windowMode == AppWindowMode.COMPACT) null else ({ Text("Quran", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) }),
                     selected = currentDestination?.route == "quran",
                     colors = navItemColors,
                     onClick = {
@@ -605,7 +605,7 @@ private fun WindowModeToolbar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(44.dp)
+                .height(52.dp)
                 .padding(horizontal = 12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
