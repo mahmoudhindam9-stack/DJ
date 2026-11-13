@@ -23,24 +23,9 @@
         android:protectionLevel="signature" />
     <uses-permission android:name="com.example.permission.WIDGET_ACTION" />
 
-    <application android:allowBackup="true" android:resizeableActivity="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/Theme.MyApplication" android:usesCleartextTraffic="true">
+    <application android:allowBackup="true" android:dataExtractionRules="@xml/data_extraction_rules" android:fullBackupContent="@xml/backup_rules" android:icon="@mipmap/ic_launcher" android:label="@string/app_name" android:roundIcon="@mipmap/ic_launcher_round" android:theme="@style/Theme.MyApplication" android:usesCleartextTraffic="true">
         <activity android:name=".MainActivity" android:exported="true" android:label="@string/app_name" android:theme="@style/Theme.MyApplication"
-            android:launchMode="singleTask"
-            android:resizeableActivity="true"
-            android:configChanges="orientation|screenSize|smallestScreenSize|screenLayout|keyboard|keyboardHidden"
-            android:windowSoftInputMode="adjustResize">
-            <layout
-                android:defaultWidth="440dp"
-                android:defaultHeight="840dp"
-                android:minWidth="320dp"
-                android:minHeight="500dp"
-                android:gravity="center" />
-            <meta-data
-                android:name="WindowManagerPreference:FreeformWindowSize"
-                android:value="phone" />
-            <meta-data
-                android:name="WindowManagerPreference:FreeformWindowOrientation"
-                android:value="portrait" />
+            android:launchMode="singleTask">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

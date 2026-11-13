@@ -79,12 +79,10 @@ fun DJMixerScreen(
     val onImportClicked = { filePicker.launch(arrayOf("audio/*")) }
 
     PremiumBackdrop {
-    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-    val useStackedDecks = maxWidth < 560.dp
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(top = 12.dp, bottom = 12.dp)
+            .padding(top = 16.dp, bottom = 16.dp)
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -155,41 +153,31 @@ fun DJMixerScreen(
             }
         }
 
-        // Keep each deck full-width on phones and compact FydeOS windows so its controls remain reachable.
-        if (useStackedDecks) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Decks
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
                 DJDeck(deckA, audioLibrary, onImportClicked, onPauseMainPlayer, MaterialTheme.colorScheme.primary)
+            }
+            Box(modifier = Modifier.weight(1f)) {
                 DJDeck(deckB, audioLibrary, onImportClicked, onPauseMainPlayer, MaterialTheme.colorScheme.secondary)
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) {
-                    DJDeck(deckA, audioLibrary, onImportClicked, onPauseMainPlayer, MaterialTheme.colorScheme.primary)
-                }
-                Box(modifier = Modifier.weight(1f)) {
-                    DJDeck(deckB, audioLibrary, onImportClicked, onPauseMainPlayer, MaterialTheme.colorScheme.secondary)
-                }
-            }
         }
-
+        
         Spacer(modifier = Modifier.height(16.dp))
-
-        // FX racks follow the same responsive arrangement as their decks.
-        if (useStackedDecks) {
-            Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                DJFxRack(deckA)
-                DJFxRack(deckB)
+        
+        // DJ FX / Effects
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                Box(modifier = Modifier) { DJFxRack(deckA) }
             }
-        } else {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                Box(modifier = Modifier.weight(1f)) { DJFxRack(deckA) }
-                Box(modifier = Modifier.weight(1f)) { DJFxRack(deckB) }
+            Box(modifier = Modifier.weight(1f)) {
+                DJFxRack(deckB)
             }
         }
 
@@ -199,7 +187,6 @@ fun DJMixerScreen(
         Box(modifier = Modifier.padding(horizontal = 16.dp)) {
             Box(modifier = Modifier) { com.example.djfx.DjFxBoard(controller = djFxController) }
         }
-    }
     }
 }
 }
