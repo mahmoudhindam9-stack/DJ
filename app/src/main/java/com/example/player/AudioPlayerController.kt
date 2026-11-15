@@ -51,15 +51,18 @@ class AudioPlayerController(private val context: Context) {
         }
     }
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build().apply {
-        setAudioAttributes(
-            AudioAttributes.Builder()
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .setUsage(C.USAGE_MEDIA)
-                .build(),
-            false
-        )
-    }
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory)
+        .setMediaSourceFactory(createAppMediaSourceFactory(context))
+        .build()
+        .apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                false
+            )
+        }
 
     // --- Auto crossfade support -------------------------------------------------
     // A second, hidden player used only to pre-roll the upcoming track underneath
@@ -80,7 +83,9 @@ class AudioPlayerController(private val context: Context) {
     }
     private var previewPlayerInstance: ExoPlayer? = null
     private fun ensurePreviewPlayer(): ExoPlayer {
-        return previewPlayerInstance ?: ExoPlayer.Builder(context, previewRenderersFactory).build()
+        return previewPlayerInstance ?: ExoPlayer.Builder(context, previewRenderersFactory)
+            .setMediaSourceFactory(createAppMediaSourceFactory(context))
+            .build()
             .apply {
                 volume = 0f
                 setAudioAttributes(
@@ -838,12 +843,7 @@ class AudioPlayerController(private val context: Context) {
             val matchIdx = expectedIndex.coerceIn(0, (expectedList.size - 1).coerceAtLeast(0))
             exoPlayer.seekTo(matchIdx, positionMs)
         } else {
-            val items = expectedList.map {
-                MediaItem.Builder()
-                    .setUri(it.uri)
-                    .setMediaId(it.id.ifEmpty { it.uri.toString() })
-                    .build()
-            }
+            val items = expectedList.map(::mediaItemFromSong)
             val safeIdx = expectedIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
             exoPlayer.setMediaItems(items, safeIdx, positionMs)
             exoPlayer.prepare()

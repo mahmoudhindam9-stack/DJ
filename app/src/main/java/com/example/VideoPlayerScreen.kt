@@ -31,11 +31,15 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import com.example.player.createAppMediaSourceFactory
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -63,13 +67,33 @@ fun VideoPlayerScreen(
             ?: "Video"
     }
 
+    var playerErrorText by remember(videoUri) { mutableStateOf<String?>(null) }
+
     val player = remember(videoUri) {
         val renderersFactory = DefaultRenderersFactory(context).setEnableDecoderFallback(true)
-        ExoPlayer.Builder(context, renderersFactory).build().apply {
-            setMediaItem(MediaItem.fromUri(videoUri))
-            playWhenReady = true
-            prepare()
-        }
+        val uriLower = videoUri.toString().lowercase().substringBefore('?').substringBefore('#')
+        val mediaItem = MediaItem.Builder()
+            .setUri(videoUri)
+            .apply {
+                when {
+                    uriLower.endsWith(".m3u8") -> setMimeType(MimeTypes.APPLICATION_M3U8)
+                    uriLower.endsWith(".mpd") -> setMimeType(MimeTypes.APPLICATION_MPD)
+                }
+            }
+            .build()
+        ExoPlayer.Builder(context, renderersFactory)
+            .setMediaSourceFactory(createAppMediaSourceFactory(context))
+            .build()
+            .apply {
+                addListener(object : Player.Listener {
+                    override fun onPlayerError(error: PlaybackException) {
+                        playerErrorText = error.localizedMessage ?: "Unable to play this video format"
+                    }
+                })
+                setMediaItem(mediaItem)
+                playWhenReady = true
+                prepare()
+            }
     }
 
     LaunchedEffect(isFullscreen) {
@@ -155,6 +179,18 @@ fun VideoPlayerScreen(
                 },
                 update = { playerView -> playerView.player = player }
             )
+
+            if (!playerErrorText.isNullOrBlank()) {
+                Text(
+                    text = playerErrorText ?: "",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .background(Color.Black.copy(alpha = 0.75f))
+                        .padding(horizontal = 16.dp, vertical = 10.dp)
+                )
+            }
 
             if (isFullscreen) {
                 IconButton(

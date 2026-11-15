@@ -23,7 +23,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
 import androidx.media3.common.Player
+import com.example.player.UnifiedStreamResolver
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.QueueSheet
@@ -53,21 +55,6 @@ data class RadioStation(
     val codec: String,
     val bitrate: Int,
     val countryCode: String
-)
-
-private const val EGYPT_QURAN_STATION_ID = "builtin-eg-quran-cairo"
-private val EGYPT_QURAN_STATION = RadioStation(
-    id = EGYPT_QURAN_STATION_ID,
-    name = "إذاعة القرآن الكريم من القاهرة",
-    streamUrls = listOf(
-        "https://stream.radiojar.com/8s5u5tpdtwzuv",
-        "https://n0e.radiojar.com/8s5u5tpdtwzuv",
-        "https://n05.radiojar.com/8s5u5tpdtwzuv"
-    ),
-    tags = "اسلامي • دين • قرآن",
-    codec = "MP3",
-    bitrate = 0,
-    countryCode = "EG"
 )
 
 object RadioBrowserRepository {
@@ -136,21 +123,6 @@ object RadioBrowserRepository {
                         }
                     }
 
-                    if (countryCode.equals("EG", ignoreCase = true) &&
-                        (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
-                    ) {
-                        // Always use the built-in Cairo Quran station as the canonical entry.
-                        // RadioBrowser may return another record for the same station which can
-                        // later fail stream validation and disappear from the UI.
-                        val withoutQuranDuplicate = parsedStations.filterNot { station ->
-                            station.name.contains("القرآن الكريم من القاهرة", ignoreCase = true) ||
-                                station.name.contains("إذاعة القرآن الكريم", ignoreCase = true)
-                        }
-                        return@withContext deduplicateRadioStations(
-                            listOf(EGYPT_QURAN_STATION) + withoutQuranDuplicate
-                        )
-                    }
-
                     return@withContext deduplicateRadioStations(parsedStations)
                 } else {
                     connection.disconnect()
@@ -162,18 +134,9 @@ object RadioBrowserRepository {
         }
         
         if (lastException != null) {
-            if (countryCode.equals("EG", ignoreCase = true) &&
-                (query.isBlank() || EGYPT_QURAN_STATION.name.contains(query, ignoreCase = true))
-            ) {
-                return@withContext listOf(EGYPT_QURAN_STATION)
-            }
             throw lastException
         }
-        if (countryCode.equals("EG", ignoreCase = true) && query.isBlank()) {
-            listOf(EGYPT_QURAN_STATION)
-        } else {
-            emptyList()
-        }
+        emptyList()
     }
 }
 
@@ -232,12 +195,14 @@ private suspend fun resolvePlaylistUrl(url: String): String = withContext(Dispat
 
 private fun radioMime(codec: String, url: String): String? {
     val c = codec.lowercase()
-    val u = url.lowercase()
+    val u = url.lowercase().substringBefore('?').substringBefore('#')
     return when {
-        c.contains("mp3") || c.contains("mpeg") || u.contains(".mp3") -> "audio/mpeg"
-        c.contains("aac") || c.contains("aacp") || u.contains(".aac") -> "audio/aac"
-        c.contains("ogg") || c.contains("vorbis") || u.contains(".ogg") -> "audio/ogg"
-        c.contains("flac") || u.contains(".flac") -> "audio/flac"
+        u.endsWith(".m3u8") || c.contains("hls") -> MimeTypes.APPLICATION_M3U8
+        u.endsWith(".mpd") || c.contains("dash") -> MimeTypes.APPLICATION_MPD
+        u.endsWith(".mp3") || c.contains("mp3") || c.contains("mpeg") -> MimeTypes.AUDIO_MPEG
+        u.endsWith(".aac") || u.endsWith(".aacp") || c.contains("aac") || c.contains("aacp") -> MimeTypes.AUDIO_AAC
+        u.endsWith(".ogg") || u.endsWith(".oga") || c.contains("ogg") || c.contains("vorbis") -> MimeTypes.AUDIO_OGG
+        u.endsWith(".flac") || c.contains("flac") -> MimeTypes.AUDIO_FLAC
         else -> null
     }
 }
@@ -339,12 +304,6 @@ fun RadioScreen(
                     kotlinx.coroutines.coroutineScope {
                         chunk.map { station ->
                             async {
-                            if (station.id == EGYPT_QURAN_STATION_ID) {
-                                StationValidator.validStations[station.id] = true
-                                synchronized(validList) { validList.add(station) }
-                                return@async
-                            }
-
                             if (StationValidator.validStations.containsKey(station.id)) {
                                 if (StationValidator.validStations[station.id] == true) {
                                     synchronized(validList) { validList.add(station) }
@@ -354,23 +313,11 @@ fun RadioScreen(
                             
                             var isValid = false
                             for (urlStr in station.streamUrls) {
-                                val resolvedUrl = resolvePlaylistUrl(urlStr)
-                                try {
-                                    val conn = URL(resolvedUrl).openConnection() as HttpURLConnection
-                                    conn.connectTimeout = 5000
-                                    conn.readTimeout = 5000
-                                    conn.requestMethod = "GET"
-                                    conn.setRequestProperty("User-Agent", "DJ-Music-Player/1.0")
-                                    val code = conn.responseCode
-                                    if (code in 200..299) {
-                                        val contentType = conn.contentType?.lowercase() ?: ""
-                                        if (contentType.contains("audio") || contentType.contains("mpeg") || contentType.contains("ogg") || contentType.contains("aac") || contentType.contains("flac") || contentType.contains("application") || contentType.contains("video/ogg")) {
-                                            isValid = true
-                                        }
-                                    }
-                                    conn.disconnect()
-                                    if (isValid) break
-                                } catch (e: Exception) {}
+                                val probed = UnifiedStreamResolver.probeStreamEndpoint(urlStr)
+                                if (probed != null && probed.isPlayable) {
+                                    isValid = true
+                                    break
+                                }
                             }
                             StationValidator.validStations[station.id] = isValid
                             if (isValid) {

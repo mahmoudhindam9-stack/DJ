@@ -36,15 +36,18 @@ class DJDeckController(private val context: Context, val deckName: String) {
         }
     }
 
-    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory).build().apply {
-        setAudioAttributes(
-            AudioAttributes.Builder()
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .setUsage(C.USAGE_MEDIA)
-                .build(),
-            false
-        )
-    }
+    val exoPlayer: ExoPlayer = ExoPlayer.Builder(context, renderersFactory)
+        .setMediaSourceFactory(createAppMediaSourceFactory(context))
+        .build()
+        .apply {
+            setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                false
+            )
+        }
 
     var currentSong by mutableStateOf<AudioItem?>(null)
     var isPlaying by mutableStateOf(false)
@@ -113,7 +116,12 @@ class DJDeckController(private val context: Context, val deckName: String) {
         RuntimeDiagnostics.recordAction(deckName + "_load_track")
         RuntimeDiagnostics.record("INFO", "DJ_DECK", deckName + ": track loaded", song.title)
         currentSong = song
-        exoPlayer.setMediaItem(MediaItem.fromUri(song.uri))
+        val mediaItem = MediaItem.Builder()
+            .setUri(song.uri)
+            .setMediaId(UnifiedPlaybackQueue.stableKey(song))
+            .apply { UnifiedStreamResolver.mimeTypeFor(song)?.let(::setMimeType) }
+            .build()
+        exoPlayer.setMediaItem(mediaItem)
         exoPlayer.prepare()
         currentPositionMs = 0L
     }

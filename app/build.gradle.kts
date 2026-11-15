@@ -110,6 +110,8 @@ dependencies {
   implementation(libs.okhttp)
   // implementation("com.google.ai.edge.litertlm:litertlm-android:0.19.1")
   implementation("androidx.media3:media3-exoplayer:1.4.1")
+  implementation("androidx.media3:media3-exoplayer-hls:1.4.1")
+  implementation("androidx.media3:media3-exoplayer-dash:1.4.1")
   implementation("androidx.media3:media3-ui:1.4.1")
   implementation("androidx.media:media:1.7.0")
   testImplementation(libs.androidx.compose.ui.test.junit4)

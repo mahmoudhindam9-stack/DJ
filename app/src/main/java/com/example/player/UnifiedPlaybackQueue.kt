@@ -1,6 +1,13 @@
 package com.example.player
 
+import android.content.Context
 import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultDataSource
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import com.example.model.AudioItem
 import com.example.onlinemusic.AlbumatyLink
 import com.example.onlinemusic.AudiusMusicRepository
@@ -11,9 +18,26 @@ import com.example.onlinemusic.OnlineMusicRepository
 import com.example.radio.RadioStation
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.net.URI
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.TimeUnit
+
+private const val STREAM_USER_AGENT =
+    "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+
+@OptIn(UnstableApi::class)
+fun createAppMediaSourceFactory(context: Context): DefaultMediaSourceFactory {
+    val httpFactory = DefaultHttpDataSource.Factory()
+        .setAllowCrossProtocolRedirects(true)
+        .setConnectTimeoutMs(15_000)
+        .setReadTimeoutMs(20_000)
+        .setUserAgent(STREAM_USER_AGENT)
+    return DefaultMediaSourceFactory(
+        DefaultDataSource.Factory(context.applicationContext, httpFactory)
+    )
+}
 
 /**
  * Shared queue utilities and lazy stream resolver used across Player, Quran, Radio,
@@ -21,7 +45,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 object UnifiedPlaybackQueue {
     private val DIRECT_AUDIO_EXTENSIONS = setOf(
-        ".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".amr", ".3gp"
+        ".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".opus", ".amr", ".3gp", ".m3u8", ".mpd"
     )
 
     fun stableKey(item: AudioItem): String = item.id.ifBlank { item.uri.toString() }
@@ -143,7 +167,17 @@ object UnifiedStreamResolver {
     private val hibaRepo by lazy { HibaMusicRepository() }
     private val audiusRepo by lazy { AudiusMusicRepository() }
 
+    private val probeClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(8, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
+
     private val resolvedCache = ConcurrentHashMap<String, AudioItem>()
+    private val detectedMimeCache = ConcurrentHashMap<String, String>()
     private val radioFallbackAttempt = ConcurrentHashMap<String, Int>()
 
     fun cacheResolved(item: AudioItem) {
@@ -172,7 +206,7 @@ object UnifiedStreamResolver {
         val lowerUri = uriStr.lowercase()
         val pathNoQuery = lowerUri.substringBefore('?').substringBefore('#')
 
-        if (lowerUri.startsWith("audius://") || item.id.startsWith("audius:") && !lowerUri.contains("/stream")) {
+        if (lowerUri.startsWith("audius://") || (item.id.startsWith("audius:") && !lowerUri.contains("/stream"))) {
             return true
         }
         if (item.id.startsWith("hiba:") && !UnifiedPlaybackQueue.isDirectPlayableUri(uriStr)) {
@@ -184,11 +218,9 @@ object UnifiedStreamResolver {
             return true
         }
         if (item.album == "Live Radio") {
-            if (pathNoQuery.endsWith(".m3u") || pathNoQuery.endsWith(".pls")) return true
+            if (pathNoQuery.endsWith(".m3u") || pathNoQuery.endsWith(".pls") || pathNoQuery.endsWith(".asx")) return true
             if (cached != null && cached.uri == item.uri) return false
-            // Allow first-time catalog check if fallback URLs exist and not yet resolved
-            val fallbacks = RadioStreamCatalog.getFallbackUrls(item.id)
-            if (fallbacks.isNotEmpty() && cached == null) return true
+            return true
         }
         return false
     }
@@ -268,47 +300,199 @@ object UnifiedStreamResolver {
     }
 
     private suspend fun resolveRadioItem(item: AudioItem, attemptIndex: Int): AudioItem {
+        val key = UnifiedPlaybackQueue.stableKey(item)
         val fallbacks = RadioStreamCatalog.getFallbackUrls(item.id)
-        val rawUrl = fallbacks.getOrElse(attemptIndex) { item.uri.toString() }
-        radioFallbackAttempt[item.id] = attemptIndex
-        val directUrl = resolveRadioPlaylistUrl(rawUrl)
+        if (fallbacks.isEmpty()) {
+            val probed = probeStreamEndpoint(item.uri.toString())
+            if (probed != null) {
+                probed.detectedMime?.let { detectedMimeCache[key] = it }
+                return item.copy(uri = Uri.parse(probed.finalUrl))
+            }
+            return item
+        }
+
+        val safeStart = attemptIndex.coerceIn(0, fallbacks.lastIndex)
+        for (idx in safeStart..fallbacks.lastIndex) {
+            radioFallbackAttempt[item.id] = idx
+            val candidateUrl = fallbacks[idx]
+            val probed = probeStreamEndpoint(candidateUrl)
+            if (probed != null && probed.isPlayable) {
+                probed.detectedMime?.let { detectedMimeCache[key] = it } ?: detectedMimeCache.remove(key)
+                return item.copy(uri = Uri.parse(probed.finalUrl))
+            }
+        }
+
+        // All probes rejected/failed; fall back to raw attempt index URL so ExoPlayer reports final status
+        radioFallbackAttempt[item.id] = safeStart
+        detectedMimeCache.remove(key)
+        val directUrl = resolveRadioPlaylistUrl(fallbacks[safeStart])
         return item.copy(uri = Uri.parse(directUrl))
     }
 
-    suspend fun resolveRadioPlaylistUrl(url: String): String = withContext(Dispatchers.IO) {
-        val clean = url.trim().lowercase().substringBefore('?')
-        if (!clean.endsWith(".m3u") && !clean.endsWith(".pls")) return@withContext url
+    internal data class ProbedStream(
+        val finalUrl: String,
+        val detectedMime: String?,
+        val isPlayable: Boolean
+    )
+
+    internal suspend fun probeStreamEndpoint(url: String, depth: Int = 0): ProbedStream? = withContext(Dispatchers.IO) {
+        if (depth > 2) return@withContext null
+        val trimmed = url.trim()
+        if (!trimmed.startsWith("http://", true) && !trimmed.startsWith("https://", true)) {
+            return@withContext ProbedStream(trimmed, inferMimeFromUrl(trimmed), isPlayable = true)
+        }
+
+        val urlHintMime = inferMimeFromUrl(trimmed)
         runCatching {
-            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
-                connectTimeout = 8_000
-                readTimeout = 10_000
-                instanceFollowRedirects = true
-                setRequestProperty("User-Agent", "DJ-Music-Player/1.0")
+            val req = Request.Builder()
+                .url(trimmed)
+                .header("User-Agent", STREAM_USER_AGENT)
+                .header("Accept", "*/*")
+                .build()
+            probeClient.newCall(req).execute().use { resp ->
+                val finalUrl = resp.request.url.toString()
+                if (!resp.isSuccessful) {
+                    return@withContext ProbedStream(finalUrl, null, isPlayable = false)
+                }
+                val contentType = resp.header("Content-Type")?.lowercase().orEmpty()
+                val finalPath = finalUrl.lowercase().substringBefore('?').substringBefore('#')
+
+                // Reject HTML landing/error pages immediately so we don't trigger UnrecognizedInputFormatException
+                if (contentType.contains("text/html") || contentType.contains("application/xhtml") ||
+                    contentType.contains("application/json")
+                ) {
+                    return@withContext ProbedStream(finalUrl, null, isPlayable = false)
+                }
+
+                // Explicit DASH manifest
+                if (finalPath.endsWith(".mpd") || contentType.contains("dash+xml")) {
+                    return@withContext ProbedStream(finalUrl, MimeTypes.APPLICATION_MPD, isPlayable = true)
+                }
+
+                val looksLikePlaylistOrHls = finalPath.endsWith(".m3u8") ||
+                    finalPath.endsWith(".m3u") ||
+                    finalPath.endsWith(".pls") ||
+                    contentType.contains("mpegurl") ||
+                    contentType.contains("scpls") ||
+                    contentType.contains("pls+xml")
+
+                if (looksLikePlaylistOrHls) {
+                    // Read a bounded slice to distinguish HLS (#EXT-X-*) vs M3U/PLS redirect playlist
+                    val bodySample = resp.body?.source()?.let { source ->
+                        source.request(16_384L)
+                        source.buffer.clone().readUtf8(minOf(source.buffer.size, 16_384L))
+                    }.orEmpty()
+
+                    val trimmedSample = bodySample.trimStart()
+                    if (trimmedSample.startsWith("<!DOCTYPE", ignoreCase = true) ||
+                        trimmedSample.startsWith("<html", ignoreCase = true)
+                    ) {
+                        return@withContext ProbedStream(finalUrl, null, isPlayable = false)
+                    }
+
+                    val isHls = finalPath.endsWith(".m3u8") ||
+                        bodySample.contains("#EXT-X-STREAM-INF", ignoreCase = true) ||
+                        bodySample.contains("#EXT-X-TARGETDURATION", ignoreCase = true) ||
+                        bodySample.contains("#EXT-X-MEDIA-SEQUENCE", ignoreCase = true) ||
+                        bodySample.contains("#EXT-X-VERSION", ignoreCase = true)
+
+                    if (isHls) {
+                        return@withContext ProbedStream(finalUrl, MimeTypes.APPLICATION_M3U8, isPlayable = true)
+                    }
+
+                    val extracted = extractUrlFromPlaylistBody(bodySample, finalUrl)
+                    if (!extracted.isNullOrBlank() && extracted != finalUrl) {
+                        return@withContext probeStreamEndpoint(extracted, depth + 1)
+                    }
+                    // If an .m3u/.pls had no usable URL inside, reject it
+                    if (finalPath.endsWith(".m3u") || finalPath.endsWith(".pls")) {
+                        return@withContext ProbedStream(finalUrl, null, isPlayable = false)
+                    }
+                }
+
+                // Direct progressive audio / octet stream
+                val inferred = inferMimeFromUrl(finalUrl) ?: inferMimeFromContentType(contentType) ?: urlHintMime
+                ProbedStream(finalUrl, inferred, isPlayable = true)
             }
-            try {
-                val body = conn.inputStream.bufferedReader().use { it.readText() }
-                val direct = body.lineSequence()
-                    .map { it.trim() }
-                    .firstOrNull { it.startsWith("http://") || it.startsWith("https://") }
-                direct ?: body.lineSequence()
-                    .map { it.substringAfter('=', "").trim() }
-                    .firstOrNull { it.startsWith("http://") || it.startsWith("https://") }
-                    ?: url
-            } finally {
-                conn.disconnect()
+        }.getOrNull()
+    }
+
+    internal fun extractUrlFromPlaylistBody(body: String, baseUrl: String): String? {
+        val candidates = mutableListOf<String>()
+        for (rawLine in body.lineSequence()) {
+            val line = rawLine.trim()
+            if (line.isEmpty() || line.startsWith("#") || line.startsWith("[")) continue
+            val value = if (line.contains('=') && line.substringBefore('=').lowercase().startsWith("file")) {
+                line.substringAfter('=', "").trim()
+            } else if (!line.contains('=') || line.startsWith("http", ignoreCase = true)) {
+                line
+            } else {
+                ""
             }
-        }.getOrDefault(url)
+            if (value.isNotBlank()) {
+                val resolved = runCatching {
+                    when {
+                        value.startsWith("http://", true) || value.startsWith("https://", true) -> value
+                        else -> URI(baseUrl).resolve(value).toString()
+                    }
+                }.getOrNull()
+                if (!resolved.isNullOrBlank() && (resolved.startsWith("http://", true) || resolved.startsWith("https://", true))) {
+                    candidates.add(resolved)
+                }
+            }
+        }
+        return candidates.firstOrNull()
+    }
+
+    suspend fun resolveRadioPlaylistUrl(url: String): String = withContext(Dispatchers.IO) {
+        val clean = url.trim().lowercase().substringBefore('?').substringBefore('#')
+        if (!clean.endsWith(".m3u") && !clean.endsWith(".pls")) return@withContext url
+        probeStreamEndpoint(url)?.finalUrl ?: url
+    }
+
+    private fun inferMimeFromUrl(url: String): String? {
+        val pathNoQuery = url.trim().lowercase().substringBefore('?').substringBefore('#')
+        return when {
+            pathNoQuery.endsWith(".m3u8") -> MimeTypes.APPLICATION_M3U8
+            pathNoQuery.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            pathNoQuery.endsWith(".mp3") -> MimeTypes.AUDIO_MPEG
+            pathNoQuery.endsWith(".aac") || pathNoQuery.endsWith(".aacp") -> MimeTypes.AUDIO_AAC
+            pathNoQuery.endsWith(".ogg") || pathNoQuery.endsWith(".oga") -> MimeTypes.AUDIO_OGG
+            pathNoQuery.endsWith(".flac") -> MimeTypes.AUDIO_FLAC
+            pathNoQuery.endsWith(".wav") -> MimeTypes.AUDIO_WAV
+            else -> null
+        }
+    }
+
+    private fun inferMimeFromContentType(contentType: String): String? {
+        val ct = contentType.lowercase()
+        return when {
+            ct.contains("mpegurl") -> MimeTypes.APPLICATION_M3U8
+            ct.contains("dash+xml") -> MimeTypes.APPLICATION_MPD
+            ct.contains("audio/mpeg") || ct.contains("audio/mp3") -> MimeTypes.AUDIO_MPEG
+            ct.contains("audio/aac") || ct.contains("audio/aacp") -> MimeTypes.AUDIO_AAC
+            ct.contains("ogg") -> MimeTypes.AUDIO_OGG
+            ct.contains("flac") -> MimeTypes.AUDIO_FLAC
+            else -> null
+        }
     }
 
     fun mimeTypeFor(item: AudioItem): String? {
+        val key = UnifiedPlaybackQueue.stableKey(item)
+        detectedMimeCache[key]?.let { return it }
+
+        val uriStr = item.uri.toString().lowercase()
+        inferMimeFromUrl(uriStr)?.let { return it }
+
         if (item.album == "Live Radio") {
             val codec = RadioStreamCatalog.getCodec(item.id).lowercase()
-            val u = item.uri.toString().lowercase()
             return when {
-                codec.contains("mp3") || codec.contains("mpeg") || u.contains(".mp3") -> "audio/mpeg"
-                codec.contains("aac") || codec.contains("aacp") || u.contains(".aac") -> "audio/aac"
-                codec.contains("ogg") || codec.contains("vorbis") || u.contains(".ogg") -> "audio/ogg"
-                codec.contains("flac") || u.contains(".flac") -> "audio/flac"
+                codec.contains("hls") || uriStr.contains(".m3u8") -> MimeTypes.APPLICATION_M3U8
+                codec.contains("dash") || uriStr.contains(".mpd") -> MimeTypes.APPLICATION_MPD
+                codec.contains("mp3") || codec.contains("mpeg") -> MimeTypes.AUDIO_MPEG
+                codec.contains("aac") || codec.contains("aacp") -> MimeTypes.AUDIO_AAC
+                codec.contains("ogg") || codec.contains("vorbis") -> MimeTypes.AUDIO_OGG
+                codec.contains("flac") -> MimeTypes.AUDIO_FLAC
                 else -> null
             }
         }
