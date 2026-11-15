@@ -18,6 +18,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -79,10 +80,9 @@ private val MushafBronzeDark = Color(0xFF433018)
 private val MushafBronzeMid = Color(0xFF6B4F28)
 private val MushafGoldLight = Color(0xFFDDC797)
 private val MushafGoldWarm = Color(0xFFC5A467)
-private val ActiveAyahFill = Color(0x48E8B938)
-private val ActiveAyahStroke = Color(0xFFC82424)
+private val ActiveAyahUnderlineColor = Color(0xFFC82424)
 
-private data class PolygonPoint(val x: Float, val y: Float)
+private typealias PolygonPoint = MushafPolygonPoint
 
 private data class AyahTimingEntry(
     val surahNumber: Int,
@@ -866,10 +866,10 @@ fun QuranReaderScreen(playerController: AudioPlayerController, onBack: () -> Uni
             ?: surahVerses.firstOrNull { it.surahNumber == sNum && it.numberInSurah == aNum && it.page in 1..604 }?.page
     }
 
-    // Automatically flip the Mushaf page when the reciter advances to a new page
+    // Automatically flip the Mushaf page when the reciter advances to a new page, or initialize to active position's page
     LaunchedEffect(activePageForPlayback, playerController.isPlaying) {
         val targetPage = activePageForPlayback
-        if (playerController.isPlaying && targetPage != null && targetPage in 1..604 && targetPage != page) {
+        if (targetPage != null && targetPage in 1..604 && targetPage != page && (playerController.isPlaying || positionMs > 3000L)) {
             page = targetPage
         }
     }
@@ -955,19 +955,9 @@ private fun FullPageMushafReplica(
     val bmp = pageData.pageBitmap
     val redBmp = pageData.redTintedBitmap
 
-    // Coordinate conversion from 343x550 (mp3quran ayat_timing space) to normalized [0..1] screen space
-    // In the 1024x1656 / 1260x2038 Madinah Mushaf page bitmap:
-    // Left crop = 40/1024 (0.03906), Right crop = 978/1024 (0.95508), Width = 938/1024
-    // Top crop = 14/1656 (0.00845), Bottom crop = 1624/1656 (0.98068), Height = 1610/1656
-    fun x343ToNorm(x343: Float): Float {
-        val imgX1024 = 51f + (x343 / 343f) * 915f
-        return ((imgX1024 - 40f) / 938f).coerceIn(0f, 1f)
-    }
+    fun x343ToNorm(x343: Float): Float = QuranMushafGeometry.x343ToNorm(x343)
 
-    fun y550ToNorm(y550: Float): Float {
-        val imgY1656 = (y550 / 550f) * 1620f - 1f
-        return ((imgY1656 - 14f) / 1610f).coerceIn(0f, 1f)
-    }
+    fun y550ToNorm(y550: Float): Float = QuranMushafGeometry.y550ToNorm(y550)
 
     BoxWithConstraints(
         modifier = Modifier
@@ -1064,25 +1054,18 @@ private fun FullPageMushafReplica(
                     )
                 }
 
-                // 3. Synchronized Active Recited Ayah Highlight (exact polygon of the recited verse)
+                // 3. Synchronized Active Recited Ayah Underline (computed from verse polygon excluding verse marker)
                 val activeGeo = activeAyahPair?.let { (sNum, aNum) ->
                     pageData.ayahGeometries.firstOrNull { it.surahNumber == sNum && it.ayahInSurah == aNum }
                 }
-                if (activeGeo != null && activeGeo.polygon.size >= 3) {
-                    val polyPath = Path().apply {
-                        activeGeo.polygon.forEachIndexed { idx, pt ->
-                            val sx = x343ToNorm(pt.x) * canvasW
-                            val sy = y550ToNorm(pt.y) * canvasH
-                            if (idx == 0) moveTo(sx, sy) else lineTo(sx, sy)
-                        }
-                        close()
-                    }
-                    drawPath(path = polyPath, color = ActiveAyahFill)
-                    drawPath(
-                        path = polyPath,
-                        color = ActiveAyahStroke.copy(alpha = 0.55f),
-                        style = Stroke(width = 2.2f)
+                val activeUnderlineSegments = if (activeGeo != null && activeGeo.polygon.size >= 3) {
+                    QuranMushafGeometry.extractActiveVerseUnderlineSegments(
+                        polygon = activeGeo.polygon,
+                        markerX = activeGeo.markerX,
+                        markerY = activeGeo.markerY
                     )
+                } else {
+                    emptyList()
                 }
 
                 // 4. Draw the High-Resolution 15-Line Madinah Mushaf Page Calligraphy (Cropped to Full Screen)
@@ -1162,22 +1145,23 @@ private fun FullPageMushafReplica(
                     )
                 }
 
-                // 7. Draw Ornate Pointed-Arch Brown & Gold Ayah Medallions (فواصل الآيات) at every Ayah position
-                val medallionRadius = (canvasW * 0.033f).coerceIn(15f, 28f)
-                for (geo in pageData.ayahGeometries) {
-                    val mx = geo.markerX ?: continue
-                    val my = geo.markerY ?: continue
-                    val cx = x343ToNorm(mx) * canvasW
-                    val cy = y550ToNorm(my) * canvasH
-                    val isActive = activeAyahPair?.first == geo.surahNumber && activeAyahPair.second == geo.ayahInSurah
-
-                    drawOrnateAyahMedallion(
-                        center = Offset(cx, cy),
-                        radius = medallionRadius,
-                        ayahNumber = geo.ayahInSurah,
-                        isActive = isActive,
-                        typeface = amiriTypeface
-                    )
+                // 7. Draw crisp 2.5dp red underline beneath ONLY the currently recited verse text area.
+                // (No duplicate medallion markers are drawn on top of imageBitmap because the Madinah Mushaf
+                // bitmap already contains the single authentic printed verse marker for every verse.)
+                if (activeUnderlineSegments.isNotEmpty()) {
+                    val underlineStrokePx = 2.5.dp.toPx()
+                    for (seg in activeUnderlineSegments) {
+                        val startX = seg.leftNorm * canvasW
+                        val endX = seg.rightNorm * canvasW
+                        val y = seg.baselineNorm * canvasH
+                        drawLine(
+                            color = ActiveAyahUnderlineColor,
+                            start = Offset(startX, y),
+                            end = Offset(endX, y),
+                            strokeWidth = underlineStrokePx,
+                            cap = StrokeCap.Round
+                        )
+                    }
                 }
             }
         } else {
@@ -1243,81 +1227,6 @@ private fun DrawScope.drawSurahSideCircle(
     }
 }
 
-private fun DrawScope.drawOrnateAyahMedallion(
-    center: Offset,
-    radius: Float,
-    ayahNumber: Int,
-    isActive: Boolean,
-    typeface: Typeface
-) {
-    val outerColor = if (isActive) MushafDivineRed else MushafBronzeDark
-    val midFill = if (isActive) Color(0xFFFFDF80) else MushafGoldLight
-    val innerFill = if (isActive) Color(0xFFFFF3C4) else MushafPaperBg
-
-    // Pointed top & bottom arch finials (matching the classic Mushaf medallion in the attached screenshot)
-    val archPath = Path().apply {
-        val topTip = Offset(center.x, center.y - radius * 1.42f)
-        val bottomTip = Offset(center.x, center.y + radius * 1.42f)
-        val leftMid = Offset(center.x - radius * 1.08f, center.y)
-        val rightMid = Offset(center.x + radius * 1.08f, center.y)
-
-        moveTo(topTip.x, topTip.y)
-        quadraticTo(center.x + radius * 0.55f, center.y - radius * 1.05f, rightMid.x, rightMid.y)
-        quadraticTo(center.x + radius * 0.55f, center.y + radius * 1.05f, bottomTip.x, bottomTip.y)
-        quadraticTo(center.x - radius * 0.55f, center.y + radius * 1.05f, leftMid.x, leftMid.y)
-        quadraticTo(center.x - radius * 0.55f, center.y - radius * 1.05f, topTip.x, topTip.y)
-        close()
-    }
-    drawPath(path = archPath, color = outerColor)
-
-    // 8-lobed rosette scallops
-    for (i in 0 until 8) {
-        val angle = (i * 45.0) * (Math.PI / 180.0)
-        val lobeCenter = Offset(
-            center.x + (cos(angle) * radius * 0.78f).toFloat(),
-            center.y + (sin(angle) * radius * 0.78f).toFloat()
-        )
-        drawCircle(color = outerColor, radius = radius * 0.34f, center = lobeCenter)
-        drawCircle(color = midFill, radius = radius * 0.25f, center = lobeCenter)
-    }
-
-    // Concentric Gold & Bronze Medallion Rings
-    drawCircle(color = outerColor, radius = radius * 0.96f, center = center)
-    drawCircle(color = midFill, radius = radius * 0.86f, center = center)
-    drawCircle(color = outerColor, radius = radius * 0.72f, center = center)
-    drawCircle(color = innerFill, radius = radius * 0.64f, center = center)
-
-    // Decorative top & bottom dots inside the pointed tips
-    drawCircle(
-        color = midFill,
-        radius = radius * 0.11f,
-        center = Offset(center.x, center.y - radius * 1.12f)
-    )
-    drawCircle(
-        color = midFill,
-        radius = radius * 0.11f,
-        center = Offset(center.x, center.y + radius * 1.12f)
-    )
-
-    // Crisp Arabic-Indic Verse Number centered inside the medallion
-    val numText = arabicDigits(ayahNumber)
-    drawIntoCanvas { canvas ->
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = if (isActive) android.graphics.Color.rgb(180, 20, 20) else android.graphics.Color.rgb(22, 18, 14)
-            textAlign = Paint.Align.CENTER
-            this.typeface = typeface
-            isFakeBoldText = true
-            textSize = when {
-                numText.length >= 3 -> radius * 0.66f
-                numText.length == 2 -> radius * 0.76f
-                else -> radius * 0.84f
-            }
-        }
-        val fm = paint.fontMetrics
-        val baselineY = center.y - (fm.ascent + fm.descent) * 0.5f
-        canvas.nativeCanvas.drawText(numText, center.x, baselineY, paint)
-    }
-}
 
 @Composable
 private fun BoxWithConstraintsScope.AutoFitTextMushafFallback(
@@ -1329,8 +1238,11 @@ private fun BoxWithConstraintsScope.AutoFitTextMushafFallback(
     val maxW = constraints.maxWidth
     val maxH = constraints.maxHeight
 
+    var activeRange by remember { mutableStateOf<IntRange?>(null) }
+
     val annotatedPage = remember(pageData.verses, activeAyahPair) {
-        buildAnnotatedString {
+        var matchedRange: IntRange? = null
+        val text = buildAnnotatedString {
             var prevSurah = -1
             pageData.verses.forEachIndexed { idx, verse ->
                 if (verse.surahNumber != prevSurah) {
@@ -1357,18 +1269,19 @@ private fun BoxWithConstraintsScope.AutoFitTextMushafFallback(
                 }
 
                 val isActive = activeAyahPair?.first == verse.surahNumber && activeAyahPair.second == verse.numberInSurah
-                if (isActive) {
-                    pushStyle(SpanStyle(background = ActiveAyahFill, color = MushafDivineRed, fontWeight = FontWeight.Bold))
-                    append(verse.text)
-                    pop()
-                } else {
-                    appendWithRedDivineNames(verse.text)
+                val startIdx = length
+                appendWithRedDivineNames(verse.text)
+                val endIdx = length
+                if (isActive && endIdx > startIdx) {
+                    matchedRange = startIdx until endIdx
                 }
                 pushStyle(SpanStyle(color = MushafBronzeMid, fontWeight = FontWeight.Bold))
                 append(" ﴿" + arabicDigits(verse.numberInSurah) + "﴾ ")
                 pop()
             }
         }
+        activeRange = matchedRange
+        text
     }
 
     val optimalFontSizeSp = remember(annotatedPage, maxW, maxH) {
@@ -1403,6 +1316,8 @@ private fun BoxWithConstraintsScope.AutoFitTextMushafFallback(
         best
     }
 
+    var textLayoutResult by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -1411,7 +1326,46 @@ private fun BoxWithConstraintsScope.AutoFitTextMushafFallback(
     ) {
         Text(
             text = annotatedPage,
-            modifier = Modifier.fillMaxSize(),
+            onTextLayout = { textLayoutResult = it },
+            modifier = Modifier
+                .fillMaxSize()
+                .drawBehind {
+                    val layout = textLayoutResult ?: return@drawBehind
+                    val range = activeRange ?: return@drawBehind
+                    if (range.isEmpty() || range.first >= layout.layoutInput.text.length) return@drawBehind
+                    val safeEnd = range.last.coerceAtMost(layout.layoutInput.text.length - 1)
+                    val firstLine = layout.getLineForOffset(range.first)
+                    val lastLine = layout.getLineForOffset(safeEnd)
+                    val strokePx = 2.5.dp.toPx()
+
+                    for (line in firstLine..lastLine) {
+                        val lineStart = layout.getLineStart(line)
+                        val lineEnd = layout.getLineEnd(line, visibleEnd = true).coerceAtLeast(lineStart)
+                        val segStart = maxOf(range.first, lineStart)
+                        val segEnd = minOf(safeEnd + 1, lineEnd)
+                        if (segEnd <= segStart) continue
+
+                        var minX = Float.MAX_VALUE
+                        var maxX = -Float.MAX_VALUE
+                        for (offset in segStart until segEnd) {
+                            val box = layout.getBoundingBox(offset)
+                            if (box.width > 0f) {
+                                if (box.left < minX) minX = box.left
+                                if (box.right > maxX) maxX = box.right
+                            }
+                        }
+                        if (maxX > minX) {
+                            val y = (layout.getLineBottom(line) - strokePx * 0.6f).coerceAtMost(size.height)
+                            drawLine(
+                                color = ActiveAyahUnderlineColor,
+                                start = Offset(minX, y),
+                                end = Offset(maxX, y),
+                                strokeWidth = strokePx,
+                                cap = StrokeCap.Round
+                            )
+                        }
+                    }
+                },
             style = TextStyle(
                 color = MushafInk,
                 fontFamily = AmiriQuranFontFamily,

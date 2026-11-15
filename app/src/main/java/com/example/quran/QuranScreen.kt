@@ -167,9 +167,14 @@ fun QuranScreen(
         )
 
     fun playSurah(reciter: QuranReciter, moshaf: QuranMoshaf, surah: Int) {
+        val targetItem = audioItem(reciter, moshaf, surah)
+        if (playerController.currentSong?.id == targetItem.id) {
+            playerController.togglePlayPause()
+            return
+        }
         val queue = moshaf.surahs.map { audioItem(reciter, moshaf, it) }
         val index = moshaf.surahs.indexOf(surah).coerceAtLeast(0)
-        playerController.play(queue[index], queue)
+        playerController.playCollection(queue, index)
         message = "تشغيل " + quranSurahNames[surah - 1] + " بصوت " + reciter.name
     }
 

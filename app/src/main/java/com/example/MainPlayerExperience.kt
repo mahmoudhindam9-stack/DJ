@@ -151,6 +151,27 @@ fun PlayerScreenV2(
         }
     }
 
+    val playFolderPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        scope.launch {
+            val songs = withContext(Dispatchers.IO) {
+                runCatching {
+                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                }
+                FolderAudioImporter.scan(context, uri, includeSubfolders = false)
+            }
+            if (songs.isNotEmpty()) {
+                onPauseDJ()
+                addToLibrary(audioLibrary, songs, context)
+                playerController.playCollection(songs, 0)
+                showNowPlaying = true
+                infoMessage = "Playing ${songs.size} song(s) from folder"
+            } else {
+                infoMessage = "No playable audio files in selected folder"
+            }
+        }
+    }
+
     fun runDeviceScan() {
         scope.launch {
             val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }
@@ -214,6 +235,7 @@ fun PlayerScreenV2(
                     DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
                     DropdownMenuItem(modifier = Modifier, text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
                     DropdownMenuItem(modifier = Modifier, text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
+                    DropdownMenuItem(modifier = Modifier, text = { Text("Play folder") }, onClick = { showLibraryMenu = false; playFolderPicker.launch(null) }, leadingIcon = { Icon(Icons.Filled.FolderOpen, null) })
                     DropdownMenuItem(modifier = Modifier, text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
                         modifier = Modifier,
@@ -437,11 +459,14 @@ fun PlayerScreenV2(
                     infoMessage = "Created playlist $name"
                 }
             },
-            onPlayNow = { items ->
+            onPlayNow = { items, startIndex ->
                 scope.launch {
-                    addToLibrary(audioLibrary, items, context)
-                    playerController.play(items.first(), items)
-                    showNowPlaying = true
+                    if (items.isNotEmpty()) {
+                        onPauseDJ()
+                        addToLibrary(audioLibrary, items, context)
+                        playerController.playCollection(items, startIndex)
+                        showNowPlaying = true
+                    }
                 }
             }
         )
@@ -633,13 +658,41 @@ fun QueueSheet(
             message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 6.dp)) }
             Spacer(Modifier.height(8.dp))
             LazyColumn(Modifier.heightIn(max = 520.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                items(controller.playlist, key = { it.id + it.uri }) { song ->
-                    Row(Modifier.fillMaxWidth().clickable { onSelect(song) }.padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(if (controller.currentSong?.id == song.id) Icons.Filled.PlayArrow else Icons.Filled.MusicNote, null)
+                items(controller.playlist, key = { com.example.player.UnifiedPlaybackQueue.stableKey(it) }) { song ->
+                    val isCurrent = controller.currentSong?.let {
+                        com.example.player.UnifiedPlaybackQueue.stableKey(it) == com.example.player.UnifiedPlaybackQueue.stableKey(song)
+                    } == true
+                    val rowBg = if (isCurrent) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else androidx.compose.ui.graphics.Color.Transparent
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(rowBg)
+                            .clickable { onSelect(song) }
+                            .padding(9.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            if (isCurrent) Icons.Filled.PlayArrow else Icons.Filled.MusicNote,
+                            null,
+                            tint = if (isCurrent) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                        )
                         Spacer(Modifier.width(8.dp))
                         Column(Modifier.weight(1f)) {
-                            Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                song.title,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                                color = if (isCurrent) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                            )
+                            Text(
+                                if (song.album.isNotBlank()) "${song.artist} • ${song.album}" else song.artist,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
                         }
                     }
                 }

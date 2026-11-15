@@ -21,6 +21,12 @@ import org.json.JSONArray
 import org.json.JSONObject
 import com.example.visualizer.AudioVisualizerEngine
 import com.example.visualizer.VisualizerMode
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 
 enum class RepeatOption { OFF, ALL, ONE }
 
@@ -123,7 +129,14 @@ class AudioPlayerController(private val context: Context) {
         private set
     var volume by mutableStateOf(1f)
         private set
+    var playbackErrorMessage by mutableStateOf<String?>(null)
+        private set
     private var skipNextFadeIn = false
+
+    private val controllerScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private var resolutionJob: Job? = null
+    private var preResolveJob: Job? = null
+    @Volatile private var resolutionToken = 0L
 
     private data class RadioRecoverySnapshot(
         val baseQueue: List<AudioItem>,
@@ -220,6 +233,9 @@ class AudioPlayerController(private val context: Context) {
 
     init {
         activeInstance = this
+        // Ensure saved/default Equalizer state is loaded into GlobalEqualizerState immediately,
+        // even if MusicService starts before EqualizerScreen is ever opened.
+        runCatching { EqualizerController.obtain(context.applicationContext) }
         activePreferredAudioDevice?.let(::setPreferredAudioDevice)
 
         exoPlayer.addListener(object : Player.Listener {
@@ -234,9 +250,11 @@ class AudioPlayerController(private val context: Context) {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 isBuffering = (playbackState == Player.STATE_BUFFERING)
                 if (playbackState == Player.STATE_READY) {
+                    playbackErrorMessage = null
                     RuntimeDiagnostics.recordPlaybackState("READY", exoPlayer.isPlaying, isBuffering)
                     durationMs = exoPlayer.duration.coerceAtLeast(0L)
                     persistSession(force = true)
+                    preResolveUpcomingTrack()
                 } else if (playbackState == Player.STATE_ENDED) {
                     RuntimeDiagnostics.recordPlaybackState("ENDED", false, false)
                     handleTrackEnded()
@@ -244,8 +262,33 @@ class AudioPlayerController(private val context: Context) {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                val active = currentSong
+                if (active != null && active.album == "Live Radio") {
+                    val token = resolutionToken
+                    controllerScope.launch {
+                        val fallback = UnifiedStreamResolver.resolveNextRadioFallback(active)
+                        if (token == resolutionToken && fallback != null) {
+                            updateResolvedItemInQueue(fallback)
+                            val idx = currentSongIndex.coerceIn(0, (playlist.size - 1).coerceAtLeast(0))
+                            if (idx < exoPlayer.mediaItemCount) {
+                                exoPlayer.replaceMediaItem(idx, mediaItemFromSong(fallback))
+                            }
+                            exoPlayer.seekTo(idx, 0L)
+                            exoPlayer.prepare()
+                            applyPreferredAudioDevice()
+                            exoPlayer.play()
+                            return@launch
+                        }
+                        isPlaying = false
+                        isBuffering = false
+                        playbackErrorMessage = error.message ?: error.errorCodeName
+                        RuntimeDiagnostics.recordPlayerError(error.message ?: error.errorCodeName, error.stackTraceToString())
+                    }
+                    return
+                }
                 isPlaying = false
                 isBuffering = false
+                playbackErrorMessage = error.message ?: error.errorCodeName
                 RuntimeDiagnostics.recordPlayerError(error.message ?: error.errorCodeName, error.stackTraceToString())
             }
 
@@ -264,18 +307,32 @@ class AudioPlayerController(private val context: Context) {
                 }
                 val currentMediaId = mediaItem?.mediaId?.ifEmpty { mediaItem.localConfiguration?.uri?.toString() }
                 val index = if (currentMediaId != null) {
-                    playlist.indexOfFirst { it.id.ifEmpty { it.uri.toString() } == currentMediaId }.takeIf { it >= 0 } ?: exoPlayer.currentMediaItemIndex
+                    playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == currentMediaId }.takeIf { it >= 0 } ?: exoPlayer.currentMediaItemIndex
                 } else {
                     exoPlayer.currentMediaItemIndex
                 }
                 if (index in playlist.indices) {
+                    val transitioned = playlist[index]
                     currentSongIndex = index
-                    currentSong = playlist[index]
+                    currentSong = transitioned
                     currentPositionMs = 0L
                     if (isShuffle) {
-                        shuffleState = shuffleState.copy(currentIndex = index)
+                        val shuffleIdx = shuffleState.currentOrder.indexOfFirst {
+                            UnifiedPlaybackQueue.stableKey(it) == UnifiedPlaybackQueue.stableKey(transitioned)
+                        }
+                        if (shuffleIdx >= 0) {
+                            shuffleState = shuffleState.copy(currentIndex = shuffleIdx)
+                        }
                     }
 
+                    if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_AUTO &&
+                        UnifiedStreamResolver.requiresResolution(transitioned)
+                    ) {
+                        playIndexWithResolution(index)
+                        return
+                    }
+
+                    preResolveUpcomingTrack()
                     persistSession(force = true)
                     syncNotificationSafely()
                 }
@@ -304,34 +361,31 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun setQueue(songs: List<AudioItem>, startIndex: Int = 0) {
+        val deduped = UnifiedPlaybackQueue.deduplicate(songs).map {
+            UnifiedStreamResolver.getCached(it) ?: it
+        }
         stopCrossfadePreview()
         baseQueue.clear()
-        baseQueue.addAll(songs)
+        baseQueue.addAll(deduped)
         playlist.clear()
-        playlist.addAll(songs)
+        playlist.addAll(deduped)
 
-        val safeIndex = startIndex.coerceIn(0, (songs.size - 1).coerceAtLeast(0))
-        val items = songs.map {
-            MediaItem.Builder()
-                .setUri(it.uri)
-                .setMediaId(it.id.ifEmpty { it.uri.toString() })
-                .build()
-        }
+        val safeIndex = startIndex.coerceIn(0, (deduped.size - 1).coerceAtLeast(0))
+        val items = deduped.map { mediaItemFromSong(it) }
 
         exoPlayer.setMediaItems(items, safeIndex, 0L)
 
-        if (isShuffle && songs.size > 1) {
-            val selected = songs.getOrNull(safeIndex)
+        if (isShuffle && deduped.size > 1) {
+            val selected = deduped.getOrNull(safeIndex)
             shuffleState = ShuffleManager.startNewCycle(
-                pool = songs,
+                pool = deduped,
                 preferredFirstSong = selected,
                 cycleNumber = shuffleState.cycleNumber + 1,
                 lastCompletedSongId = shuffleState.lastCompletedSongId
             )
             applyShuffleOrderToPlayer(shuffleState.currentOrder)
-            val currentOriginalIndex = songs.indexOfFirst {
-                it.id.ifEmpty { it.uri.toString() } ==
-                    selected?.id?.ifEmpty { selected.uri.toString() }
+            val currentOriginalIndex = deduped.indexOfFirst {
+                UnifiedPlaybackQueue.stableKey(it) == selected?.let(UnifiedPlaybackQueue::stableKey)
             }.coerceAtLeast(0)
             exoPlayer.seekTo(currentOriginalIndex, 0L)
             currentSongIndex = currentOriginalIndex
@@ -339,7 +393,7 @@ class AudioPlayerController(private val context: Context) {
         } else {
             exoPlayer.shuffleModeEnabled = false
             currentSongIndex = safeIndex
-            currentSong = songs.getOrNull(safeIndex)
+            currentSong = deduped.getOrNull(safeIndex)
         }
 
         exoPlayer.repeatMode = when (repeatOption) {
@@ -347,9 +401,24 @@ class AudioPlayerController(private val context: Context) {
             RepeatOption.ALL -> if (isShuffle) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
             RepeatOption.ONE -> Player.REPEAT_MODE_ONE
         }
-        exoPlayer.prepare()
+        val active = currentSong
+        if (active == null || !UnifiedStreamResolver.requiresResolution(active)) {
+            exoPlayer.prepare()
+        }
         applyPreferredAudioDevice()
         persistSession(force = true)
+    }
+
+    fun syncPlaylistShuffleIfNeeded() {
+        if (!isShuffle || playlist.size <= 1) return
+        val cur = currentSong
+        shuffleState = ShuffleManager.startNewCycle(
+            pool = playlist.toList(),
+            preferredFirstSong = cur,
+            cycleNumber = shuffleState.cycleNumber + 1,
+            lastCompletedSongId = shuffleState.lastCompletedSongId
+        )
+        applyShuffleOrderToPlayer(shuffleState.currentOrder)
     }
 
     /**
@@ -447,42 +516,37 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun startShuffle(songs: List<AudioItem>) {
-        if (songs.isEmpty()) return
+        val deduped = UnifiedPlaybackQueue.deduplicate(songs).map {
+            UnifiedStreamResolver.getCached(it) ?: it
+        }
+        if (deduped.isEmpty()) return
         pauseOthers()
         stopCrossfadePreview()
 
-        isShuffle = songs.size > 1
+        isShuffle = deduped.size > 1
         baseQueue.clear()
-        baseQueue.addAll(songs)
+        baseQueue.addAll(deduped)
         playlist.clear()
-        playlist.addAll(songs)
+        playlist.addAll(deduped)
 
         if (!isShuffle) {
             exoPlayer.shuffleModeEnabled = false
-            exoPlayer.setMediaItems(
-                songs.map { MediaItem.Builder().setUri(it.uri).setMediaId(it.id.ifEmpty { it.uri.toString() }).build() },
-                0,
-                0L
-            )
+            exoPlayer.setMediaItems(deduped.map(::mediaItemFromSong), 0, 0L)
             currentSongIndex = 0
-            currentSong = songs.first()
+            currentSong = deduped.first()
             shuffleState = ShuffleState()
         } else {
             shuffleState = ShuffleManager.startNewCycle(
-                pool = songs,
+                pool = deduped,
                 preferredFirstSong = null,
                 cycleNumber = shuffleState.cycleNumber + 1,
                 lastCompletedSongId = shuffleState.lastCompletedSongId
             )
-            exoPlayer.setMediaItems(
-                songs.map { MediaItem.Builder().setUri(it.uri).setMediaId(it.id.ifEmpty { it.uri.toString() }).build() },
-                0,
-                0L
-            )
+            exoPlayer.setMediaItems(deduped.map(::mediaItemFromSong), 0, 0L)
             applyShuffleOrderToPlayer(shuffleState.currentOrder)
-            val firstOriginalIndex = songs.indexOfFirst {
-                it.id.ifEmpty { it.uri.toString() } ==
-                    shuffleState.currentSong?.id?.ifEmpty { shuffleState.currentSong!!.uri.toString() }
+            val firstKey = shuffleState.currentSong?.let(UnifiedPlaybackQueue::stableKey)
+            val firstOriginalIndex = deduped.indexOfFirst {
+                UnifiedPlaybackQueue.stableKey(it) == firstKey
             }.coerceAtLeast(0)
             exoPlayer.seekTo(firstOriginalIndex, 0L)
             currentSongIndex = firstOriginalIndex
@@ -495,9 +559,14 @@ class AudioPlayerController(private val context: Context) {
             RepeatOption.ALL -> if (isShuffle) Player.REPEAT_MODE_OFF else Player.REPEAT_MODE_ALL
             RepeatOption.ONE -> Player.REPEAT_MODE_ONE
         }
-        exoPlayer.prepare()
-        applyPreferredAudioDevice()
-        exoPlayer.play()
+        val active = currentSong
+        if (active == null || !UnifiedStreamResolver.requiresResolution(active)) {
+            exoPlayer.prepare()
+            applyPreferredAudioDevice()
+            exoPlayer.play()
+        } else {
+            playIndexWithResolution(currentSongIndex)
+        }
         persistSession(force = true)
         syncNotificationSafely()
     }
@@ -509,87 +578,232 @@ class AudioPlayerController(private val context: Context) {
     }
 
     fun playRadio(song: AudioItem, mediaItem: MediaItem) {
+        UnifiedStreamResolver.cacheResolved(song)
+        playRadioCollection(listOf(song), startIndex = 0)
+    }
+
+    /**
+     * Unified collection playback entrypoint used across Player, Local Folders, Quran,
+     * Radio, Online Music (New Songs, Search, Sections, Audius, Hiba), and AI Playlists.
+     */
+    fun playRadioCollection(stations: List<AudioItem>, startIndex: Int = 0) {
+        val deduped = UnifiedPlaybackQueue.deduplicate(stations)
+        if (deduped.isEmpty()) return
         pauseOthers()
         captureBeforeRadioSwitch()
         stopCrossfadePreview()
 
-        baseQueue.clear()
-        baseQueue.add(song)
-        playlist.clear()
-        playlist.add(song)
-        currentSongIndex = 0
-        currentSong = song
-        currentPositionMs = 0L
-        durationMs = 0L
+        val safeIndex = startIndex.coerceIn(0, deduped.lastIndex)
         isShuffle = false
         exoPlayer.shuffleModeEnabled = false
-
-        exoPlayer.setMediaItem(mediaItem, 0L)
-        exoPlayer.prepare()
-        applyPreferredAudioDevice()
-        exoPlayer.play()
-
+        UnifiedStreamResolver.resetRadioFallbackIndex(deduped[safeIndex].id)
+        setQueue(deduped, safeIndex)
         skipNextFadeIn = true
-        persistSession(force = true)
-        syncNotificationSafely()
+        playIndexWithResolution(currentSongIndex.coerceIn(0, playlist.lastIndex))
+    }
+
+    fun playCollection(items: List<AudioItem>, startIndex: Int = 0) {
+        val deduped = UnifiedPlaybackQueue.deduplicate(items)
+        if (deduped.isEmpty()) return
+        val safeIndex = startIndex.coerceIn(0, deduped.lastIndex)
+        play(deduped[safeIndex], deduped)
     }
 
     fun play(song: AudioItem, newQueue: List<AudioItem>? = null) {
         pauseOthers()
+        val dedupedQueue = newQueue?.let {
+            UnifiedPlaybackQueue.deduplicate(it).map { item ->
+                if (UnifiedPlaybackQueue.stableKey(item) == UnifiedPlaybackQueue.stableKey(song) &&
+                    !UnifiedStreamResolver.requiresResolution(song)
+                ) {
+                    UnifiedStreamResolver.cacheResolved(song)
+                    song
+                } else {
+                    UnifiedStreamResolver.getCached(item) ?: item
+                }
+            }
+        }
+        val effectiveSong = UnifiedStreamResolver.getCached(song) ?: song
+        val songKey = UnifiedPlaybackQueue.stableKey(effectiveSong)
 
-        val isDifferentQueue = newQueue != null && (
-            newQueue.size != baseQueue.size ||
-            newQueue.withIndex().any { (i, item) -> item.uri != baseQueue.getOrNull(i)?.uri }
-        )
+        val isDifferentQueue = dedupedQueue != null && !UnifiedPlaybackQueue.isSameQueue(dedupedQueue, baseQueue)
 
         if (isDifferentQueue) {
-            val q = newQueue!!
-            val startIndex = q.indexOfFirst { it.uri == song.uri }.takeIf { it >= 0 } ?: 0
+            val q = dedupedQueue!!
+            val startIndex = q.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }.takeIf { it >= 0 } ?: 0
             setQueue(q, startIndex)
-            applyPreferredAudioDevice()
-            exoPlayer.play()
+            if (effectiveSong.album == "Live Radio") skipNextFadeIn = true
+            playIndexWithResolution(currentSongIndex.coerceIn(0, playlist.lastIndex))
         } else if (isShuffle) {
-            val idx = playlist.indexOfFirst { it.uri == song.uri }
+            val idx = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }
             if (idx >= 0) {
                 shuffleState = ShuffleManager.jumpToIndex(
                     shuffleState,
-                    shuffleState.currentOrder.indexOfFirst { it.uri == song.uri }
+                    shuffleState.currentOrder.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }
                         .takeIf { it >= 0 } ?: shuffleState.currentIndex
                 )
-                currentSongIndex = idx
-                currentSong = playlist[idx]
-                exoPlayer.seekTo(idx, 0L)
-                currentPositionMs = 0L
-                applyPreferredAudioDevice()
-                preparePlayerForRecoveryIfNeeded()
-                exoPlayer.play()
+                playIndexWithResolution(idx)
             } else {
-                val pool = (baseQueue + listOf(song))
-                    .distinctBy { it.id.ifEmpty { it.uri.toString() } }
-                val startIndex = pool.indexOfFirst { it.uri == song.uri }.coerceAtLeast(0)
+                val pool = UnifiedPlaybackQueue.deduplicate(baseQueue + listOf(effectiveSong))
+                val startIndex = pool.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }.coerceAtLeast(0)
                 setQueue(pool, startIndex)
-                applyPreferredAudioDevice()
-                exoPlayer.play()
+                playIndexWithResolution(currentSongIndex.coerceIn(0, playlist.lastIndex))
             }
         } else {
-            val idx = playlist.indexOfFirst { it.uri == song.uri }
+            val idx = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }
             if (idx >= 0) {
-                currentSongIndex = idx
-                currentSong = playlist[idx]
-                exoPlayer.seekTo(idx, 0L)
-                currentPositionMs = 0L
-                applyPreferredAudioDevice()
-                exoPlayer.play()
+                if (playlist[idx].uri != effectiveSong.uri && !UnifiedStreamResolver.requiresResolution(effectiveSong)) {
+                    updateResolvedItemInQueue(effectiveSong)
+                    if (idx < exoPlayer.mediaItemCount) {
+                        exoPlayer.replaceMediaItem(idx, mediaItemFromSong(effectiveSong))
+                    }
+                }
+                playIndexWithResolution(idx)
             } else {
-                val q = newQueue ?: listOf(song)
-                val startIndex = q.indexOfFirst { it.uri == song.uri }.takeIf { it >= 0 } ?: 0
+                val q = dedupedQueue ?: listOf(effectiveSong)
+                val startIndex = q.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == songKey }.takeIf { it >= 0 } ?: 0
                 setQueue(q, startIndex)
-                applyPreferredAudioDevice()
-                exoPlayer.play()
+                playIndexWithResolution(currentSongIndex.coerceIn(0, playlist.lastIndex))
             }
         }
         persistSession(force = true)
         syncNotificationSafely()
+    }
+
+    private fun updateResolvedItemInQueue(resolved: AudioItem) {
+        val key = UnifiedPlaybackQueue.stableKey(resolved)
+        val pIdx = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == key }
+        if (pIdx >= 0) playlist[pIdx] = resolved
+        val bIdx = baseQueue.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == key }
+        if (bIdx >= 0) baseQueue[bIdx] = resolved
+        if (isShuffle && shuffleState.currentOrder.isNotEmpty()) {
+            val updatedOrder = shuffleState.currentOrder.map {
+                if (UnifiedPlaybackQueue.stableKey(it) == key) resolved else it
+            }
+            shuffleState = shuffleState.copy(currentOrder = updatedOrder)
+        }
+        if (currentSong != null && UnifiedPlaybackQueue.stableKey(currentSong!!) == key) {
+            currentSong = resolved
+        }
+    }
+
+    private fun playIndexWithResolution(targetIndex: Int) {
+        val targetSong = playlist.getOrNull(targetIndex) ?: return
+        val cachedSong = UnifiedStreamResolver.getCached(targetSong) ?: targetSong
+        if (cachedSong !== targetSong) {
+            updateResolvedItemInQueue(cachedSong)
+        }
+
+        val token = ++resolutionToken
+        resolutionJob?.cancel()
+        currentSongIndex = targetIndex
+        currentSong = cachedSong
+        currentPositionMs = 0L
+        durationMs = cachedSong.durationMs.coerceAtLeast(0L)
+        playbackErrorMessage = null
+        if (cachedSong.album == "Live Radio") {
+            UnifiedStreamResolver.resetRadioFallbackIndex(cachedSong.id)
+            skipNextFadeIn = true
+        }
+
+        if (!UnifiedStreamResolver.requiresResolution(cachedSong)) {
+            if (targetIndex < exoPlayer.mediaItemCount) {
+                val existingMedia = exoPlayer.getMediaItemAt(targetIndex)
+                val expectedUri = cachedSong.uri
+                if (existingMedia.localConfiguration?.uri != expectedUri) {
+                    exoPlayer.replaceMediaItem(targetIndex, mediaItemFromSong(cachedSong))
+                }
+            }
+            exoPlayer.seekTo(targetIndex, 0L)
+            preparePlayerForRecoveryIfNeeded()
+            applyPreferredAudioDevice()
+            exoPlayer.play()
+            preResolveUpcomingTrack()
+            persistSession(force = true)
+            syncNotificationSafely()
+            return
+        }
+
+        // Lazy remote resolution required before ExoPlayer can stream this item
+        exoPlayer.pause()
+        isBuffering = true
+        syncNotificationSafely()
+        resolutionJob = controllerScope.launch {
+            runCatching {
+                UnifiedStreamResolver.resolve(cachedSong)
+            }.onSuccess { resolved ->
+                if (token != resolutionToken) return@onSuccess
+                val activeIdx = playlist.indexOfFirst {
+                    UnifiedPlaybackQueue.stableKey(it) == UnifiedPlaybackQueue.stableKey(resolved)
+                }.takeIf { it >= 0 } ?: targetIndex
+                updateResolvedItemInQueue(resolved)
+                if (activeIdx in 0 until exoPlayer.mediaItemCount) {
+                    exoPlayer.replaceMediaItem(activeIdx, mediaItemFromSong(resolved))
+                } else {
+                    exoPlayer.setMediaItems(playlist.map(::mediaItemFromSong), activeIdx.coerceIn(0, (playlist.size - 1).coerceAtLeast(0)), 0L)
+                }
+                currentSongIndex = activeIdx
+                currentSong = resolved
+                exoPlayer.seekTo(activeIdx, 0L)
+                exoPlayer.prepare()
+                applyPreferredAudioDevice()
+                exoPlayer.play()
+                isBuffering = false
+                preResolveUpcomingTrack()
+                persistSession(force = true)
+                syncNotificationSafely()
+            }.onFailure { err ->
+                if (token != resolutionToken) return@onFailure
+                isBuffering = false
+                isPlaying = false
+                playbackErrorMessage = err.message ?: "تعذر تشغيل المقطع"
+                if (cachedSong.album == "Live Radio") {
+                    recoverFromRadioFailure()
+                }
+                syncNotificationSafely()
+            }
+        }
+    }
+
+    private fun upcomingSongForPreResolve(): Pair<Int, AudioItem>? {
+        if (playlist.size <= 1 || repeatOption == RepeatOption.ONE) return null
+        val nextSong = if (isShuffle) {
+            resolveNextShuffleSong()
+        } else {
+            val nextIdx = currentSongIndex + 1
+            when {
+                nextIdx < playlist.size -> playlist[nextIdx]
+                repeatOption == RepeatOption.ALL -> playlist.firstOrNull()
+                else -> null
+            }
+        } ?: return null
+        val idx = playlist.indexOfFirst {
+            UnifiedPlaybackQueue.stableKey(it) == UnifiedPlaybackQueue.stableKey(nextSong)
+        }
+        if (idx < 0 || idx == currentSongIndex) return null
+        return idx to playlist[idx]
+    }
+
+    private fun preResolveUpcomingTrack() {
+        val (nextIdx, nextSong) = upcomingSongForPreResolve() ?: return
+        if (!UnifiedStreamResolver.requiresResolution(nextSong)) return
+        val expectedKey = UnifiedPlaybackQueue.stableKey(nextSong)
+        val token = resolutionToken
+        preResolveJob?.cancel()
+        preResolveJob = controllerScope.launch {
+            runCatching {
+                UnifiedStreamResolver.resolve(nextSong)
+            }.onSuccess { resolved ->
+                if (token != resolutionToken) return@onSuccess
+                val idxNow = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == expectedKey }
+                if (idxNow >= 0 && idxNow != currentSongIndex) {
+                    updateResolvedItemInQueue(resolved)
+                    if (idxNow < exoPlayer.mediaItemCount) {
+                        exoPlayer.replaceMediaItem(idxNow, mediaItemFromSong(resolved))
+                    }
+                }
+            }
+        }
     }
 
     fun pause() {
@@ -642,10 +856,15 @@ class AudioPlayerController(private val context: Context) {
         isCrossfading = false
         stopCrossfadePreview()
         skipNextFadeIn = false
+        pauseOthers()
 
         if (isShuffle) {
-            if (exoPlayer.hasNextMediaItem()) {
-                exoPlayer.seekToNextMediaItem()
+            val nextFromCycle = resolveNextShuffleSong()
+            if (shuffleState.currentIndex < shuffleState.currentOrder.lastIndex && nextFromCycle != null) {
+                shuffleState = shuffleState.copy(currentIndex = shuffleState.currentIndex + 1)
+                val nextKey = UnifiedPlaybackQueue.stableKey(nextFromCycle)
+                val nextIdx = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == nextKey }.coerceAtLeast(0)
+                playIndexWithResolution(nextIdx)
             } else {
                 val pool = if (baseQueue.isNotEmpty()) baseQueue.toList() else playlist.toList()
                 if (pool.size > 1) {
@@ -655,37 +874,23 @@ class AudioPlayerController(private val context: Context) {
                     applyShuffleOrderToPlayer(shuffleState.currentOrder)
 
                     val nextSong = shuffleState.currentSong
-                    val nextKey = nextSong?.let { it.id.ifEmpty { it.uri.toString() } }
+                    val nextKey = nextSong?.let(UnifiedPlaybackQueue::stableKey)
                     val nextOriginalIndex = playlist.indexOfFirst {
-                        it.id.ifEmpty { it.uri.toString() } == nextKey
+                        UnifiedPlaybackQueue.stableKey(it) == nextKey
                     }.coerceAtLeast(0)
-                    currentSongIndex = nextOriginalIndex
-                    currentSong = nextSong
-                    currentPositionMs = 0L
-                    exoPlayer.seekTo(nextOriginalIndex, 0L)
+                    playIndexWithResolution(nextOriginalIndex)
                 }
             }
         } else {
-            if (exoPlayer.hasNextMediaItem()) {
-                exoPlayer.seekToNextMediaItem()
-            } else if (playlist.size > 1) {
-                val nextIdx = (currentSongIndex + 1).coerceAtMost(playlist.lastIndex)
-                currentSongIndex = nextIdx
-                currentSong = playlist[nextIdx]
-                exoPlayer.seekTo(nextIdx, 0L)
-            } else {
+            if (playlist.size <= 1) {
+                if (repeatOption != RepeatOption.OFF) {
+                    playIndexWithResolution(0)
+                }
                 return
             }
-            currentPositionMs = 0L
+            val nextIdx = if (currentSongIndex + 1 < playlist.size) currentSongIndex + 1 else 0
+            playIndexWithResolution(nextIdx)
         }
-
-        pauseOthers()
-        currentPositionMs = 0L
-        applyPreferredAudioDevice()
-        preparePlayerForRecoveryIfNeeded()
-        exoPlayer.play()
-        persistSession(force = true)
-        syncNotificationSafely()
     }
 
     fun playPrevious() {
@@ -695,40 +900,30 @@ class AudioPlayerController(private val context: Context) {
         stopCrossfadePreview()
         skipNextFadeIn = false
 
-        if (currentPositionMs > 3000L) {
+        if (currentPositionMs > 3000L && currentSong?.album != "Live Radio") {
             seekTo(0L)
             return
         }
+
+        pauseOthers()
 
         if (isShuffle) {
             if (shuffleState.hasPrevious) {
                 shuffleState = ShuffleManager.previous(shuffleState)
                 val previousSong = shuffleState.currentSong
-                val previousKey = previousSong?.let { it.id.ifEmpty { it.uri.toString() } }
+                val previousKey = previousSong?.let(UnifiedPlaybackQueue::stableKey)
                 val originalIndex = playlist.indexOfFirst {
-                    it.id.ifEmpty { it.uri.toString() } == previousKey
+                    UnifiedPlaybackQueue.stableKey(it) == previousKey
                 }.coerceAtLeast(0)
-                currentSongIndex = originalIndex
-                currentSong = previousSong
-                exoPlayer.seekTo(originalIndex, 0L)
+                playIndexWithResolution(originalIndex)
             } else {
                 seekTo(0L)
                 return
             }
         } else {
             val prevIdx = (currentSongIndex - 1).takeIf { it >= 0 } ?: (playlist.size - 1)
-            currentSongIndex = prevIdx
-            currentSong = playlist.getOrNull(prevIdx)
-            exoPlayer.seekTo(prevIdx, 0L)
+            playIndexWithResolution(prevIdx)
         }
-
-        pauseOthers()
-        currentPositionMs = 0L
-        applyPreferredAudioDevice()
-        preparePlayerForRecoveryIfNeeded()
-        exoPlayer.play()
-        persistSession(force = true)
-        syncNotificationSafely()
     }
 
     fun seekTo(positionMs: Long) {
@@ -902,57 +1097,45 @@ class AudioPlayerController(private val context: Context) {
                 applyShuffleOrderToPlayer(shuffleState.currentOrder)
 
                 val nextSong = shuffleState.currentSong
-                val nextKey = nextSong?.let { it.id.ifEmpty { it.uri.toString() } }
+                val nextKey = nextSong?.let(UnifiedPlaybackQueue::stableKey)
                 val nextOriginalIndex = playlist.indexOfFirst {
-                    it.id.ifEmpty { it.uri.toString() } == nextKey
+                    UnifiedPlaybackQueue.stableKey(it) == nextKey
                 }.coerceAtLeast(0)
-                currentSongIndex = nextOriginalIndex
-                currentSong = nextSong
-                currentPositionMs = 0L
-                exoPlayer.seekTo(nextOriginalIndex, 0L)
-                applyPreferredAudioDevice()
-                exoPlayer.play()
+                playIndexWithResolution(nextOriginalIndex)
             } else {
                 isPlaying = false
+                persistSession(force = true)
+                syncNotificationSafely()
             }
-            persistSession(force = true)
-            syncNotificationSafely()
             return
         }
 
         if (repeatOption == RepeatOption.ALL) {
             val nextIdx = (currentSongIndex + 1).takeIf { it < playlist.size } ?: 0
-            currentSongIndex = nextIdx
-            currentSong = playlist.getOrNull(nextIdx)
-            seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
-            exoPlayer.play()
+            playIndexWithResolution(nextIdx)
         } else if (currentSongIndex + 1 < playlist.size) {
             val nextIdx = currentSongIndex + 1
-            currentSongIndex = nextIdx
-            currentSong = playlist.getOrNull(nextIdx)
-            seekOrLoadMedia(currentSong, playlist.toList(), nextIdx)
-            exoPlayer.play()
+            playIndexWithResolution(nextIdx)
         } else {
             isPlaying = false
             exoPlayer.seekToDefaultPosition(0)
+            persistSession(force = true)
+            syncNotificationSafely()
         }
-
-        persistSession(force = true)
-        syncNotificationSafely()
     }
 
     fun onLibraryUpdated(newLibrary: List<AudioItem>) {
         if (newLibrary.isEmpty()) return
 
-        val distinctLibrary = newLibrary.distinctBy { it.id.ifEmpty { it.uri.toString() } }
-        val validIds = distinctLibrary.map { it.id.ifEmpty { it.uri.toString() } }.toSet()
+        val distinctLibrary = UnifiedPlaybackQueue.deduplicate(newLibrary)
+        val validIds = distinctLibrary.map(UnifiedPlaybackQueue::stableKey).toSet()
         val wasPlaying = exoPlayer.isPlaying
         val curPos = exoPlayer.currentPosition
-        val curKey = currentSong?.let { it.id.ifEmpty { it.uri.toString() } }
+        val curKey = currentSong?.let(UnifiedPlaybackQueue::stableKey)
 
-        val remainingBase = baseQueue.filter { (it.id.ifEmpty { it.uri.toString() }) in validIds }
-        val baseKeys = remainingBase.map { it.id.ifEmpty { it.uri.toString() } }.toSet()
-        val addedBase = distinctLibrary.filter { (it.id.ifEmpty { it.uri.toString() }) !in baseKeys }
+        val remainingBase = baseQueue.filter { UnifiedPlaybackQueue.stableKey(it) in validIds }
+        val baseKeys = remainingBase.map(UnifiedPlaybackQueue::stableKey).toSet()
+        val addedBase = distinctLibrary.filter { UnifiedPlaybackQueue.stableKey(it) !in baseKeys }
         baseQueue.clear()
         baseQueue.addAll(remainingBase + addedBase)
 
@@ -963,9 +1146,9 @@ class AudioPlayerController(private val context: Context) {
 
             if (shuffleState.currentOrder.isNotEmpty()) {
                 applyShuffleOrderToPlayer(shuffleState.currentOrder)
-                val currentKey = shuffleState.currentSong?.let { it.id.ifEmpty { it.uri.toString() } } ?: curKey
+                val currentKey = shuffleState.currentSong?.let(UnifiedPlaybackQueue::stableKey) ?: curKey
                 val currentOriginalIndex = playlist.indexOfFirst {
-                    it.id.ifEmpty { it.uri.toString() } == currentKey
+                    UnifiedPlaybackQueue.stableKey(it) == currentKey
                 }.coerceAtLeast(0)
                 currentSongIndex = currentOriginalIndex
                 currentSong = playlist.getOrNull(currentOriginalIndex)
@@ -973,13 +1156,13 @@ class AudioPlayerController(private val context: Context) {
                 if (wasPlaying) exoPlayer.play()
             }
         } else {
-            val remainingPlaylist = playlist.filter { (it.id.ifEmpty { it.uri.toString() }) in validIds }
-            val pKeys = remainingPlaylist.map { it.id.ifEmpty { it.uri.toString() } }.toSet()
-            val addedPlaylist = distinctLibrary.filter { (it.id.ifEmpty { it.uri.toString() }) !in pKeys }
+            val remainingPlaylist = playlist.filter { UnifiedPlaybackQueue.stableKey(it) in validIds }
+            val pKeys = remainingPlaylist.map(UnifiedPlaybackQueue::stableKey).toSet()
+            val addedPlaylist = distinctLibrary.filter { UnifiedPlaybackQueue.stableKey(it) !in pKeys }
             playlist.clear()
             playlist.addAll(remainingPlaylist + addedPlaylist)
 
-            val newIdx = playlist.indexOfFirst { it.id.ifEmpty { it.uri.toString() } == curKey }.coerceAtLeast(0)
+            val newIdx = playlist.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == curKey }.coerceAtLeast(0)
             currentSongIndex = newIdx
             currentSong = playlist.getOrNull(newIdx)
             if (playlist.isNotEmpty()) {
@@ -995,7 +1178,8 @@ class AudioPlayerController(private val context: Context) {
     private fun mediaItemFromSong(song: AudioItem): MediaItem {
         return MediaItem.Builder()
             .setUri(song.uri)
-            .setMediaId(song.id.ifEmpty { song.uri.toString() })
+            .setMediaId(UnifiedPlaybackQueue.stableKey(song))
+            .apply { UnifiedStreamResolver.mimeTypeFor(song)?.let(::setMimeType) }
             .build()
     }
 
@@ -1096,9 +1280,13 @@ class AudioPlayerController(private val context: Context) {
                         }
                         else -> null
                     }
-                    val nextMediaItem = nextSong?.let { mediaItemFromSong(it) }
+                    val nextMediaItem = nextSong
+                        ?.takeIf { !UnifiedStreamResolver.requiresResolution(it) }
+                        ?.let { mediaItemFromSong(it) }
 
-                    if (repeatOption != RepeatOption.ONE && remaining in 1..crossfadeDurationMs && nextSong != null) {
+                    if (repeatOption != RepeatOption.ONE && remaining in 1..crossfadeDurationMs &&
+                        nextSong != null && !UnifiedStreamResolver.requiresResolution(nextSong)
+                    ) {
                         startCrossfade(nextSong, remaining)
                     } else if (!skipNextFadeIn && currentPositionMs < crossfadeDurationMs) {
                         val fraction = (currentPositionMs.toFloat() / crossfadeDurationMs.toFloat()).coerceIn(0f, 1f)
@@ -1445,17 +1633,12 @@ class AudioPlayerController(private val context: Context) {
                 currentPositionMs = savedPosition
                 durationMs = currentSong?.durationMs ?: 0L
 
-                val items = restored.map {
-                    MediaItem.Builder()
-                        .setUri(it.uri)
-                        .setMediaId(it.id.ifEmpty { it.uri.toString() })
-                        .build()
-                }
+                val items = restored.map(::mediaItemFromSong)
                 exoPlayer.setMediaItems(items, savedOriginalIndex, savedPosition)
 
                 val validShuffle = shuffleState.currentOrder.mapNotNull { song ->
-                    val key = song.id.ifEmpty { song.uri.toString() }
-                    restored.indexOfFirst { it.id.ifEmpty { it.uri.toString() } == key }
+                    val key = UnifiedPlaybackQueue.stableKey(song)
+                    restored.indexOfFirst { UnifiedPlaybackQueue.stableKey(it) == key }
                         .takeIf { it >= 0 }
                 }
                 if (validShuffle.size == restored.size && validShuffle.distinct().size == restored.size) {
@@ -1471,7 +1654,10 @@ class AudioPlayerController(private val context: Context) {
                     RepeatOption.ONE -> Player.REPEAT_MODE_ONE
                 }
                 exoPlayer.volume = volume
-                exoPlayer.prepare()
+                val active = currentSong
+                if (active == null || !UnifiedStreamResolver.requiresResolution(active)) {
+                    exoPlayer.prepare()
+                }
             } else {
                 playlist.clear()
                 playlist.addAll(restored)
@@ -1481,20 +1667,28 @@ class AudioPlayerController(private val context: Context) {
                 currentPositionMs = savedPosition
                 durationMs = currentSong?.durationMs ?: 0L
 
-                exoPlayer.setMediaItems(restored.map { MediaItem.Builder().setUri(it.uri).setMediaId(it.id.ifEmpty { it.uri.toString() }).build() }, savedIndex, savedPosition)
+                exoPlayer.setMediaItems(restored.map(::mediaItemFromSong), savedIndex, savedPosition)
                 exoPlayer.repeatMode = when (repeatOption) {
                     RepeatOption.OFF -> Player.REPEAT_MODE_OFF
                     RepeatOption.ALL -> Player.REPEAT_MODE_ALL
                     RepeatOption.ONE -> Player.REPEAT_MODE_ONE
                 }
                 exoPlayer.volume = volume
-                exoPlayer.prepare()
+                val active = currentSong
+                if (active == null || !UnifiedStreamResolver.requiresResolution(active)) {
+                    exoPlayer.prepare()
+                }
             }
 
             val canAutoResume = MusicService.instance?.playerController == null || MusicService.instance?.playerController === this
             if (savedPlaying && canAutoResume) {
-                pauseOthers()
-                exoPlayer.playWhenReady = true
+                val active = currentSong
+                if (active != null && UnifiedStreamResolver.requiresResolution(active)) {
+                    playIndexWithResolution(currentSongIndex)
+                } else {
+                    pauseOthers()
+                    exoPlayer.playWhenReady = true
+                }
             }
 
             applyPreferredAudioDevice()
@@ -1522,6 +1716,7 @@ class AudioPlayerController(private val context: Context) {
 
     fun release() {
         persistSession(force = true)
+        controllerScope.cancel()
         PlaybackNotificationRouter.clear("player")
         try { exoPlayer.setPreferredAudioDevice(null) } catch (e: Exception) { android.util.Log.w("AudioPlayerController", "Caught throwable", e) }
         if (activeInstance === this) activeInstance = null

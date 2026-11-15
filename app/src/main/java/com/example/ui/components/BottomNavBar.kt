@@ -12,9 +12,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 @Composable
 fun DjBottomNavBar(
@@ -24,7 +25,7 @@ fun DjBottomNavBar(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 8.dp)
+            .padding(horizontal = 8.dp, vertical = 6.dp)
             .clip(RoundedCornerShape(28.dp))
             .shadow(24.dp, RoundedCornerShape(28.dp)),
         shape = RoundedCornerShape(28.dp),
@@ -38,12 +39,13 @@ fun DjBottomNavBar(
             containerColor = Color.Transparent,
             tonalElevation = 0.dp
         ) {
-            DjNavItem(Icons.Filled.PlayArrow, "Player", currentRoute == "player") { onNavigate("player") }
-            DjNavItem(Icons.Filled.Headset, "DJ", currentRoute == "dj") { onNavigate("dj") }
-            DjNavItem(Icons.Filled.Tune, "EQ", currentRoute == "equalizer") { onNavigate("equalizer") }
-            DjNavItem(Icons.Filled.Radio, "Radio", currentRoute == "radio") { onNavigate("radio") }
-            DjNavItem(Icons.Filled.Cloud, "Online", currentRoute == "online_music") { onNavigate("online_music") }
-            DjNavItem(Icons.Filled.Mic, "Mic", currentRoute == "mic") { onNavigate("mic") }
+            DjNavItem(Icons.Filled.PlayArrow, "Player", "Player", currentRoute == "player", "nav_player") { onNavigate("player") }
+            DjNavItem(Icons.Filled.Tune, "EQ", "Equalizer", currentRoute == "equalizer", "nav_equalizer") { onNavigate("equalizer") }
+            DjNavItem(Icons.Filled.Cloud, "Online", "Online Music", currentRoute == "online_music", "nav_online_music") { onNavigate("online_music") }
+            DjNavItem(Icons.Filled.Radio, "Radio", "Radio", currentRoute == "radio", "nav_radio") { onNavigate("radio") }
+            DjNavItem(Icons.Filled.MenuBook, "Quran", "Holy Quran", currentRoute == "quran", "nav_quran") { onNavigate("quran") }
+            DjNavItem(Icons.Filled.Headset, "DJ", "DJ Mixer", currentRoute == "dj", "nav_dj") { onNavigate("dj") }
+            DjNavItem(Icons.Filled.Mic, "Mic", "Mic/Karaoke", currentRoute == "mic", "nav_mic") { onNavigate("mic") }
         }
     }
 }
@@ -52,14 +54,17 @@ fun DjBottomNavBar(
 private fun RowScope.DjNavItem(
     icon: ImageVector,
     label: String,
+    contentDesc: String,
     selected: Boolean,
+    tag: String,
     onClick: () -> Unit
 ) {
     NavigationBarItem(
+        modifier = Modifier.testTag(tag),
         icon = {
             Icon(
                 imageVector = icon,
-                contentDescription = label,
+                contentDescription = contentDesc,
                 tint = if (selected) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
@@ -72,6 +77,7 @@ private fun RowScope.DjNavItem(
                 overflow = TextOverflow.Clip
             )
         },
+        alwaysShowLabel = true,
         selected = selected,
         onClick = onClick,
         colors = NavigationBarItemDefaults.colors(
@@ -83,3 +89,4 @@ private fun RowScope.DjNavItem(
         )
     )
 }
+

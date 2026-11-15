@@ -29,7 +29,10 @@ import com.example.model.Playlist
 import com.example.QueueSheet
 import com.example.onlinemusic.OnlineDeckTarget
 import com.example.onlinemusic.OnlineDjBridge
+import com.example.onlinemusic.enqueueOnlineSong
 import com.example.player.AudioPlayerController
+import com.example.player.RadioStreamCatalog
+import com.example.player.UnifiedPlaybackQueue
 import com.example.room.PlaylistEntity
 import com.example.room.PlaylistRepository
 import kotlinx.coroutines.Dispatchers
@@ -308,31 +311,8 @@ fun RadioScreen(
     }
 
     fun addStationToQueue(station: RadioStation) {
-        val current = playerController.currentSong
-        if (current?.album != "Live Radio") return
-
-        val currentQueue = playerController.playlist.toList()
-        if (currentQueue.any { it.id == station.id }) return
-
-        val existingStations = currentQueue.map {
-            RadioStation(
-                id = it.id,
-                name = it.title.removePrefix("📻 ").trim(),
-                streamUrls = listOf(it.uri.toString()),
-                tags = "",
-                codec = "",
-                bitrate = 0,
-                countryCode = if (it.artist == "إذاعة مصرية") "EG" else ""
-            )
-        }
-
-        val updated = (existingStations + station).distinctBy { it.id }
-        playerController.setRadioQueue(
-            songs = toRadioAudioItems(updated),
-            mediaItems = toRadioMediaItems(updated),
-            startIndex = currentQueue.indexOfFirst { it.id == current.id }.coerceAtLeast(0),
-            preserveCurrent = true
-        )
+        RadioStreamCatalog.register(station)
+        playerController.enqueueOnlineSong(UnifiedPlaybackQueue.radioStationToAudioItem(station))
     }
 
     // Trigger recomposition on state changes
@@ -400,10 +380,12 @@ fun RadioScreen(
                     }.forEach { it.await() }
                     }
                     
-                    // Update UI incrementally
+                    // Update UI incrementally and register streams in catalog
+                    RadioStreamCatalog.registerAll(validList)
                     stations = validList.toList()
                 }
             }
+            RadioStreamCatalog.registerAll(validList)
             stations = validList
         } catch (e: Exception) {
             error = e.localizedMessage ?: "فشل الاتصال بالخادم"
@@ -524,10 +506,11 @@ fun RadioScreen(
         }
         LazyColumn(verticalArrangement = Arrangement.spacedBy(7.dp), modifier = Modifier.fillMaxSize()) {
             items(visibleStations.size, key = { visibleStations[it].id }) { index -> val station = visibleStations[index]
-                val isCurrentStation = (currentMediaId == station.id)
+                val isCurrentStation = (currentMediaId == station.id) || (playerController.currentSong?.id == station.id)
                 val isStationPlaying = isCurrentStation && isPlayerPlaying
                 val isStationLoading = (loadingStationId == station.id) || (isCurrentStation && isPlayerBuffering && !isStationPlaying)
-                val isStationFailed = (failedStationId == station.id) && !isStationPlaying && !isStationLoading
+                val isStationFailed = ((isCurrentStation && !isStationPlaying && !isStationLoading && !playerController.playbackErrorMessage.isNullOrBlank()) ||
+                    (failedStationId == station.id && !isStationPlaying && !isStationLoading))
                 val isFavorite = favorites.contains(station.id)
 
                 val statusText = when {
@@ -569,21 +552,22 @@ fun RadioScreen(
                             IconButton(onClick = { deckPicker = station }) {
                                 Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck")
                             }
-                            FilledIconButton(modifier = Modifier,
+                            FilledIconButton(
+                                modifier = Modifier,
                                 onClick = {
                                     if (isStationPlaying) {
                                         playerController.pause()
                                     } else if (isCurrentStation) {
-                                        playerController.exoPlayer.play()
+                                        playerController.togglePlayPause()
                                     } else {
-                                        val queueIndex = playerController.playlist.indexOfFirst {
-                                            it.album == "Live Radio" && it.id == station.id
+                                        val queueStations = visibleStations.ifEmpty { listOf(station) }
+                                        RadioStreamCatalog.registerAll(queueStations)
+                                        val radioQueue = queueStations.map {
+                                            UnifiedPlaybackQueue.radioStationToAudioItem(it)
                                         }
-                                        if (queueIndex >= 0) {
-                                            playerController.play(playerController.playlist[queueIndex], null)
-                                        } else {
-                                            crScope.launch { playStation(station) }
-                                        }
+                                        val startIndex = queueStations.indexOfFirst { it.id == station.id }.coerceAtLeast(0)
+                                        failedStationId = null
+                                        playerController.playRadioCollection(radioQueue, startIndex)
                                     }
                                 }
                             ) {

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -196,13 +197,16 @@ fun MainApp() {
         val uri = MainActivity.incomingAudioUri.value ?: return@LaunchedEffect
         MainActivity.incomingAudioUri.value = null
         try {
-            val audioItem = withContext(kotlinx.coroutines.Dispatchers.IO) {
-                MusicScanner.parsePickedUri(context, uri)
+            val (folderQueue, startIndex) = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                val tappedItem = MusicScanner.parsePickedUri(context, uri)
+                MusicScanner.buildFolderQueueForUri(context, uri, tappedItem)
             }
-            if (!audioLibrary.any { it.uri == audioItem.uri }) {
-                audioLibrary.add(0, audioItem)
+            folderQueue.forEach { item ->
+                if (!audioLibrary.any { it.uri == item.uri }) {
+                    audioLibrary.add(item)
+                }
             }
-            playerController.play(audioItem, listOf(audioItem))
+            playerController.playCollection(folderQueue, startIndex)
             navController.navigate("full_player") {
                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                 launchSingleTop = true
@@ -289,7 +293,7 @@ fun MainApp() {
                 modifier = Modifier
                     .fillMaxWidth()
                     .windowInsetsPadding(WindowInsets.navigationBars)
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                    .padding(horizontal = 8.dp, vertical = 6.dp)
                     .shadow(24.dp, RoundedCornerShape(28.dp))
                     .clip(RoundedCornerShape(28.dp)),
                 containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
@@ -299,8 +303,10 @@ fun MainApp() {
                 val navBackStackEntry by navController.currentBackStackEntryAsState()
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
+                    modifier = Modifier.testTag("nav_player"),
                     icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Player") },
-                    label = { Text("Player", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Player", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
                     selected = currentDestination?.route == "player",
                     colors = navItemColors,
                     onClick = {
@@ -313,8 +319,70 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
+                    modifier = Modifier.testTag("nav_equalizer"),
+                    icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
+                    label = { Text("EQ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
+                    selected = currentDestination?.route == "equalizer",
+                    colors = navItemColors,
+                    onClick = {
+                        navController.navigate("equalizer") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    modifier = Modifier.testTag("nav_online_music"),
+                    icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
+                    label = { Text("Online", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
+                    selected = currentDestination?.route == "online_music",
+                    colors = navItemColors,
+                    onClick = {
+                        navController.navigate("online_music") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    modifier = Modifier.testTag("nav_radio"),
+                    icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
+                    label = { Text("Radio", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
+                    selected = currentDestination?.route == "radio",
+                    colors = navItemColors,
+                    onClick = {
+                        navController.navigate("radio") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    modifier = Modifier.testTag("nav_quran"),
+                    icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
+                    label = { Text("Quran", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
+                    selected = currentDestination?.route == "quran",
+                    colors = navItemColors,
+                    onClick = {
+                        navController.navigate("quran") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+                NavigationBarItem(
+                    modifier = Modifier.testTag("nav_dj"),
                     icon = { Icon(Icons.Filled.Headset, contentDescription = "DJ Mixer") },
-                    label = { Text("DJ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("DJ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
                     selected = currentDestination?.route == "dj",
                     colors = navItemColors,
                     onClick = {
@@ -327,65 +395,14 @@ fun MainApp() {
                     }
                 )
                 NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
-                    label = { Text("EQ", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
-                    selected = currentDestination?.route == "equalizer",
-                    colors = navItemColors,
-                    onClick = {
-                        navController.navigate("equalizer") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
+                    modifier = Modifier.testTag("nav_mic"),
                     icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
-                    label = { Text("Mic", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
+                    label = { Text("Mic", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    alwaysShowLabel = true,
                     selected = currentDestination?.route == "mic",
                     colors = navItemColors,
                     onClick = {
                         navController.navigate("mic") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
-                    label = { Text("Radio", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
-                    selected = currentDestination?.route == "radio",
-                    colors = navItemColors,
-                    onClick = {
-                        navController.navigate("radio") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
-                    label = { Text("Online", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
-                    selected = currentDestination?.route == "online_music",
-                    colors = navItemColors,
-                    onClick = {
-                        navController.navigate("online_music") {
-                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
-                )
-                NavigationBarItem(
-                    icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
-                    label = { Text("Quran", maxLines = 1, softWrap = false, fontWeight = FontWeight.SemiBold) },
-                    selected = currentDestination?.route == "quran",
-                    colors = navItemColors,
-                    onClick = {
-                        navController.navigate("quran") {
                             popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                             launchSingleTop = true
                             restoreState = true

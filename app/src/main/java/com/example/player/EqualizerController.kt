@@ -7,7 +7,17 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import org.json.JSONArray
+import org.json.JSONObject
 import java.util.concurrent.CopyOnWriteArraySet
+
+data class CustomEqPreset(
+    val name: String,
+    val bandLevelsDb: List<Int>,
+    val preampDb: Float,
+    val bassBoostLevel: Float,
+    val trebleBoostLevel: Float
+)
 
 class EqBand(
     val id: Int,
@@ -42,12 +52,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     var customTrebleBoostLevel = 0f
         private set
 
-    init {
-        instanceRegistry.add(this)
-        loadState()
-    }
-
-    var isEnabled by mutableStateOf(false)
+    var isEnabled by mutableStateOf(true)
         private set
     var selectedPreset by mutableStateOf("Custom")
         private set
@@ -68,10 +73,31 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     var preampDb by mutableStateOf(0f)
         private set
 
-    val presets = listOf(
+    val builtInPresets = listOf(
         "Custom", "Flat", "Dolby Music", "Dolby Cinema", "Dolby Dynamic", "Dolby Voice", "Dolby Game",
         "Bass Boost", "Rock", "Pop", "Jazz", "Electronic", "Vocal", "Concert"
     )
+
+    var customPresets by mutableStateOf<List<CustomEqPreset>>(emptyList())
+        private set
+
+    /** Tracks which custom preset was active prior to slider edits, so users can 1-tap overwrite it. */
+    var editingCustomPresetName by mutableStateOf<String?>(null)
+        private set
+
+    val presets: List<String>
+        get() = builtInPresets + customPresets.map { it.name }
+
+    init {
+        instanceRegistry.add(this)
+        loadState()
+    }
+
+    fun isBuiltInPreset(name: String): Boolean =
+        builtInPresets.any { it.equals(name.trim(), ignoreCase = true) }
+
+    fun isCustomPreset(name: String): Boolean =
+        customPresets.any { it.name.equals(name.trim(), ignoreCase = true) }
 
     fun toggleEnable() {
         val nextEnabled = !isEnabled
@@ -86,6 +112,9 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         val clamped = levelDb.coerceIn(-12, 12)
         bands[bandIndex].currentLevelDb = clamped
         customBands[bandIndex] = clamped
+        if (isBuiltInPreset(selectedPreset) && selectedPreset != "Custom") {
+            editingCustomPresetName = null
+        }
         selectedPreset = "Custom"
         customPreampDb = preampDb
         customBassBoostLevel = bassBoostLevel
@@ -132,6 +161,29 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
     }
 
     fun applyPreset(presetName: String) {
+        val customMatch = customPresets.firstOrNull { it.name.equals(presetName, ignoreCase = true) }
+        if (customMatch != null) {
+            selectedPreset = customMatch.name
+            editingCustomPresetName = customMatch.name
+            for (i in bands.indices) {
+                val lvl = customMatch.bandLevelsDb.getOrElse(i) { 0 }.coerceIn(-12, 12)
+                bands[i].currentLevelDb = lvl
+                customBands[i] = lvl
+            }
+            preampDb = customMatch.preampDb.coerceIn(0f, 12f)
+            bassBoostLevel = customMatch.bassBoostLevel.coerceIn(0f, 1f)
+            trebleBoostLevel = customMatch.trebleBoostLevel.coerceIn(0f, 1f)
+            customPreampDb = preampDb
+            customBassBoostLevel = bassBoostLevel
+            customTrebleBoostLevel = trebleBoostLevel
+            syncQuickFromBands()
+            isEnabled = true
+            persistState()
+            broadcastState()
+            recordDiagnosticsState()
+            return
+        }
+
         if (presetName == "Custom") {
             selectedPreset = "Custom"
             for (i in bands.indices) {
@@ -148,7 +200,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             return
         }
 
-        selectedPreset = if (presetName in presets) presetName else "Custom"
+        editingCustomPresetName = null
+        selectedPreset = if (presetName in builtInPresets) presetName else "Custom"
         val values = when (presetName) {
             "Flat" -> List(10) { 0 }
             "Dolby Music" -> listOf(5, 4, 3, 1, 2, 3, 4, 5, 4, 3)
@@ -171,6 +224,74 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         persistState()
         broadcastState()
         recordDiagnosticsState()
+    }
+
+    fun saveCustomPreset(rawName: String): Result<CustomEqPreset> {
+        val cleanName = rawName.trim()
+        if (cleanName.isBlank()) {
+            return Result.failure(IllegalArgumentException("Preset name cannot be empty"))
+        }
+        if (isBuiltInPreset(cleanName)) {
+            return Result.failure(IllegalArgumentException("Cannot overwrite built-in preset \"$cleanName\""))
+        }
+        val snapshot = CustomEqPreset(
+            name = cleanName,
+            bandLevelsDb = bands.map { it.currentLevelDb.coerceIn(-12, 12) },
+            preampDb = preampDb.coerceIn(0f, 12f),
+            bassBoostLevel = bassBoostLevel.coerceIn(0f, 1f),
+            trebleBoostLevel = trebleBoostLevel.coerceIn(0f, 1f)
+        )
+        val existingIdx = customPresets.indexOfFirst { it.name.equals(cleanName, ignoreCase = true) }
+        val updatedList = customPresets.toMutableList()
+        if (existingIdx >= 0) {
+            updatedList[existingIdx] = snapshot
+        } else {
+            updatedList.add(snapshot)
+        }
+        customPresets = updatedList
+        selectedPreset = snapshot.name
+        editingCustomPresetName = snapshot.name
+        for (i in bands.indices) customBands[i] = snapshot.bandLevelsDb[i]
+        customPreampDb = snapshot.preampDb
+        customBassBoostLevel = snapshot.bassBoostLevel
+        customTrebleBoostLevel = snapshot.trebleBoostLevel
+        persistState()
+        broadcastState()
+        recordDiagnosticsState()
+        return Result.success(snapshot)
+    }
+
+    fun updateCustomPreset(name: String): Result<CustomEqPreset> {
+        val cleanName = name.trim()
+        if (isBuiltInPreset(cleanName)) {
+            return Result.failure(IllegalArgumentException("Built-in presets cannot be modified"))
+        }
+        val existing = customPresets.firstOrNull { it.name.equals(cleanName, ignoreCase = true) }
+            ?: return Result.failure(IllegalArgumentException("Custom preset \"$cleanName\" not found"))
+        return saveCustomPreset(existing.name)
+    }
+
+    fun deleteCustomPreset(name: String): Boolean {
+        val cleanName = name.trim()
+        if (isBuiltInPreset(cleanName)) return false
+        val idx = customPresets.indexOfFirst { it.name.equals(cleanName, ignoreCase = true) }
+        if (idx < 0) return false
+        val removed = customPresets[idx]
+        customPresets = customPresets.filterIndexed { i, _ -> i != idx }
+        if (selectedPreset.equals(removed.name, ignoreCase = true)) {
+            selectedPreset = "Custom"
+            for (i in bands.indices) customBands[i] = bands[i].currentLevelDb
+            customPreampDb = preampDb
+            customBassBoostLevel = bassBoostLevel
+            customTrebleBoostLevel = trebleBoostLevel
+        }
+        if (editingCustomPresetName.equals(removed.name, ignoreCase = true)) {
+            editingCustomPresetName = null
+        }
+        persistState()
+        broadcastState()
+        recordDiagnosticsState()
+        return true
     }
 
     private fun recordDiagnosticsState() {
@@ -196,7 +317,8 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         preset: String,
         sharedPreampDb: Float,
         sharedBassBoost: Float,
-        sharedTrebleBoost: Float
+        sharedTrebleBoost: Float,
+        sharedCustomPresets: List<CustomEqPreset>
     ) {
         for (i in bands.indices) {
             bands[i].currentLevelDb = levels.getOrElse(i) { 0f }.toInt().coerceIn(-12, 12)
@@ -206,6 +328,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         preampDb = sharedPreampDb.coerceIn(0f, 12f)
         bassBoostLevel = sharedBassBoost.coerceIn(0f, 1f)
         trebleBoostLevel = sharedTrebleBoost.coerceIn(0f, 1f)
+        customPresets = sharedCustomPresets
         syncQuickFromBands()
         onUpdate()
     }
@@ -218,15 +341,37 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
         val sharedPreamp = if (enabled) preampDb else 0f
         val sharedBassBoost = if (enabled) bassBoostLevel * 12f else 0f
         val sharedTrebleBoost = if (enabled) trebleBoostLevel * 12f else 0f
-        
+
         GlobalEqualizerState.update(levels, enabled, sharedPreamp, sharedBassBoost, sharedTrebleBoost)
         for (controller in instanceRegistry) {
-            controller.applySharedSnapshot(levels, enabled, preset, sharedPreamp, bassBoostLevel, trebleBoostLevel)
+            controller.applySharedSnapshot(
+                levels = levels,
+                enabled = enabled,
+                preset = preset,
+                sharedPreampDb = preampDb,
+                sharedBassBoost = bassBoostLevel,
+                sharedTrebleBoost = trebleBoostLevel,
+                sharedCustomPresets = customPresets
+            )
         }
     }
 
     private fun persistState() {
         try {
+            val customPresetsArr = JSONArray().apply {
+                customPresets.forEach { preset ->
+                    put(
+                        JSONObject().apply {
+                            put("name", preset.name)
+                            put("bands", JSONArray().apply { preset.bandLevelsDb.forEach { put(it) } })
+                            put("preamp", preset.preampDb.toDouble())
+                            put("bassBoost", preset.bassBoostLevel.toDouble())
+                            put("trebleBoost", preset.trebleBoostLevel.toDouble())
+                        }
+                    )
+                }
+            }
+
             val editor = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE).edit()
             editor.putInt("bass", quickBassDb)
                 .putInt("mid", quickMidDb)
@@ -236,6 +381,7 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
                 .putFloat("preamp", preampDb)
                 .putFloat("bassBoost", bassBoostLevel)
                 .putFloat("trebleBoost", trebleBoostLevel)
+                .putString("custom_presets_json", customPresetsArr.toString())
             for (i in bands.indices) {
                 editor.putInt("band_$i", bands[i].currentLevelDb)
                 editor.putInt("custom_band_$i", customBands[i])
@@ -243,13 +389,40 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             editor.putFloat("custom_preamp", customPreampDb)
             editor.putFloat("custom_bass_boost", customBassBoostLevel)
             editor.putFloat("custom_treble_boost", customTrebleBoostLevel)
-            editor.apply()
+            editor.commit()
         } catch (e: Exception) { android.util.Log.w("EqualizerController", "Caught throwable", e) }
     }
 
     private fun loadState() {
         try {
             val prefs = context.getSharedPreferences("quick_eq", Context.MODE_PRIVATE)
+            val loadedCustomPresets = mutableListOf<CustomEqPreset>()
+            val customJson = prefs.getString("custom_presets_json", null)
+            if (!customJson.isNullOrBlank()) {
+                runCatching {
+                    val arr = JSONArray(customJson)
+                    for (i in 0 until arr.length()) {
+                        val obj = arr.optJSONObject(i) ?: continue
+                        val name = obj.optString("name").trim()
+                        if (name.isBlank() || isBuiltInPreset(name)) continue
+                        val bandArr = obj.optJSONArray("bands")
+                        val levels = List(10) { idx ->
+                            (bandArr?.optInt(idx, 0) ?: 0).coerceIn(-12, 12)
+                        }
+                        loadedCustomPresets.add(
+                            CustomEqPreset(
+                                name = name,
+                                bandLevelsDb = levels,
+                                preampDb = obj.optDouble("preamp", 0.0).toFloat().coerceIn(0f, 12f),
+                                bassBoostLevel = obj.optDouble("bassBoost", 0.0).toFloat().coerceIn(0f, 1f),
+                                trebleBoostLevel = obj.optDouble("trebleBoost", 0.0).toFloat().coerceIn(0f, 1f)
+                            )
+                        )
+                    }
+                }
+            }
+            customPresets = loadedCustomPresets
+
             for (i in bands.indices) {
                 val fallback = prefs.getInt(when(i) {
                     0 -> "bass"
@@ -264,8 +437,15 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             customBassBoostLevel = prefs.getFloat("custom_bass_boost", prefs.getFloat("bassBoost", 0f)).coerceIn(0f, 1f)
             customTrebleBoostLevel = prefs.getFloat("custom_treble_boost", prefs.getFloat("trebleBoost", 0f)).coerceIn(0f, 1f)
 
-            selectedPreset = prefs.getString("preset", "Custom") ?: "Custom"
-            isEnabled = prefs.getBoolean("enabled", false)
+            val savedPreset = prefs.getString("preset", "Custom") ?: "Custom"
+            selectedPreset = when {
+                savedPreset in builtInPresets -> savedPreset
+                loadedCustomPresets.any { it.name == savedPreset } -> savedPreset
+                else -> "Custom"
+            }
+            editingCustomPresetName = loadedCustomPresets.firstOrNull { it.name == selectedPreset }?.name
+            // Fresh install defaults Equalizer to ON (true); persisted disabled state stays OFF.
+            isEnabled = prefs.getBoolean("enabled", true)
             preampDb = prefs.getFloat("preamp", if (selectedPreset == "Custom") customPreampDb else 0f).coerceIn(0f, 12f)
             bassBoostLevel = prefs.getFloat("bassBoost", if (selectedPreset == "Custom") customBassBoostLevel else 0f).coerceIn(0f, 1f)
             trebleBoostLevel = prefs.getFloat("trebleBoost", if (selectedPreset == "Custom") customTrebleBoostLevel else 0f).coerceIn(0f, 1f)
@@ -302,6 +482,11 @@ class EqualizerController(private val context: Context, private val onUpdate: ()
             return activeInstance ?: synchronized(this) {
                 activeInstance ?: EqualizerController(context.applicationContext).also { activeInstance = it }
             }
+        }
+
+        fun resetInstanceForTests() {
+            activeInstance = null
+            companionObjectRegistry.clear()
         }
 
         fun adjustQuickBand(context: Context, band: Int) {

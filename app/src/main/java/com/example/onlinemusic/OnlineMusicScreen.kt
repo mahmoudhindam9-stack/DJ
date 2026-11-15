@@ -33,6 +33,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -41,6 +42,8 @@ import com.example.QueueSheet
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import com.example.player.AudioPlayerController
+import com.example.player.AudiusTrackCatalog
+import com.example.player.UnifiedPlaybackQueue
 import com.example.room.PlaylistRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
@@ -166,26 +169,25 @@ private fun AlbumatyOnlineScreen(
         }
     }
 
-    fun playSong(link: AlbumatyLink) {
-        scope.launch {
-            val same = playerController.currentSong?.id == link.url
-            if (same) {
-                playerController.togglePlayPause()
-                return@launch
-            }
-            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
-                val audio = track.streamUrl ?: return@onSuccess
-                val item = AudioItem(
-                    link.url,
-                    track.title,
-                    track.artist.ifBlank { "Albumaty" },
-                    track.album ?: "Online Music",
-                    0L,
-                    Uri.parse(audio)
-                )
-                playerController.play(item, listOf(item))
-            }
+    fun playSong(
+        link: AlbumatyLink,
+        collection: List<AlbumatyLink> = listOf(link),
+        albumFallback: String = "Online Music"
+    ) {
+        val same = playerController.currentSong?.id == link.url
+        if (same) {
+            playerController.togglePlayPause()
+            return
         }
+        val songLinks = collection
+            .filter { it.isSong() }
+            .let { filtered ->
+                if (filtered.any { it.url == link.url }) filtered else listOf(link) + filtered
+            }
+            .distinctBy { it.url }
+        val queue = songLinks.map { UnifiedPlaybackQueue.albumatyLinkToAudioItem(it, albumFallback) }
+        val startIndex = songLinks.indexOfFirst { it.url == link.url }.coerceAtLeast(0)
+        playerController.playCollection(queue, startIndex)
     }
 
     fun downloadSong(link: AlbumatyLink) {
@@ -198,22 +200,8 @@ private fun AlbumatyOnlineScreen(
         }
     }
 
-    fun queueSong(link: AlbumatyLink) {
-        scope.launch {
-            runCatching { viewModel.resolveTrack(link) }.onSuccess { track ->
-                val audio = track.streamUrl ?: return@onSuccess
-                playerController.enqueueOnlineSong(
-                    AudioItem(
-                        link.url,
-                        track.title,
-                        track.artist.ifBlank { "Albumaty" },
-                        track.album ?: "Online Music",
-                        0L,
-                        Uri.parse(audio)
-                    )
-                )
-            }
-        }
+    fun queueSong(link: AlbumatyLink, albumFallback: String = "Online Music") {
+        playerController.enqueueOnlineSong(UnifiedPlaybackQueue.albumatyLinkToAudioItem(link, albumFallback))
     }
 
     fun sendToDeck(link: AlbumatyLink, deck: OnlineDeckTarget) {
@@ -235,8 +223,8 @@ private fun AlbumatyOnlineScreen(
         }
     }
 
-    fun activate(link: AlbumatyLink) {
-        if (link.isSong()) playSong(link) else viewModel.openSection(link)
+    fun activate(link: AlbumatyLink, collection: List<AlbumatyLink> = listOf(link)) {
+        if (link.isSong()) playSong(link, collection) else viewModel.openSection(link)
     }
 
     viewModel.section?.let { section ->
@@ -245,10 +233,10 @@ private fun AlbumatyOnlineScreen(
             isLoading = viewModel.isLoading,
             errorMessage = viewModel.errorMessage,
             onBack = viewModel::closeSection,
-            onOpen = ::activate,
-            onPlay = ::playSong,
+            onOpen = { link -> activate(link, section.content) },
+            onPlay = { link -> playSong(link, section.content, section.title.ifBlank { "Online Music" }) },
             onDownload = ::downloadSong,
-            onQueue = ::queueSong,
+            onQueue = { link -> queueSong(link, section.title.ifBlank { "Online Music" }) },
             onDeck = ::sendToDeck,
             playerController = playerController
         )
@@ -279,7 +267,7 @@ private fun AlbumatyOnlineScreen(
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).testTag("ai_prompt_input"),
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
                 leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "بحث") },
@@ -310,7 +298,7 @@ private fun AlbumatyOnlineScreen(
                     }
                 },
                 enabled = query.isNotBlank() && !viewModel.isBuildingMoodPlaylist,
-                modifier = Modifier.size(48.dp)
+                modifier = Modifier.size(48.dp).testTag("ai_generate_button")
             ) {
                 Icon(Icons.Filled.AutoAwesome, contentDescription = "اختيار ذكي")
             }
@@ -324,7 +312,7 @@ private fun AlbumatyOnlineScreen(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (viewModel.moodPlaylist.isNotEmpty()) {
+            if (viewModel.moodPlaylist.isNotEmpty() || viewModel.moodPlaylistError != null) {
                 item(key = "clear_mood") {
                     AssistChip(
                         onClick = { viewModel.clearMoodPlaylist() },
@@ -334,6 +322,7 @@ private fun AlbumatyOnlineScreen(
             }
             items(MoodCategory.entries, key = { it.id }) { category ->
                 FilterChip(
+                    modifier = Modifier.testTag("mood_chip_${category.id}"),
                     selected = viewModel.moodPlaylistTitle == category.title && viewModel.moodPlaylist.isNotEmpty(),
                     onClick = { viewModel.buildMoodPlaylist(category, refresh = true) },
                     label = { Text(category.title, maxLines = 1) }
@@ -343,6 +332,35 @@ private fun AlbumatyOnlineScreen(
 
         if (viewModel.isBuildingMoodPlaylist || viewModel.isSearchingAlbumaty) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp))
+        }
+
+        viewModel.moodPlaylistError?.let { errMsg ->
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = errMsg,
+                        modifier = Modifier.weight(1f),
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    TextButton(
+                        onClick = { viewModel.retryLastMoodPlaylist() },
+                        modifier = Modifier.testTag("mood_retry_button")
+                    ) {
+                        Text("إعادة المحاولة")
+                    }
+                }
+            }
         }
 
         // Maximum-height full-screen scrollable song area
@@ -360,6 +378,7 @@ private fun AlbumatyOnlineScreen(
             ) {
                 // 1. Active Mood / AI Playlist songs displayed directly in the main scrollable list
                 if (viewModel.moodPlaylist.isNotEmpty()) {
+                    val moodMixName = viewModel.moodPlaylistTitle.ifBlank { "Mood Mix" }
                     item(key = "mood_header") {
                         Row(
                             modifier = Modifier
@@ -369,7 +388,7 @@ private fun AlbumatyOnlineScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "${viewModel.moodPlaylistTitle} (${viewModel.moodPlaylist.size})",
+                                text = "$moodMixName (${viewModel.moodPlaylist.size})",
                                 modifier = Modifier.weight(1f),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
@@ -382,7 +401,7 @@ private fun AlbumatyOnlineScreen(
                                     if (matchingCat != null) {
                                         viewModel.buildMoodPlaylist(matchingCat, refresh = true)
                                     } else if (viewModel.moodPlaylistTitle.isNotBlank()) {
-                                        viewModel.askMusicAssistant(viewModel.moodPlaylistTitle)
+                                        viewModel.askMusicAssistant(viewModel.moodPlaylistTitle, refresh = true)
                                     }
                                 },
                                 enabled = !viewModel.isBuildingMoodPlaylist,
@@ -392,23 +411,10 @@ private fun AlbumatyOnlineScreen(
                             }
                             FilledTonalButton(
                                 onClick = {
-                                    scope.launch {
-                                        viewModel.moodPlaylist.forEach { link ->
-                                            runCatching {
-                                                val resolved = viewModel.resolveTrack(link)
-                                                val audio = resolved.streamUrl ?: return@runCatching
-                                                playerController.enqueueOnlineSong(
-                                                    AudioItem(
-                                                        link.url,
-                                                        resolved.title,
-                                                        resolved.artist.ifBlank { "Albumaty" },
-                                                        resolved.album ?: "Mood Mix",
-                                                        0L,
-                                                        Uri.parse(audio)
-                                                    )
-                                                )
-                                            }
-                                        }
+                                    viewModel.moodPlaylist.forEach { link ->
+                                        playerController.enqueueOnlineSong(
+                                            UnifiedPlaybackQueue.albumatyLinkToAudioItem(link, moodMixName)
+                                        )
                                     }
                                 },
                                 enabled = !viewModel.isBuildingMoodPlaylist,
@@ -422,9 +428,9 @@ private fun AlbumatyOnlineScreen(
                     items(viewModel.moodPlaylist, key = { "mood_${it.url}" }) { link ->
                         OnlineSongCard(
                             link = link,
-                            onPlay = ::playSong,
+                            onPlay = { playSong(it, viewModel.moodPlaylist, moodMixName) },
                             onDownload = ::downloadSong,
-                            onQueue = ::queueSong,
+                            onQueue = { queueSong(it, moodMixName) },
                             onDeck = ::sendToDeck,
                             playerController = playerController
                         )
@@ -433,35 +439,49 @@ private fun AlbumatyOnlineScreen(
                     // 2. Direct Search Results
                     if (searchSongs.isNotEmpty()) {
                         items(searchSongs, key = { "s_song_${it.url}" }) { link ->
-                            OnlineSongCard(link, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)
+                            OnlineSongCard(
+                                link = link,
+                                onPlay = { playSong(it, searchSongs) },
+                                onDownload = ::downloadSong,
+                                onQueue = { queueSong(it) },
+                                onDeck = ::sendToDeck,
+                                playerController = playerController
+                            )
                         }
                     }
                     if (searchAlbums.isNotEmpty()) {
                         item(key = "s_albums_hdr") { SectionHeader("الألبومات") }
                         items(searchAlbums, key = { "s_album_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, searchAlbums) }
                         }
                     }
                     if (searchArtists.isNotEmpty()) {
                         item(key = "s_artists_hdr") { SectionHeader("الفنانون") }
                         items(searchArtists, key = { "s_artist_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, searchArtists) }
                         }
                     }
                 } else if (isSearching) {
                     if (localSongs.isNotEmpty()) {
                         items(localSongs, key = { "l_song_${it.url}" }) { link ->
-                            OnlineSongCard(link, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)
+                            OnlineSongCard(
+                                link = link,
+                                onPlay = { playSong(it, localSongs, "New Songs") },
+                                onDownload = ::downloadSong,
+                                onQueue = { queueSong(it, "New Songs") },
+                                onDeck = ::sendToDeck,
+                                playerController = playerController
+                            )
                         }
                     }
                     if (localAlbums.isNotEmpty()) {
                         items(localAlbums, key = { "l_album_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, localAlbums) }
                         }
                     }
                     if (localArtists.isNotEmpty()) {
                         items(localArtists, key = { "l_artist_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, localArtists) }
                         }
                     }
                 } else {
@@ -484,19 +504,26 @@ private fun AlbumatyOnlineScreen(
                     }
                     if (localSongs.isNotEmpty()) {
                         items(localSongs, key = { "h_song_${it.url}" }) { link ->
-                            OnlineSongCard(link, ::playSong, ::downloadSong, ::queueSong, ::sendToDeck, playerController)
+                            OnlineSongCard(
+                                link = link,
+                                onPlay = { playSong(it, viewModel.home.songs, "New Songs") },
+                                onDownload = ::downloadSong,
+                                onQueue = { queueSong(it, "New Songs") },
+                                onDeck = ::sendToDeck,
+                                playerController = playerController
+                            )
                         }
                     }
                     if (localAlbums.isNotEmpty()) {
                         item(key = "h_albums_hdr") { SectionHeader("ألبومات جديدة") }
                         items(localAlbums.take(20), key = { "h_album_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, localAlbums) }
                         }
                     }
                     if (localArtists.isNotEmpty()) {
                         item(key = "h_artists_hdr") { SectionHeader("فنانون") }
                         items(localArtists.take(24), key = { "h_artist_${it.url}" }) { link ->
-                            SectionLinkCard(link, ::activate)
+                            SectionLinkCard(link) { activate(it, localArtists) }
                         }
                     }
                 }
@@ -538,26 +565,24 @@ private fun AudiusOnlineScreen(
 
     LaunchedEffect(Unit) { viewModel.loadAudiusHome() }
 
-    fun playSong(track: AudiusTrack) {
-        scope.launch {
-            val same = playerController.currentSong?.id == "audius:${track.id}"
-            if (same) {
-                playerController.togglePlayPause()
-                return@launch
-            }
-            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->
-                val audio = resolved.streamUrl ?: return@onSuccess
-                val item = AudioItem(
-                    "audius:${track.id}",
-                    resolved.title,
-                    resolved.artist,
-                    resolved.album ?: "Audius",
-                    0L,
-                    Uri.parse(audio)
-                )
-                playerController.play(item, listOf(item))
-            }
+    val searchResults = viewModel.audiusSearchResults
+    val displayedTracks = if (query.isBlank()) {
+        (viewModel.audiusHome.trending + viewModel.audiusHome.latest).distinctBy { it.id }
+    } else {
+        searchResults
+    }
+
+    fun playSong(track: AudiusTrack, collection: List<AudiusTrack> = displayedTracks) {
+        val same = playerController.currentSong?.id == "audius:${track.id}"
+        if (same) {
+            playerController.togglePlayPause()
+            return
         }
+        val list = if (collection.any { it.id == track.id }) collection else listOf(track) + collection
+        AudiusTrackCatalog.registerAll(list)
+        val queue = list.map { UnifiedPlaybackQueue.audiusTrackToAudioItem(it) }
+        val startIdx = list.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        playerController.playCollection(queue, startIdx)
     }
 
     fun downloadSong(track: AudiusTrack) {
@@ -571,21 +596,8 @@ private fun AudiusOnlineScreen(
     }
 
     fun queueSong(track: AudiusTrack) {
-        scope.launch {
-            runCatching { viewModel.resolveAudiusTrack(track) }.onSuccess { resolved ->
-                val audio = resolved.streamUrl ?: return@onSuccess
-                playerController.enqueueOnlineSong(
-                    AudioItem(
-                        "audius:${track.id}",
-                        resolved.title,
-                        resolved.artist,
-                        resolved.album ?: "Audius",
-                        0L,
-                        Uri.parse(audio)
-                    )
-                )
-            }
-        }
+        AudiusTrackCatalog.register(track)
+        playerController.enqueueOnlineSong(UnifiedPlaybackQueue.audiusTrackToAudioItem(track))
     }
 
     fun sendToDeck(track: AudiusTrack, deck: OnlineDeckTarget) {
@@ -614,7 +626,7 @@ private fun AudiusOnlineScreen(
             viewModel.isLoading,
             viewModel.errorMessage,
             viewModel::closeAudiusDetail,
-            ::playSong,
+            { track -> playSong(track, detail.tracks) },
             ::downloadSong,
             ::queueSong,
             ::sendToDeck,
@@ -629,20 +641,13 @@ private fun AudiusOnlineScreen(
             viewModel.isLoading,
             viewModel.errorMessage,
             viewModel::closeAudiusDetail,
-            ::playSong,
+            { track -> playSong(track, tracks) },
             ::downloadSong,
             ::queueSong,
             ::sendToDeck,
             playerController
         )
         return
-    }
-
-    val searchResults = viewModel.audiusSearchResults
-    val displayedTracks = if (query.isBlank()) {
-        (viewModel.audiusHome.trending + viewModel.audiusHome.latest).distinctBy { it.id }
-    } else {
-        searchResults
     }
 
     Column(Modifier.fillMaxSize()) {

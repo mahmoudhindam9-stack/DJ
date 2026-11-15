@@ -4,13 +4,33 @@ import android.content.Context
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+data class PlaylistGenerationRequest(
+    val categoryId: String? = null,
+    val prompt: String,
+    val source: String = "albumaty",
+    val playlistSize: Int = 50,
+    val diversify: Boolean = true
+) {
+    val cacheKey: String
+        get() {
+            val normPrompt = LocalMusicAssistant.normalizeArabicText(prompt)
+            return listOf(
+                source.trim().lowercase(),
+                categoryId?.trim()?.lowercase().orEmpty(),
+                normPrompt,
+                playlistSize.toString(),
+                diversify.toString()
+            ).joinToString("|")
+        }
+}
+
 /**
  * Instant, zero-credit, zero-latency semantic music assistant.
  * Runs 100% on the user's device without consuming any developer cloud credits or requiring
  * any external model downloads, mapping musical vibes/moods/dialects to authentic repertoire
  * rather than searching literal category names.
  */
-class LocalMusicAssistant(context: Context) : AutoCloseable {
+class LocalMusicAssistant(context: Context? = null) : AutoCloseable {
 
     val isReady: Boolean
         get() = true
@@ -28,67 +48,74 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
             buildSmartVibeQueries(request, seedTerms)
         }
 
-    suspend fun rankTracks(request: String, candidates: List<AlbumatyLink>): List<AlbumatyLink> =
+    suspend fun rankTracks(
+        request: String,
+        candidates: List<AlbumatyLink>,
+        category: MoodCategory? = null,
+        recentTrackSignatures: Set<String> = emptySet(),
+        diversify: Boolean = true
+    ): List<AlbumatyLink> =
         withContext(Dispatchers.Default) {
             if (candidates.isEmpty()) return@withContext emptyList()
-            rankAndDiversifyTracks(request, candidates)
+            rankAndDiversifyTracks(
+                request = request,
+                candidates = candidates,
+                category = category,
+                recentTrackSignatures = recentTrackSignatures,
+                diversify = diversify
+            )
         }
 
     internal fun buildSmartVibeQueries(request: String, seedTerms: List<String>): List<String> {
-        val normalized = normalizeArabic(request)
+        val normalized = normalizeArabicText(request)
         val matchedPool = mutableListOf<String>()
 
-        // If seedTerms are provided (from a MoodCategory), shuffle them so each refresh brings fresh artists/songs
-        if (seedTerms.isNotEmpty()) {
-            matchedPool.addAll(seedTerms.shuffled())
-        }
-
-        // Semantic mood & vibe repertoire pools (actual songs & artists with that musical character, NEVER literal category labels)
+        // Semantic mood & vibe repertoire pools (actual songs & artists curated for Albumaty search index)
         val semanticVibePools: List<Pair<List<String>, List<String>>> = listOf(
-            listOf("حزين", "حزينه", "فراق", "دموع", "وجع", "جرح", "كئيب", "زعلان", "وداع", "خذلان", "موجوع", "بكي", "sad") to listOf(
-                "تامر عاشور هيجيلي موجوع", "تامر عاشور بقول عادي", "شيرين كده يا قلبي", "رامي جمال سقف",
-                "مسلم اتنسيت", "حمزة نمرة فاضي شوية", "احمد كامل", "وائل جسار خليني ذكرى",
-                "انغام ياريتك فاهمني", "انغام اكتبلك تعهد", "شيرين جرح تاني",
-                "مصطفى كامل", "هاني شاكر", "تامر حسني نسيانك صعب", "اصالة", "ادم"
+            listOf("حزين", "حزينه", "حزن", "فراق", "دموع", "وجع", "جرح", "كئيب", "زعلان", "وداع", "خذلان", "موجوع", "بكي", "sad") to listOf(
+                "هيجيلي موجوع", "بقول عادي", "كده يا قلبي", "اتنسيت",
+                "فاضي شوية", "خليني ذكرى", "ياريتك فاهمني", "اكتبلك تعهد",
+                "تامر عاشور", "شيرين", "مسلم", "احمد كامل", "مصطفى كامل", "وائل جسار", "ادم"
             ),
             listOf("فرح", "سعاده", "بهجه", "مبهجه", "مبسوط", "فرحان", "انبساط", "happy", "joy") to listOf(
-                "احمد سعد اليوم الحلو", "احمد سعد اختياراتي", "عمرو دياب يا انا يا لا", "حماقي يا ستار",
-                "تامر حسني حلو المكان", "تامر حسني هدلعني", "نانسي عجرم صح صح", "حسين الجسمي بالبنط العريض",
-                "راغب علامة اللي باعنا", "سعد لمجرد لمعلم", "محمود العسيلي", "بهاء سلطان دلعنا", "روبي حته تانيه"
+                "اليوم الحلو", "اختياراتي", "وسع وسع", "يا انا يا لا",
+                "حلو المكان", "يا ستار", "ادرينالين", "بالبنط العريض",
+                "احمد سعد", "عمرو دياب", "حماقي", "تامر حسني", "نانسي عجرم", "حسين الجسمي", "روبي"
             ),
             listOf("حماس", "حماسيه", "جيم", "رياضه", "طاقه", "نشاط", "تمرين", "باور", "تشجيع", "workout", "gym", "sport") to listOf(
-                "ويجز دورك جاي", "ويجز", "مروان بابلو", "مروان موسى بطل عالم", "عفروتو",
-                "احمد سعد وسع وسع", "كايروكي", "شارموفرز", "عصام صاصا",
-                "حسن شاكوش", "تامر حسني", "ديسكو مصر"
+                "دورك جاي", "بطل عالم", "ويجز", "مروان بابلو", "مروان موسى",
+                "عفروتو", "كايروكي", "عصام صاصا", "حسن شاكوش", "ابيوسف"
             ),
             listOf("رقص", "افراح", "زفه", "شعبي", "مهرجان", "مهرجانات", "حفله", "خطوبه", "دخله", "حنه", "party", "dance") to listOf(
-                "محمود الليثي", "حكيم حلاوة روح", "احمد سعد وسع وسع", "رضا البحراوي",
-                "حسن شاكوش بنت الجيران", "عمر كمال", "بوسي اه يا دنيا", "عبد الباسط حمودة",
-                "عصام صاصا", "سعد الصغير", "فارس كرم", "حمو بيكا"
+                "محمود الليثي", "حكيم", "رضا البحراوي", "حسن شاكوش",
+                "عمر كمال", "بوسي اه يا دنيا", "عبد الباسط حمودة", "عصام صاصا",
+                "سعد الصغير", "فارس كرم", "حلاوة روح"
             ),
             listOf("حب", "رومانسي", "رومانسيه", "عشق", "غزل", "حبيبي", "حبيبتي", "مشاعر", "love", "romance") to listOf(
-                "اليسا اجمل احساس", "اليسا حالة حب", "عمرو دياب تملي معاك", "تامر حسني بحبك",
-                "وائل جسار مليون احبك", "فضل شاكر يا غايب", "ماجد المهندس", "تامر عاشور تيجي نتراهن",
-                "شيرين حبه جنة", "حماقي ما بلاش", "نانسي عجرم", "رامي صبري", "كاظم الساهر", "انغام"
+                "اجمل احساس", "حالة حب", "تملي معاك", "مليون احبك",
+                "تيجي نتراهن", "حبه جنة", "ما بلاش", "اليسا",
+                "ماجد المهندس", "رامي صبري", "عمرو دياب", "وائل جسار", "تامر حسني"
             ),
-            listOf("هادئ", "هادئه", "هدوء", "ليل", "ليليه", "روقان", "استرخاء", "نوم", "رايق", "رايقه", "سكون", "راحه", "chill", "relax", "sleep") to listOf(
-                "فيروز انا لحبيبي", "فيروز سكن الليل", "عمر خيرت", "كاظم الساهر", "فضل شاكر",
-                "مروان خوري كل القصايد", "اليسا", "انغام", "عبادي الجوهر",
-                "ماجدة الرومي", "عبير نعمة", "فايا يونان", "حمزة نمرة"
+            listOf("هادئ", "هادئه", "هدوء", "ليل", "ليليه", "منتصف الليل", "روقان", "رايق", "رايقه", "سكون", "chill", "midnight") to listOf(
+                "انا لحبيبي", "زيديني عشقا", "كل القصايد", "اواخر الشتا",
+                "فيروز", "كاظم الساهر", "مروان خوري", "فضل شاكر", "اليسا", "عبادي الجوهر", "وائل كفوري"
+            ),
+            listOf("نوم", "استرخاء", "راحه", "كلاسيك هادئ", "موسيقي هادئه", "relax", "sleep") to listOf(
+                "عمر خيرت", "سكن الليل", "اعطني الناي", "ماجدة الرومي",
+                "عبير نعمة", "فايا يونان", "جوليا بطرس", "فيروز"
             ),
             listOf("سفر", "طريق", "قياده", "عربيه", "سياره", "مشوار", "رحله", "drive", "road") to listOf(
-                "كايروكي روما", "كايروكي", "عمرو دياب", "ويجز البخت", "حماقي",
-                "شارموفرز", "مسار اجباري", "محمود العسيلي", "توليت",
-                "مروان موسى", "تامر حسني عيش بشوقك", "امير عيد"
+                "كايروكي", "بسرح واتوه", "روما", "ديسكو مصر",
+                "شارموفرز", "مسار اجباري", "توليت", "مروان موسى", "امير عيد", "البخت"
             ),
             listOf("ميلاد", "عيد ميلاد", "بيرثداي", "birthday") to listOf(
-                "تامر حسني كل سنة وانت طيب", "نانسي عجرم سنة حلوة يا جميل", "وليد توفيق انزل يا جميل",
-                "حمادة هلال عيد ميلاد", "احمد سعد اليوم الحلو", "تامر حسني حلو المكان", "حسين الجسمي"
+                "كل سنة وانت طيب", "سنة حلوة يا جميل", "انزل يا جميل", "عيد ميلاد",
+                "وليد توفيق", "حمادة هلال", "نانسي عجرم", "تامر حسني"
             ),
             listOf("قديم", "طرب", "كلاسيك", "الزمن الجميل", "اصاله", "عمالقه", "تراث", "classic") to listOf(
                 "ام كلثوم", "عبد الحليم حافظ", "وردة الجزائرية", "فريد الاطرش",
                 "محمد عبد الوهاب", "فايزة احمد", "نجاة الصغيرة", "شادية",
-                "جورج وسوف", "ميادة الحناوي", "صباح فخري", "وديع الصافي"
+                "صباح فخري", "وديع الصافي"
             ),
             listOf("موال", "مواويل", "صعيدي", "شجن") to listOf(
                 "موال", "رضا البحراوي", "عبد الباسط حمودة", "طارق الشيخ", "جورج وسوف",
@@ -122,19 +149,30 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
             )
         )
 
-        if (matchedPool.isEmpty()) {
-            for ((triggers, repertoire) in semanticVibePools) {
-                if (triggers.any { normalized.contains(normalizeArabic(it)) }) {
-                    matchedPool.addAll(repertoire.shuffled())
+        // Interleave any matching semantic pools with seed terms for multi-facet prompts (e.g. "حزين + خليجي")
+        val promptMatchedPools = mutableListOf<List<String>>()
+        for ((triggers, repertoire) in semanticVibePools) {
+            if (triggers.any { normalized.contains(normalizeArabicText(it)) }) {
+                promptMatchedPools.add(repertoire.shuffled())
+            }
+        }
+
+        if (seedTerms.isNotEmpty()) {
+            matchedPool.addAll(seedTerms.shuffled())
+        }
+        if (promptMatchedPools.isNotEmpty()) {
+            val maxSize = promptMatchedPools.maxOf { it.size }
+            for (i in 0 until maxSize) {
+                for (pool in promptMatchedPools) {
+                    pool.getOrNull(i)?.let { matchedPool.add(it) }
                 }
             }
         }
 
-        // Check if the user typed a specific artist or song name (excluding generic command/mood words)
         val genericMoodAndCommandWords = setOf(
             "شغل", "شغلي", "لي", "عايز", "عاوز", "اريد", "ابحث", "سمعني", "ممكن", "هات", "افتح",
             "اغاني", "اغنيه", "مزيكا", "موسيقي", "قائمه", "قائمه تشغيل", "بلاي", "ليست",
-            "حزين", "حزينه", "حزن", "فراق", "دموع", "وجع", "سعاده", "بهجه", "مبهجه", "فرح",
+            "حزين", "حزينه", "حزن", "فراق", "دموع", "وجع", "جرح", "سعاده", "بهجه", "مبهجه", "فرح",
             "قياده", "سفر", "طريق", "هدوء", "منتصف", "الليل", "ليليه", "هادئه", "هادئ",
             "نوم", "استرخاء", "راحه", "افراح", "رقص", "زفاف", "عيد", "الميلاد", "ميلاد",
             "رومانسيه", "رومانسي", "حب", "عشق", "رياضه", "حماس", "حماسيه", "تشجيع", "جيم",
@@ -149,14 +187,14 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
             .split(Regex("\\s+"))
             .map { it.trim() }
             .filter { token ->
-                val norm = normalizeArabic(token)
+                val norm = normalizeArabicText(token)
                 norm.length >= 2 && norm !in genericMoodAndCommandWords
             }
 
         val specificPhrase = userSpecificTerms.joinToString(" ").trim()
         val finalQueries = mutableListOf<String>()
 
-        if (specificPhrase.isNotBlank()) {
+        if (specificPhrase.isNotBlank() && seedTerms.isEmpty()) {
             finalQueries.add(specificPhrase)
         }
 
@@ -176,75 +214,115 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
     }
 
     /**
-     * Ranks, filters, and interleaves candidate songs so the playlist has rich artist diversity,
-     * excludes contradictory mood tracks, and avoids clumping songs that merely contain the literal category label.
+     * Ranks, deduplicates by URL + normalized (title, artist), excludes contradictory tracks,
+     * de-prioritizes tracks in [recentTrackSignatures], and interleaves across artists.
      */
-    internal fun rankAndDiversifyTracks(request: String, candidates: List<AlbumatyLink>): List<AlbumatyLink> {
-        val normRequest = normalizeArabic(request)
-
-        // Apply mood-specific negative filter even for free-form requests
-        val matchedCategory = MoodCategory.entries.firstOrNull {
-            normalizeArabic(it.title) == normRequest || normRequest.contains(normalizeArabic(it.title))
+    internal fun rankAndDiversifyTracks(
+        request: String,
+        candidates: List<AlbumatyLink>,
+        category: MoodCategory? = null,
+        recentTrackSignatures: Set<String> = emptySet(),
+        diversify: Boolean = true
+    ): List<AlbumatyLink> {
+        val normRequest = normalizeArabicText(request)
+        val matchedCategory = category ?: MoodCategory.entries.firstOrNull {
+            normalizeArabicText(it.title) == normRequest || normRequest.contains(normalizeArabicText(it.title))
         }
-        val filteredCandidates = candidates
-            .distinctBy { it.url }
-            .filter { track ->
-                matchedCategory?.isAllowed(track.title) ?: isFreeFormTrackAllowed(normRequest, track.title)
-            }
-            .ifEmpty { candidates.distinctBy { it.url } }
 
-        // Group candidates by inferred artist/bucket so we interleave artists smoothly
+        // 1. Deduplicate by BOTH exact URL and normalized (title, artist) signature
+        val seenUrls = HashSet<String>()
+        val seenSignatures = HashSet<String>()
+        val deduped = candidates.filter { track ->
+            val urlKey = track.url.trim().trimEnd('/').lowercase()
+            val sigKey = normalizeTrackSignature(track)
+            seenUrls.add(urlKey) && (sigKey.isBlank() || seenSignatures.add(sigKey))
+        }
+
+        // 2. Enforce strict mood exclusion rules
+        val filteredCandidates = deduped.filter { track ->
+            val catAllowed = matchedCategory?.isAllowed(track.title) ?: true
+            val freeFormAllowed = isFreeFormTrackAllowed(normRequest, track.title)
+            catAllowed && freeFormAllowed
+        }
+        if (filteredCandidates.isEmpty()) return emptyList()
+
+        // 3. Score tracks using preferred artists, novelty (not in recent history), and literal-word penalty
+        val literalMoodWords = setOf("حزين", "حزينه", "سفر", "نوم", "استرخاء", "هدوء", "رياضه", "سعاده", "بهجه", "رومانسيه")
+        val preferredNorms = matchedCategory?.preferredArtists?.map { normalizeArabicText(it) }.orEmpty()
+
+        val scored = filteredCandidates.map { track ->
+            val sig = normalizeTrackSignature(track)
+            val normTitle = normalizeArabicText(track.title)
+            var score = 0
+            if (sig !in recentTrackSignatures) score += 100
+            if (preferredNorms.any { artist -> normTitle.contains(artist) }) score += 25
+            val isGenericMoodRequest = literalMoodWords.any { normRequest == it || normRequest.contains(it) }
+            if (isGenericMoodRequest && normTitle.contains(normRequest) && normRequest.length <= 8) {
+                score -= 40
+            }
+            track to score
+        }
+
+        // Keep unseen fresh tracks first, then previously heard tracks, preserving relative ranking
+        val orderedCandidates = scored
+            .sortedByDescending { it.second }
+            .map { it.first }
+
+        if (!diversify) {
+            return orderedCandidates
+        }
+
+        // 4. Group candidates by normalized artist/bucket so no single singer dominates
         val buckets = linkedMapOf<String, MutableList<AlbumatyLink>>()
-        for (track in filteredCandidates) {
-            val cleanTitle = track.title
-                .replace(Regex("^(?:اغنية|أغنية|تحميل|استماع)\\s+"), "")
-                .trim()
-            val bucketKey = when {
-                cleanTitle.contains("-") -> cleanTitle.substringAfterLast("-").trim().take(18)
-                else -> cleanTitle.split(Regex("\\s+")).take(2).joinToString(" ")
-            }.ifBlank { track.url }
+        for (track in orderedCandidates) {
+            val bucketKey = extractArtistBucket(track)
             buckets.getOrPut(bucketKey) { mutableListOf() }.add(track)
         }
 
-        // Round-robin interleave across buckets for maximum artist & musical variety
         val interleaved = mutableListOf<AlbumatyLink>()
-        val iterators = buckets.values.map { it.iterator() }.toMutableList()
+        val perArtistCounts = HashMap<String, Int>()
+        val overflow = mutableListOf<AlbumatyLink>()
+        val maxPerArtistPass = 4
+
+        val iterators = buckets.entries.map { it.key to it.value.iterator() }.toMutableList()
         while (iterators.isNotEmpty()) {
-            val it = iterators.iterator()
-            while (it.hasNext()) {
-                val bucketIt = it.next()
+            val outer = iterators.iterator()
+            while (outer.hasNext()) {
+                val (artistKey, bucketIt) = outer.next()
                 if (bucketIt.hasNext()) {
-                    interleaved.add(bucketIt.next())
+                    val item = bucketIt.next()
+                    val count = perArtistCounts[artistKey] ?: 0
+                    if (count < maxPerArtistPass) {
+                        interleaved.add(item)
+                        perArtistCounts[artistKey] = count + 1
+                    } else {
+                        overflow.add(item)
+                    }
                 } else {
-                    it.remove()
+                    outer.remove()
                 }
             }
         }
 
-        // De-prioritize tracks whose title ONLY matches a literal mood word like "حزين"
-        val literalMoodWords = setOf("حزين", "حزينه", "سفر", "نوم", "استرخاء", "هدوء", "رياضه", "سعاده", "بهجه")
-        val isGenericMoodRequest = literalMoodWords.any { normRequest == it || normRequest.contains(it) }
+        return interleaved + overflow
+    }
 
-        return if (isGenericMoodRequest) {
-            val authentic = mutableListOf<AlbumatyLink>()
-            val literalTitleOnly = mutableListOf<AlbumatyLink>()
-            for (track in interleaved) {
-                val normTitle = normalizeArabic(track.title)
-                if (normTitle.contains(normRequest) && normRequest.length <= 6) {
-                    literalTitleOnly.add(track)
-                } else {
-                    authentic.add(track)
-                }
-            }
-            authentic + literalTitleOnly
-        } else {
-            interleaved
+    private fun extractArtistBucket(track: AlbumatyLink): String {
+        val cleanTitle = track.title
+            .replace(Regex("^(?:اغنية|أغنية|تحميل|استماع)\\s+", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\s*MP3\\s*$", RegexOption.IGNORE_CASE), "")
+            .trim()
+        val rawArtist = when {
+            cleanTitle.contains(" - ") -> cleanTitle.substringAfterLast(" - ").trim()
+            cleanTitle.contains("-") -> cleanTitle.substringAfterLast("-").trim()
+            else -> cleanTitle.split(Regex("\\s+")).take(2).joinToString(" ")
         }
+        return normalizeArabicText(rawArtist).ifBlank { track.url }
     }
 
     private fun isFreeFormTrackAllowed(normRequest: String, title: String): Boolean {
-        val normTitle = normalizeArabic(title)
-        val isSadQuery = listOf("حزين", "فراق", "دموع", "وجع", "جرح").any { normRequest.contains(it) }
+        val normTitle = normalizeArabicText(title)
+        val isSadQuery = listOf("حزين", "حزينه", "فراق", "دموع", "وجع", "جرح").any { normRequest.contains(it) }
         if (isSadQuery && listOf("مهرجان", "فرح", "رقص", "زفه", "سنه حلوه", "اليوم الحلو").any { normTitle.contains(it) }) {
             return false
         }
@@ -259,14 +337,41 @@ class LocalMusicAssistant(context: Context) : AutoCloseable {
         return true
     }
 
-    private fun normalizeArabic(text: String): String {
-        return text.lowercase()
-            .replace(Regex("[أإآ]"), "ا")
-            .replace("ة", "ه")
-            .replace("ى", "ي")
-            .replace(Regex("[ًٌٍَُِّْ]"), "")
-            .trim()
-    }
-
     override fun close() = Unit
+
+    companion object {
+        fun normalizeArabicText(text: String): String {
+            return text.lowercase()
+                .replace(Regex("[أإآ]"), "ا")
+                .replace("ة", "ه")
+                .replace("ى", "ي")
+                .replace("ؤ", "و")
+                .replace("ئ", "ي")
+                .replace("ـ", "")
+                .replace(Regex("[ًٌٍَُِّْ]"), "")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+        }
+
+        fun normalizeTrackSignature(link: AlbumatyLink): String {
+            var cleaned = link.title
+                .replace(Regex("^(?:اغنية|أغنية|تحميل|استماع)\\s+", RegexOption.IGNORE_CASE), "")
+                .replace(Regex("\\s*(?:MP3|كاملة|حصريا|بالكلمات)\\s*", RegexOption.IGNORE_CASE), " ")
+                .replace(Regex("\\([^)]*\\)|\\[[^]]*]"), " ")
+            cleaned = normalizeArabicText(cleaned)
+                .replace(Regex("[|•_]+"), " ")
+                .replace(Regex("\\s*-\\s*"), " - ")
+                .replace(Regex("[^\\p{L}\\p{Nd}\\s-]"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+            if (cleaned.isBlank()) return ""
+            return if (cleaned.contains(" - ")) {
+                val titlePart = cleaned.substringBeforeLast(" - ").trim()
+                val artistPart = cleaned.substringAfterLast(" - ").trim()
+                "$titlePart|$artistPart"
+            } else {
+                cleaned
+            }
+        }
+    }
 }

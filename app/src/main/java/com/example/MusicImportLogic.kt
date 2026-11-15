@@ -4,6 +4,9 @@ import android.content.ContentUris
 import android.content.Context
 import android.provider.MediaStore
 import com.example.model.AudioItem
+import com.example.utils.MusicScanner
+import java.io.File
+import java.util.Locale
 
 data class ImportFile(val audio: AudioItem, val path: String)
 
@@ -14,8 +17,39 @@ class ImportFolder(val name: String, val path: String) {
 
 object MusicImportLogic {
 
+    fun isPlayableAudioFile(pathOrName: String, mimeType: String?, sizeBytes: Long): Boolean {
+        if (sizeBytes <= 0L) return false
+        val name = pathOrName.substringAfterLast('/')
+        if (name.startsWith(".")) return false
+        val mime = mimeType.orEmpty().lowercase(Locale.ROOT)
+        if (mime.startsWith("image/") || mime.startsWith("video/")) return false
+        return mime.startsWith("audio/") || mime == "application/ogg" || MusicScanner.isPlayableAudioName(name)
+    }
+
+    fun directPlayableFolderItems(folder: ImportFolder): List<AudioItem> =
+        folder.files
+            .sortedWith(compareBy<ImportFile, String>(String.CASE_INSENSITIVE_ORDER) { it.audio.title }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.path })
+            .map { it.audio }
+            .distinctBy { it.id.ifBlank { it.uri.toString() } }
+
+    fun siblingFolderQueueForFile(allFiles: List<ImportFile>, target: ImportFile): Pair<List<AudioItem>, Int> {
+        val parent = File(target.path).parent ?: return listOf(target.audio) to 0
+        val siblings = allFiles
+            .filter { File(it.path).parent == parent }
+            .sortedWith(compareBy<ImportFile, String>(String.CASE_INSENSITIVE_ORDER) { it.audio.title }
+                .thenBy(String.CASE_INSENSITIVE_ORDER) { it.path })
+            .map { it.audio }
+            .distinctBy { it.id.ifBlank { it.uri.toString() } }
+        if (siblings.isEmpty()) return listOf(target.audio) to 0
+        val idx = siblings.indexOfFirst { it.id == target.audio.id || it.uri == target.audio.uri }.coerceAtLeast(0)
+        return siblings to idx
+    }
+
     fun scanDeviceFiles(context: Context): List<ImportFile> {
         val list = mutableListOf<ImportFile>()
+        val seenUris = HashSet<String>()
+        val seenPaths = HashSet<String>()
         val collection = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
             MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL)
         } else {
@@ -29,13 +63,21 @@ object MusicImportLogic {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.SIZE,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.DISPLAY_NAME
         )
         
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.SIZE} > 0"
         
         try {
-            context.contentResolver.query(collection, projection, selection, null, null)?.use { cursor ->
+            context.contentResolver.query(
+                collection,
+                projection,
+                selection,
+                null,
+                "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
+            )?.use { cursor ->
                 val idCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
                 val titleCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
                 val artistCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
@@ -43,6 +85,8 @@ object MusicImportLogic {
                 val durationCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
                 val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+                val mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
+                val dispCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
                 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idCol)
@@ -52,25 +96,34 @@ object MusicImportLogic {
                     val duration = cursor.getLong(durationCol)
                     val size = cursor.getLong(sizeCol)
                     val data = cursor.getString(dataCol) ?: ""
+                    val mime = if (mimeCol >= 0) cursor.getString(mimeCol) else null
+                    val disp = if (dispCol >= 0) cursor.getString(dispCol).orEmpty() else ""
+
+                    val nameForCheck = data.ifBlank { disp.ifBlank { title } }
+                    if (!isPlayableAudioFile(nameForCheck, mime, size)) continue
                     
                     val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
+                    if (!seenUris.add(contentUri.toString())) continue
+                    val normPath = data.trim().lowercase(Locale.ROOT)
+                    if (normPath.isNotBlank() && !seenPaths.add(normPath)) continue
                     
                     val item = AudioItem(
                         id = id.toString(),
-                        title = if (title == "<unknown>") "Track $id" else title,
+                        title = if (title == "<unknown>") disp.substringBeforeLast('.').ifBlank { "Track $id" } else title,
                         artist = if (artist == "<unknown>") "Unknown Artist" else artist,
                         album = if (album == "<unknown>") "Unknown Album" else album,
                         durationMs = duration,
                         uri = contentUri,
                         sizeBytes = size
                     )
-                    list.add(ImportFile(item, data))
+                    list.add(ImportFile(item, data.ifBlank { "/$album/$disp" }))
                 }
             }
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        return list
+        return list.sortedWith(compareBy<ImportFile, String>(String.CASE_INSENSITIVE_ORDER) { it.audio.title }
+            .thenBy(String.CASE_INSENSITIVE_ORDER) { it.path })
     }
 
     fun buildTree(files: List<ImportFile>): ImportFolder {

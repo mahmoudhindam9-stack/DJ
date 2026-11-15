@@ -1,5 +1,10 @@
 package com.example
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -13,9 +18,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import com.example.model.AudioItem
 import com.example.model.Playlist
 import kotlinx.coroutines.Dispatchers
@@ -29,9 +36,27 @@ fun MusicImportDialog(
     playlists: List<Playlist>,
     onImportToPlaylist: (List<AudioItem>, String) -> Unit,
     onCreatePlaylistAndImport: (List<AudioItem>, String) -> Unit,
-    onPlayNow: (List<AudioItem>) -> Unit
+    onPlayNow: (List<AudioItem>, Int) -> Unit
 ) {
     val context = LocalContext.current
+    val requiredPermission = remember {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Manifest.permission.READ_MEDIA_AUDIO
+        } else {
+            Manifest.permission.READ_EXTERNAL_STORAGE
+        }
+    }
+    var hasAudioPermission by remember {
+        mutableStateOf(
+            ContextCompat.checkSelfPermission(context, requiredPermission) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasAudioPermission = granted
+    }
+
     var allFiles by remember { mutableStateOf<List<ImportFile>>(emptyList()) }
     var rootFolder by remember { mutableStateOf<ImportFolder?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -43,7 +68,14 @@ fun MusicImportDialog(
     var showCreatePlaylist by remember { mutableStateOf(false) }
     var newPlaylistName by remember { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(hasAudioPermission) {
+        if (!hasAudioPermission) {
+            allFiles = emptyList()
+            rootFolder = null
+            isLoading = false
+            return@LaunchedEffect
+        }
+        isLoading = true
         withContext(Dispatchers.IO) {
             val f = MusicImportLogic.scanDeviceFiles(context)
             allFiles = f
@@ -117,22 +149,55 @@ fun MusicImportDialog(
                 )
 
                 Box(Modifier.weight(1f)) {
-                    if (isLoading) {
+                    if (!hasAudioPermission) {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.FolderOff, null, modifier = Modifier.size(48.dp), tint = MaterialTheme.colorScheme.primary)
+                            Text(
+                                "Allow audio access to browse local folders and songs.",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            Button(onClick = { permissionLauncher.launch(requiredPermission) }) {
+                                Text("Grant Audio Permission")
+                            }
+                        }
+                    } else if (isLoading) {
                         CircularProgressIndicator(Modifier.align(Alignment.Center))
+                    } else if (allFiles.isEmpty()) {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(Icons.Default.AudioFile, null, modifier = Modifier.size(44.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("No playable audio files found on device.")
+                        }
                     } else if (searchQuery.isNotBlank()) {
                         LazyColumn(Modifier.fillMaxSize()) {
-                            items(searchResults) { item ->
+                            items(searchResults, key = { it.path }) { item ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().clickable {
                                         selectedPaths = if (item.path in selectedPaths) selectedPaths - item.path else selectedPaths + item.path
-                                    }.padding(8.dp),
+                                    }.padding(horizontal = 8.dp, vertical = 6.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Checkbox(checked = item.path in selectedPaths, onCheckedChange = null)
                                     Spacer(Modifier.width(8.dp))
-                                    Column {
-                                        Text(item.audio.title, style = MaterialTheme.typography.bodyLarge)
-                                        Text("${item.audio.artist} • ${item.path}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Column(Modifier.weight(1f)) {
+                                        Text(item.audio.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                        Text("${item.audio.artist} • ${item.path}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    IconButton(onClick = {
+                                        val (folderQueue, startIdx) = MusicImportLogic.siblingFolderQueueForFile(allFiles, item)
+                                        if (folderQueue.isNotEmpty()) {
+                                            onPlayNow(folderQueue, startIdx)
+                                            onDismiss()
+                                        }
+                                    }) {
+                                        Icon(Icons.Default.PlayArrow, contentDescription = "Play folder from song")
                                     }
                                 }
                             }
@@ -140,8 +205,9 @@ fun MusicImportDialog(
                     } else {
                         LazyColumn(Modifier.fillMaxSize()) {
                             fun renderFolder(folder: ImportFolder, depth: Int) {
+                                val directFiles = MusicImportLogic.directPlayableFolderItems(folder)
                                 if (folder.path != "/") {
-                                    item {
+                                    item(key = "folder_${folder.path}") {
                                         val fully = isFolderFullySelected(folder)
                                         val partial = isFolderPartiallySelected(folder)
                                         Row(
@@ -162,32 +228,50 @@ fun MusicImportDialog(
                                             Spacer(Modifier.width(8.dp))
                                             Icon(Icons.Default.Folder, null, tint = MaterialTheme.colorScheme.primary)
                                             Spacer(Modifier.width(8.dp))
-                                            Text(folder.name, style = MaterialTheme.typography.bodyLarge)
+                                            Text(folder.name, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                            if (directFiles.isNotEmpty()) {
+                                                IconButton(onClick = {
+                                                    onPlayNow(directFiles, 0)
+                                                    onDismiss()
+                                                }) {
+                                                    Icon(Icons.Default.PlayArrow, contentDescription = "Play folder")
+                                                }
+                                            }
                                         }
                                     }
                                 }
                                 
                                 if (folder.path == "/" || folder.path in expandedFolders) {
-                                    folder.subfolders.values.sortedBy { it.name }.forEach { renderFolder(it, depth + 1) }
-                                    folder.files.sortedBy { it.audio.title }.forEach { file ->
-                                        item {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth().padding(start = ((depth + 1) * 16).dp).clickable {
-                                                    selectedPaths = if (file.path in selectedPaths) selectedPaths - file.path else selectedPaths + file.path
-                                                }.padding(vertical = 4.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                Checkbox(checked = file.path in selectedPaths, onCheckedChange = null)
-                                                Spacer(Modifier.width(8.dp))
-                                                Icon(Icons.Default.AudioFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                                                Spacer(Modifier.width(8.dp))
-                                                Column {
-                                                    Text(file.audio.title, style = MaterialTheme.typography.bodyMedium)
-                                                    Text(file.audio.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    folder.subfolders.values.sortedBy { it.name.lowercase() }.forEach { renderFolder(it, depth + 1) }
+                                    folder.files
+                                        .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.audio.title })
+                                        .forEach { file ->
+                                            item(key = "file_${file.path}") {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth().padding(start = ((depth + 1) * 16).dp).clickable {
+                                                        selectedPaths = if (file.path in selectedPaths) selectedPaths - file.path else selectedPaths + file.path
+                                                    }.padding(vertical = 4.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Checkbox(checked = file.path in selectedPaths, onCheckedChange = null)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Icon(Icons.Default.AudioFile, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                                    Spacer(Modifier.width(8.dp))
+                                                    Column(Modifier.weight(1f)) {
+                                                        Text(file.audio.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                        Text(file.audio.artist, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                                    }
+                                                    IconButton(onClick = {
+                                                        val queue = directFiles.ifEmpty { listOf(file.audio) }
+                                                        val startIdx = queue.indexOfFirst { it.id == file.audio.id || it.uri == file.audio.uri }.coerceAtLeast(0)
+                                                        onPlayNow(queue, startIdx)
+                                                        onDismiss()
+                                                    }) {
+                                                        Icon(Icons.Default.PlayArrow, contentDescription = "Play from folder")
+                                                    }
                                                 }
                                             }
                                         }
-                                    }
                                 }
                             }
                             rootFolder?.let { renderFolder(it, 0) }
@@ -200,10 +284,13 @@ fun MusicImportDialog(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
-                        val selectedItems = allFiles.filter { it.path in selectedPaths }.map { it.audio }
+                        val selectedItems = allFiles
+                            .filter { it.path in selectedPaths }
+                            .map { it.audio }
+                            .distinctBy { it.id.ifBlank { it.uri.toString() } }
                         val btnEnabled = selectedItems.isNotEmpty()
                         
-                        Button(onClick = { onPlayNow(selectedItems); onDismiss() }, enabled = btnEnabled) {
+                        Button(onClick = { onPlayNow(selectedItems, 0); onDismiss() }, enabled = btnEnabled) {
                             Text("Play Now")
                         }
                         Button(onClick = { showPlaylistSelector = true }, enabled = btnEnabled) {
@@ -217,7 +304,7 @@ fun MusicImportDialog(
             }
             
             if (showPlaylistSelector) {
-                val selectedItems = allFiles.filter { it.path in selectedPaths }.map { it.audio }
+                val selectedItems = allFiles.filter { it.path in selectedPaths }.map { it.audio }.distinctBy { it.id.ifBlank { it.uri.toString() } }
                 AlertDialog(
                     onDismissRequest = { showPlaylistSelector = false },
                     title = { Text("Select Playlist") },

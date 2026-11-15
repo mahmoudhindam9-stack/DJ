@@ -35,9 +35,9 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
 
-private data class HibaTrackLink(val title: String, val url: String)
+internal data class HibaTrackLink(val title: String, val url: String)
 
-private class HibaMusicRepository {
+internal class HibaMusicRepository {
     private val client = OkHttpClient.Builder()
         .connectTimeout(12, TimeUnit.SECONDS)
         .readTimeout(20, TimeUnit.SECONDS)
@@ -168,33 +168,24 @@ fun HibaMusicScreen(
     }
 
     fun play(track: HibaTrackLink) {
-        scope.launch {
-            val current = playerController.currentSong
-            if (current?.id == "hiba:" + track.url) {
-                playerController.togglePlayPause()
-                return@launch
-            }
-            message = "جاري تجهيز الأغنية..."
-            runCatching {
-                val audioUrl = repository.resolve(track)
-                AudioItem("hiba:" + track.url, track.title, "Hiba Music", "Oldies & Classics", 0L, Uri.parse(audioUrl))
-            }.onSuccess { item ->
-                playerController.play(item, listOf(item))
-                message = "يعمل الآن: " + item.title
-            }.onFailure { message = it.message ?: "تعذر تشغيل الأغنية" }
+        val current = playerController.currentSong
+        if (current?.id == "hiba:" + track.url) {
+            playerController.togglePlayPause()
+            return
         }
+        val currentTracks = tracks
+        val idx = currentTracks.indexOfFirst { it.url == track.url }.coerceAtLeast(0)
+        val queue = currentTracks.map {
+            com.example.player.UnifiedPlaybackQueue.hibaTrackToAudioItem(it)
+        }
+        playerController.playCollection(queue, startIndex = idx)
+        message = "جاري تجهيز: ${track.title}"
     }
 
     fun queue(track: HibaTrackLink) {
-        scope.launch {
-            runCatching {
-                val url = repository.resolve(track)
-                AudioItem("hiba:" + track.url, track.title, "Hiba Music", "Oldies & Classics", 0L, Uri.parse(url))
-            }.onSuccess {
-                playerController.enqueueOnlineSong(it)
-                message = "أضيفت إلى قائمة التشغيل"
-            }.onFailure { message = it.message ?: "تعذر إضافة الأغنية" }
-        }
+        val item = com.example.player.UnifiedPlaybackQueue.hibaTrackToAudioItem(track)
+        playerController.enqueueOnlineSong(item)
+        message = "أضيفت إلى قائمة التشغيل"
     }
 
     fun download(track: HibaTrackLink) {

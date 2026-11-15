@@ -55,7 +55,12 @@ class OnlineMusicViewModel(
         private set
     var moodPlaylistMessage by mutableStateOf<String?>(null)
         private set
+    var moodPlaylistError by mutableStateOf<String?>(null)
+        private set
     private val moodSeenUrls = mutableMapOf<String, MutableSet<String>>()
+    private val playlistCache = linkedMapOf<String, List<AlbumatyLink>>()
+    private val recentTrackSignatures = ArrayDeque<String>()
+    private var lastMoodRequest: Pair<MoodCategory?, String>? = null
     private var localAssistant: LocalMusicAssistant? = null
 
     var isAssistantReady by mutableStateOf(true)
@@ -88,6 +93,16 @@ class OnlineMusicViewModel(
         moodPlaylist = emptyList()
         moodPlaylistTitle = ""
         moodPlaylistMessage = null
+        moodPlaylistError = null
+    }
+
+    fun retryLastMoodPlaylist() {
+        val (category, prompt) = lastMoodRequest ?: return
+        if (category != null) {
+            buildMoodPlaylist(category, refresh = true)
+        } else if (prompt.isNotBlank()) {
+            askMusicAssistant(prompt, refresh = true)
+        }
     }
 
     fun loadHome(force: Boolean = false) {
@@ -122,73 +137,157 @@ class OnlineMusicViewModel(
 
     fun buildMoodPlaylist(category: MoodCategory, refresh: Boolean = false) {
         if (isBuildingMoodPlaylist) return
+        val genRequest = PlaylistGenerationRequest(
+            categoryId = category.id,
+            prompt = category.title,
+            source = "albumaty",
+            playlistSize = 50,
+            diversify = true
+        )
+        lastMoodRequest = category to category.title
+
+        if (!refresh) {
+            val cached = playlistCache[genRequest.cacheKey]
+            if (!cached.isNullOrEmpty()) {
+                moodPlaylistTitle = category.title
+                moodPlaylist = cached
+                moodPlaylistError = null
+                moodPlaylistMessage = null
+                return
+            }
+        }
+
         viewModelScope.launch {
             isBuildingMoodPlaylist = true
             moodPlaylistTitle = category.title
             moodPlaylistMessage = null
+            moodPlaylistError = null
             if (refresh) moodPlaylist = emptyList()
             val seen = moodSeenUrls.getOrPut(category.id) { mutableSetOf() }
-            val assistant = localAssistant
+            val assistant = localAssistant ?: LocalMusicAssistant(null)
             try {
-                val queries = if (assistant != null) {
-                    assistant.createSearchQueries(category.title, category.searchTerms)
-                } else {
-                    category.searchTerms.shuffled().take(8)
-                }
+                val queries = assistant.createSearchQueries(category.title, category.searchTerms)
+                    .ifEmpty { category.searchTerms.shuffled().take(8) }
                 val candidates = collectMoodCandidates(
-                    queries.ifEmpty { category.searchTerms.shuffled().take(8) },
-                    seen,
-                    category
+                    queries = queries,
+                    seen = seen,
+                    categoryFilter = category
                 )
-                val tracks = if (assistant != null && candidates.isNotEmpty()) {
-                    assistant.rankTracks(category.title, candidates)
+                val recentSet = recentTrackSignatures.toSet()
+                val tracks = assistant.rankTracks(
+                    request = category.title,
+                    candidates = candidates,
+                    category = category,
+                    recentTrackSignatures = recentSet,
+                    diversify = genRequest.diversify
+                ).take(genRequest.playlistSize)
+
+                if (tracks.isEmpty()) {
+                    moodPlaylist = emptyList()
+                    moodPlaylistError = "لم يتم العثور على أغاني مطابقة لـ ${category.title}"
                 } else {
-                    candidates
+                    moodPlaylist = tracks
+                    moodPlaylistError = null
+                    seen.addAll(tracks.map { it.url })
+                    recordRecentSignatures(tracks)
+                    cachePlaylist(genRequest.cacheKey, tracks)
                 }
-                moodPlaylist = tracks.take(60)
-                seen.addAll(moodPlaylist.map { it.url })
-                moodPlaylistMessage = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to build mood playlist", e)
-                moodPlaylistMessage = null
+                moodPlaylist = emptyList()
+                moodPlaylistError = e.message?.takeIf { it.isNotBlank() }
+                    ?: "تعذر إنشاء القائمة الذكية، تأكد من الاتصال"
             } finally {
                 isBuildingMoodPlaylist = false
             }
         }
     }
 
-    fun askMusicAssistant(request: String) {
+    fun askMusicAssistant(request: String, refresh: Boolean = false) {
         val prompt = request.trim()
         if (prompt.isBlank() || isBuildingMoodPlaylist) return
-        val assistant = localAssistant
+        val genRequest = PlaylistGenerationRequest(
+            categoryId = null,
+            prompt = prompt,
+            source = "albumaty",
+            playlistSize = 50,
+            diversify = true
+        )
+        lastMoodRequest = null to prompt
+
+        if (!refresh) {
+            val cached = playlistCache[genRequest.cacheKey]
+            if (!cached.isNullOrEmpty()) {
+                moodPlaylistTitle = prompt
+                moodPlaylist = cached
+                moodPlaylistError = null
+                moodPlaylistMessage = null
+                return
+            }
+        }
+
+        val assistant = localAssistant ?: LocalMusicAssistant(null)
         viewModelScope.launch {
             isBuildingMoodPlaylist = true
             moodPlaylistTitle = prompt
             moodPlaylist = emptyList()
             moodPlaylistMessage = null
+            moodPlaylistError = null
             val seen = moodSeenUrls.getOrPut("custom:$prompt") { mutableSetOf() }
             try {
-                val queries = assistant?.createSearchQueries(prompt, emptyList())
-                    ?.ifEmpty { listOf(prompt) }
-                    ?: listOf(prompt)
+                val queries = assistant.createSearchQueries(prompt, emptyList())
+                    .ifEmpty { listOf(prompt) }
                 val candidates = collectMoodCandidates(queries, seen, null)
-                val tracks = if (assistant != null && candidates.isNotEmpty()) {
-                    assistant.rankTracks(prompt, candidates)
+                val recentSet = recentTrackSignatures.toSet()
+                val tracks = assistant.rankTracks(
+                    request = prompt,
+                    candidates = candidates,
+                    category = null,
+                    recentTrackSignatures = recentSet,
+                    diversify = genRequest.diversify
+                ).take(genRequest.playlistSize)
+
+                if (tracks.isEmpty()) {
+                    moodPlaylist = emptyList()
+                    moodPlaylistError = "لم يتم العثور على أغاني مطابقة للطلب"
                 } else {
-                    candidates
+                    moodPlaylist = tracks
+                    moodPlaylistError = null
+                    seen.addAll(tracks.map { it.url })
+                    recordRecentSignatures(tracks)
+                    cachePlaylist(genRequest.cacheKey, tracks)
                 }
-                moodPlaylist = tracks.take(60)
-                seen.addAll(moodPlaylist.map { it.url })
-                moodPlaylistMessage = null
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 Log.e(TAG, "Music assistant request failed", e)
-                moodPlaylistMessage = null
+                moodPlaylist = emptyList()
+                moodPlaylistError = e.message?.takeIf { it.isNotBlank() }
+                    ?: "تعذر إنشاء القائمة الذكية، حاول مرة أخرى"
             } finally {
                 isBuildingMoodPlaylist = false
+            }
+        }
+    }
+
+    private fun cachePlaylist(key: String, tracks: List<AlbumatyLink>) {
+        playlistCache[key] = tracks
+        while (playlistCache.size > 24) {
+            val oldest = playlistCache.keys.firstOrNull() ?: break
+            playlistCache.remove(oldest)
+        }
+    }
+
+    private fun recordRecentSignatures(tracks: List<AlbumatyLink>) {
+        tracks.forEach { link ->
+            val sig = LocalMusicAssistant.normalizeTrackSignature(link)
+            if (sig.isNotBlank()) {
+                recentTrackSignatures.addLast(sig)
+                while (recentTrackSignatures.size > 180) {
+                    recentTrackSignatures.removeFirst()
+                }
             }
         }
     }
@@ -199,11 +298,16 @@ class OnlineMusicViewModel(
         categoryFilter: MoodCategory?
     ): List<AlbumatyLink> = coroutineScope {
         val distinctQueries = queries.map { it.trim() }.filter { it.isNotBlank() }.distinct().take(10)
+        var firstError: Throwable? = null
+        var successfulQueries = 0
 
-        // Execute all search queries concurrently in parallel for sub-second speed
+        // Execute remote queries concurrently in parallel without falling back to unrelated home.songs
         val parallelLists = distinctQueries.map { term ->
             async {
-                runCatching { repository.search(term) }.getOrDefault(emptyList())
+                runCatching { repository.searchRemoteOnly(term) }
+                    .onSuccess { successfulQueries++ }
+                    .onFailure { err -> if (firstError == null) firstError = err }
+                    .getOrDefault(emptyList())
             }
         }.awaitAll()
 
@@ -211,7 +315,7 @@ class OnlineMusicViewModel(
         val allFoundSongs = linkedMapOf<String, AlbumatyLink>()
         val artistLinks = mutableListOf<AlbumatyLink>()
 
-        // For "new" and "trending" categories, also include fresh releases directly from Albumaty home
+        // Strictly ONLY include home.songs for explicit "new" or "trending" categories
         if (categoryFilter?.id == "new" || categoryFilter?.id == "trending") {
             val homeSongs = if (home.songs.isNotEmpty()) {
                 home.songs
@@ -219,7 +323,7 @@ class OnlineMusicViewModel(
                 runCatching { repository.getHome().also { home = it }.songs }.getOrDefault(emptyList())
             }
             for (song in homeSongs.shuffled()) {
-                if (song.isMoodSongLink() && (categoryFilter.isAllowed(song.title))) {
+                if (song.isMoodSongLink() && categoryFilter.isAllowed(song.title)) {
                     allFoundSongs.putIfAbsent(song.url, song)
                     if (song.url !in seen) {
                         unseenSongs.putIfAbsent(song.url, song)
@@ -240,18 +344,18 @@ class OnlineMusicViewModel(
                             unseenSongs.putIfAbsent(item.url, item)
                         }
                     }
-                } else if (item.isMoodArtistOrAlbumLink() && artistLinks.size < 6) {
+                } else if (item.isMoodArtistOrAlbumLink() && artistLinks.size < 8) {
                     if (artistLinks.none { it.url == item.url }) {
                         artistLinks.add(item)
                     }
                 }
             }
-            if (unseenSongs.size >= 100) break
+            if (unseenSongs.size >= 110) break
         }
 
-        // Expand top artist/album pages in parallel when more variety is needed (especially for classic/regional/mawwal artists)
-        if (unseenSongs.size < 24 && artistLinks.isNotEmpty()) {
-            val sectionLists = artistLinks.take(4).map { link ->
+        // Expand top artist/album pages in parallel when more variety is needed
+        if (unseenSongs.size < 30 && artistLinks.isNotEmpty()) {
+            val sectionLists = artistLinks.take(5).map { link ->
                 async {
                     runCatching { repository.getSection(link).content }.getOrDefault(emptyList())
                 }
@@ -271,23 +375,18 @@ class OnlineMusicViewModel(
         }
 
         if (unseenSongs.size >= 6) {
-            return@coroutineScope unseenSongs.values.take(90)
+            return@coroutineScope unseenSongs.values.take(100)
         }
 
         if (allFoundSongs.isNotEmpty()) {
             seen.clear()
-            return@coroutineScope allFoundSongs.values.take(90)
+            return@coroutineScope allFoundSongs.values.take(100)
         }
 
-        val fallbackSongs = if (home.songs.isNotEmpty()) {
-            home.songs
-        } else {
-            runCatching { repository.getHome().also { home = it }.songs }.getOrDefault(emptyList())
+        if (successfulQueries == 0 && firstError != null) {
+            throw firstError!!
         }
-        fallbackSongs
-            .filter { it.isMoodSongLink() && (categoryFilter == null || categoryFilter.isAllowed(it.title)) }
-            .shuffled()
-            .take(50)
+        emptyList()
     }
 
     override fun onCleared() {
