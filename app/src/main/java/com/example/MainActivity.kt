@@ -41,6 +41,8 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.debounce
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -257,6 +259,68 @@ fun MainApp() {
 
     val db = remember { com.example.room.AppDatabase.getDatabase(context) }
     val playlistRepo = remember { com.example.room.PlaylistRepository(db.playlistDao()) }
+    val cloudUser by cloudSyncManager.user.collectAsState()
+    var cloudLibrarySyncReady by remember { mutableStateOf(false) }
+
+    // Download cloud metadata before publishing the merged Android library.
+    // Device-only content:// audio URIs are never made public or uploaded as files.
+    LaunchedEffect(cloudUser?.id) {
+        cloudLibrarySyncReady = false
+        if (cloudUser == null) return@LaunchedEffect
+        try {
+            while (!PlayerLibraryStore.isLoaded) delay(100L)
+            delay(200L)
+
+            val remoteTracks = cloudSyncManager.mergeCloudLibrary(audioLibrary.toList())
+            val localIds = audioLibrary.map { it.id }.toHashSet()
+            remoteTracks.filter { it.id !in localIds }.forEach { audioLibrary.add(it) }
+
+            val localEntities = playlistRepo.allPlaylists.first()
+            val localPlaylists = localEntities.map { entity ->
+                Playlist(
+                    id = entity.playlistId,
+                    name = entity.name,
+                    songIds = if (entity.songIdsJson.isBlank()) emptyList()
+                        else entity.songIdsJson.split(",").filter { it.isNotBlank() }
+                )
+            }
+            val remotePlaylists = cloudSyncManager.mergeCloudPlaylists(localPlaylists)
+            remotePlaylists.forEach { playlist ->
+                playlistRepo.insert(
+                    com.example.room.PlaylistEntity(
+                        playlistId = playlist.id,
+                        name = playlist.name,
+                        songIdsJson = playlist.songIds.joinToString(",")
+                    )
+                )
+            }
+            cloudLibrarySyncReady = true
+        } catch (error: Exception) {
+            android.util.Log.w("DJCloudSync", "Initial library or playlist merge failed", error)
+        }
+    }
+
+    // Keep later imports, library edits, and playlist changes in sync after the
+    // initial merge. Local Room/MediaStore remains the source of each device's files.
+    LaunchedEffect(cloudUser?.id, cloudLibrarySyncReady) {
+        if (cloudUser == null || !cloudLibrarySyncReady) return@LaunchedEffect
+        snapshotFlow { audioLibrary.toList() }
+            .debounce(2_000L)
+            .collect { snapshot ->
+                runCatching { cloudSyncManager.uploadLibrary(snapshot) }
+                    .onFailure { android.util.Log.w("DJCloudSync", "Library upload failed", it) }
+            }
+    }
+
+    LaunchedEffect(cloudUser?.id, cloudLibrarySyncReady) {
+        if (cloudUser == null || !cloudLibrarySyncReady) return@LaunchedEffect
+        snapshotFlow { playlists.toList() }
+            .debounce(2_000L)
+            .collect { snapshot ->
+                runCatching { cloudSyncManager.uploadPlaylists(snapshot) }
+                    .onFailure { android.util.Log.w("DJCloudSync", "Playlist upload failed", it) }
+            }
+    }
 
     LaunchedEffect(Unit) {
         playlistRepo.allPlaylists.collect { entities ->
