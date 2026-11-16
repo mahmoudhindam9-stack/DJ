@@ -4,7 +4,7 @@ import {
   type SealedLiveQuery,
   type RawLiveQueryUpdate,
 } from '@neon/realtime/client';
-import { cloudAuthClient, type CloudUser } from './cloudAuth';
+import { cloudAuthClient, cloudTokenClient, type CloudUser } from './cloudAuth';
 
 export interface CloudDevice {
   device_id: string;
@@ -99,12 +99,12 @@ function describeLocalDevice(): { name: string; platform: CloudDevice['platform'
 }
 
 async function getBearerToken(): Promise<string> {
-  if (!cloudAuthClient) throw new Error('DJ Cloud authentication is not configured.');
-  const result = await cloudAuthClient.getSession();
-  if (result.error || !result.data?.session?.token) {
+  if (!cloudTokenClient) throw new Error('DJ Cloud authentication is not configured.');
+  const result = await cloudTokenClient.token();
+  if (result.error || !result.data?.token) {
     throw new Error(result.error?.message || 'Your DJ Cloud session has expired. Please sign in again.');
   }
-  return result.data.session.token;
+  return result.data.token;
 }
 
 async function cloudRequest<T>(route: string, method = 'GET', body?: unknown): Promise<T> {
