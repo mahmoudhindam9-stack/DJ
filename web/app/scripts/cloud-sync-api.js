@@ -100,6 +100,7 @@ function cleanTrack(value) {
   const uri = String(track.uri || '');
   if (/^(blob:|file:|content:|filesystem:)/i.test(uri)) {
     track.unavailableOnOtherDevices = true;
+    track.uri = '';
   }
   return track;
 }
@@ -432,7 +433,7 @@ export async function handleCloudApi(req, res, url, sendJson) {
       return true;
     }
 
-    if (route.startsWith('playlists/') && method === 'DELETE') {
+    if (route.startsWith('playlists/') && !route.slice('playlists/'.length).includes('/') && method === 'DELETE') {
       const playlistId = decodeURIComponent(route.slice('playlists/'.length));
       if (playlistId.includes('/')) {
         sendError(sendJson, res, 400, 'Invalid playlist identifier.');
