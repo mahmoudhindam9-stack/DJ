@@ -161,6 +161,23 @@ class DjCloudSyncManager(
         _error.value = null
     }
 
+    /**
+     * Downloads playable online tracks first, then uploads this device's track metadata.
+     * The API strips private file/content URIs before storing them in the cloud.
+     */
+    suspend fun mergeCloudLibrary(localSongs: List<AudioItem>): List<AudioItem> {
+        val remoteRows = client.fetchLibrary()
+        val remoteTracks = remoteRows.mapNotNull { row ->
+            audioItemFrom(row.optJSONObject("track"))
+        }
+        if (localSongs.isNotEmpty()) client.saveLibrary(localSongs)
+        return remoteTracks
+    }
+
+    suspend fun uploadLibrary(localSongs: List<AudioItem>) {
+        if (localSongs.isNotEmpty()) client.saveLibrary(localSongs)
+    }
+
     suspend fun takeControl() {
         _error.value = null
         _notice.value = "Requesting playback handoff…"
