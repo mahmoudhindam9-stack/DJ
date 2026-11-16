@@ -6,9 +6,18 @@ const DB_VERSION = 3;
 class StorageDB {
   private dbPromise: Promise<IDBDatabase>;
 
+  private activeScope = 'local';
+
   constructor() {
-    this.dbPromise = new Promise((resolve, reject) => {
-      const request = indexedDB.open(DB_NAME, DB_VERSION);
+    this.dbPromise = this.openDatabase('local');
+  }
+
+  private openDatabase(scope: string): Promise<IDBDatabase> {
+    return new Promise((resolve, reject) => {
+      const suffix = scope === 'local'
+        ? ''
+        : '_' + scope.replace(/[^a-zA-Z0-9_-]/g, '_');
+      const request = indexedDB.open(DB_NAME + suffix, DB_VERSION);
 
       request.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result;
@@ -45,7 +54,20 @@ class StorageDB {
 
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+      request.onblocked = () => reject(new Error('DJ storage is blocked by another open tab. Close old DJ tabs and try again.'));
     });
+  }
+
+  async setUserScope(userId?: string | null): Promise<void> {
+    const nextScope = userId ? String(userId) : 'local';
+    if (this.activeScope === nextScope) return;
+    this.activeScope = nextScope;
+    this.dbPromise = this.openDatabase(nextScope);
+    await this.dbPromise;
+  }
+
+  getUserScope(): string {
+    return this.activeScope;
   }
 
   // Recreate temporary browser URLs from persistent file bytes whenever songs are read.

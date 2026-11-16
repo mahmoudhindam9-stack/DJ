@@ -104,6 +104,13 @@ export const App: React.FC = () => {
   const [isDownloadingOnlineQueue, setIsDownloadingOnlineQueue] = useState(false);
   const [isSetupModalOpen, setIsSetupModalOpen] = useState(false);
   const [appDataLoaded, setAppDataLoaded] = useState(false);
+  const [cloudVaultLoaded, setCloudVaultLoaded] = useState(false);
+  const [cloudVaultReconciled, setCloudVaultReconciled] = useState(false);
+  const pendingCloudVaultRef = useRef<{
+    tracks: AudioItem[];
+    playlists: Array<Playlist & { songIds?: string[] }>;
+  } | null>(null);
+  const cloudUserRef = useRef<string | null>(null);
   const [autoUpdatesEnabled, setAutoUpdatesEnabled] = useState(true);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
@@ -220,18 +227,103 @@ export const App: React.FC = () => {
   useEffect(() => {
     cloudSyncService.init({
       onRemoteAudioClaimed: (playback) => {
-        if (playback.active_output_platform !== 'web' && playback.is_playing) {
+        if (playback.activeDevicePlatform !== 'web' && playback.isPlaying) {
           mainAudioEngine.pause();
           deckAEngine.pause();
           deckBEngine.pause();
           setIsPlaying(false);
         }
       },
-      onUserChanged: () => {
-        // User vault changed
+      onUserChanged: async (user) => {
+        const nextId = user?.userId || null;
+        if (cloudUserRef.current !== nextId) {
+          cloudUserRef.current = nextId;
+          setCloudVaultLoaded(false);
+          setCloudVaultReconciled(false);
+          pendingCloudVaultRef.current = null;
+          await db.setUserScope(nextId);
+          const [scopedTracks, scopedPlaylists] = await Promise.all([
+            db.getAllSongs(),
+            db.getPlaylists(),
+          ]);
+          if (cloudSyncService.getUser()?.userId !== nextId) return;
+          setLibrary(scopedTracks);
+          setPlaylists(scopedPlaylists);
+        }
+      },
+      onVaultLoaded: (vault) => {
+        pendingCloudVaultRef.current = { tracks: vault.tracks, playlists: vault.playlists };
+        setCloudVaultLoaded(true);
+        setCloudVaultReconciled(false);
+        setPlaylists(vault.playlists.map((playlist) => ({
+          ...playlist,
+          songCount: playlist.songCount ?? playlist.songIds?.length ?? 0,
+        })));
+        if (vault.themeName && Object.prototype.hasOwnProperty.call(THEMES, vault.themeName)) {
+          setCurrentTheme(vault.themeName as AppThemeOption);
+        }
+        if (vault.languageMode === 'ar' || vault.languageMode === 'en' || vault.languageMode === 'auto') {
+          setLanguageMode(vault.languageMode);
+          if (vault.languageMode !== 'auto') setIsArabic(vault.languageMode === 'ar');
+        }
       },
     });
   }, []);
+
+
+  // Restore and synchronize the signed-in user's vault through Neon after the first remote read.
+  useEffect(() => {
+    if (!appDataLoaded || !cloudVaultLoaded || !cloudVaultReconciled || !cloudSyncService.getUser()) return;
+    let cancelled = false;
+    const syncVault = async () => {
+      try {
+        const playlistsWithSongs = await Promise.all(playlists.map(async (playlist) => ({
+          ...playlist,
+          songIds: (await db.getSongsInPlaylist(playlist.id)).map((song) => song.id),
+        })));
+        if (cancelled) return;
+        const favoriteIds = library.filter((track) => track.isFavorite).map((track) => track.id);
+        await cloudSyncService.pushUserVaultState({
+          tracks: library.map(({ audioBlob, ...track }) => ({
+            ...track,
+            uri: audioBlob ? '' : track.uri,
+          })),
+          playlists: playlistsWithSongs,
+          favoriteIds,
+          languageMode,
+          themeName: currentTheme,
+        });
+      } catch (error) {
+        console.warn('Neon vault sync failed:', error);
+      }
+    };
+    void syncVault();
+    return () => { cancelled = true; };
+  }, [appDataLoaded, cloudVaultLoaded, cloudVaultReconciled, library, playlists, languageMode, currentTheme]);
+  // Reconcile Neon metadata with IndexedDB without discarding local audio blobs.
+  useEffect(() => {
+    if (!appDataLoaded || !cloudVaultLoaded || cloudVaultReconciled) return;
+    let cancelled = false;
+    const reconcileVault = async () => {
+      try {
+        const pending = pendingCloudVaultRef.current;
+        if (!pending) return;
+        const localTracks = await db.getAllSongs();
+        const merged = new Map<string, AudioItem>();
+        for (const track of pending.tracks) merged.set(track.id, track as AudioItem);
+        for (const track of localTracks) merged.set(track.id, { ...merged.get(track.id), ...track });
+        await db.addSongs(Array.from(merged.values()));
+        await db.syncCloudPlaylists(pending.playlists);
+        if (cancelled) return;
+        setLibrary(Array.from(merged.values()));
+        setCloudVaultReconciled(true);
+      } catch (error) {
+        console.warn('Could not reconcile the Neon vault with local storage:', error);
+      }
+    };
+    void reconcileVault();
+    return () => { cancelled = true; };
+  }, [appDataLoaded, cloudVaultLoaded, cloudVaultReconciled]);
 
   // Handle Audio Engine subscriptions
   useEffect(() => {
