@@ -27,6 +27,11 @@ import {
   onlineMusicService,
 } from '../../services/OnlineMusicService';
 import { AudioItem, AudiusTrack, Playlist, ThemeColors } from '../../types';
+import {
+  buildSmartVibeQueries,
+  MOOD_CATEGORIES,
+  rankAndDiversifyTracks,
+} from '../../services/LocalMusicAssistant';
 
 interface OnlineMusicScreenProps {
   themeColors: ThemeColors;
@@ -110,6 +115,11 @@ export const OnlineMusicScreen: React.FC<OnlineMusicScreenProps> = ({
   const [pendingPlaylistTrack, setPendingPlaylistTrack] = useState<AudioItem | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [playlistBusy, setPlaylistBusy] = useState(false);
+  const [showAiPlaylistModal, setShowAiPlaylistModal] = useState(false);
+  const [aiPlaylistPrompt, setAiPlaylistPrompt] = useState('');
+  const [aiPlaylistCategory, setAiPlaylistCategory] = useState('');
+  const [aiPlaylistSize, setAiPlaylistSize] = useState(20);
+  const [aiPlaylistBusy, setAiPlaylistBusy] = useState(false);
 
   // Viewport-adaptive pagination for zero scrolling
   const gridRef = useRef<HTMLDivElement | null>(null);
@@ -533,6 +543,86 @@ export const OnlineMusicScreen: React.FC<OnlineMusicScreenProps> = ({
     }
   };
 
+  const generateMoodPlaylist = async () => {
+    const prompt = aiPlaylistPrompt.trim();
+    const category = MOOD_CATEGORIES.find((item) => item.id === aiPlaylistCategory);
+    if (!prompt && !category) {
+      setErrorMessage(isArabic ? 'اكتب وصفاً أو اختر نوعاً للقائمة.' : 'Describe a mood or choose a category.');
+      return;
+    }
+
+    setAiPlaylistBusy(true);
+    setErrorMessage(null);
+    setMessage(isArabic ? 'المساعد الذكي يبحث عن الأغاني المناسبة...' : 'AI assistant is finding matching tracks...');
+    try {
+      const queries = buildSmartVibeQueries(prompt || category?.title || '', category);
+      const searchResults = await Promise.allSettled(
+        queries.slice(0, 8).map((term) => onlineMusicService.searchAlbumaty(term))
+      );
+      const seenUrls = new Set<string>();
+      const candidates: AlbumatyLink[] = [];
+      for (const result of searchResults) {
+        if (result.status !== 'fulfilled') continue;
+        for (const link of result.value.songs || []) {
+          const key = link.url.trim().replace(/\/$/, '').toLowerCase();
+          if (!key || seenUrls.has(key)) continue;
+          seenUrls.add(key);
+          candidates.push(link);
+        }
+      }
+
+      const ranked = rankAndDiversifyTracks(prompt || category?.title || '', candidates, category, new Set(), true);
+      if (ranked.length === 0) {
+        throw new Error(isArabic ? 'لم أجد أغاني مناسبة. جرّب وصفاً أو نوعاً آخر.' : 'No matching songs were found. Try a different mood or category.');
+      }
+
+      const selectedLinks = ranked.slice(0, Math.min(aiPlaylistSize, 50));
+      const resolvedItems: AudioItem[] = [];
+      for (let index = 0; index < selectedLinks.length; index += 4) {
+        const batch = selectedLinks.slice(index, index + 4);
+        const resolved = await Promise.allSettled(batch.map(async (link) => {
+          const track = await onlineMusicService.resolveAlbumatySong(link.url);
+          return onlineMusicService.convertResolvedToAudioItem(
+            track,
+            `albumaty_${encodeURIComponent(link.url)}`,
+            'ALBUMATY'
+          );
+        }));
+        for (const item of resolved) {
+          if (item.status === 'fulfilled') resolvedItems.push(item.value);
+        }
+      }
+
+      if (resolvedItems.length === 0) {
+        throw new Error(isArabic ? 'تم العثور على نتائج لكن تعذر تجهيز روابط التشغيل.' : 'Tracks were found, but their playable links could not be resolved.');
+      }
+
+      const label = (category?.title || prompt || (isArabic ? 'اختيارات ذكية' : 'Smart Mix'))
+        .replace(/[\\/:*?"<>|]/g, ' ')
+        .trim()
+        .slice(0, 48);
+      const playlist = await onCreatePlaylist(
+        `AI • ${label || (isArabic ? 'قائمة ذكية' : 'Smart Playlist')}`
+      );
+      await Promise.all(resolvedItems.map((item) => onAddSongToPlaylist(playlist.id, item)));
+      setShowAiPlaylistModal(false);
+      setAiPlaylistPrompt('');
+      setMessage(
+        isArabic
+          ? `تم إنشاء "${playlist.name}" وإضافة ${resolvedItems.length} أغنية متنوعة`
+          : `Created "${playlist.name}" with ${resolvedItems.length} varied tracks`
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : isArabic ? 'تعذر إنشاء القائمة الذكية.' : 'Could not create the smart playlist.'
+      );
+    } finally {
+      setAiPlaylistBusy(false);
+    }
+  };
+
   const handleCreateAndAdd = async () => {
     const trimmed = newPlaylistName.trim();
     if (!trimmed || !pendingPlaylistTrack) return;
@@ -624,6 +714,19 @@ export const OnlineMusicScreen: React.FC<OnlineMusicScreenProps> = ({
           >
             <Sparkles className="w-3.5 h-3.5" />
             {isArabic ? 'هبة ميوزيك (الزمن الجميل)' : 'Hiba Music (Oldies)'}
+          </button>
+          <button
+            onClick={() => setShowAiPlaylistModal(true)}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border flex items-center gap-1"
+            style={{
+              backgroundColor: themeColors.surfaceVariant,
+              borderColor: themeColors.border,
+              color: themeColors.primary,
+            }}
+            title={isArabic ? 'إنشاء قائمة ذكية حسب المزاج' : 'Generate an AI mood playlist'}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            {isArabic ? 'قائمة ذكية' : 'AI Playlist'}
           </button>
           <button
             onClick={() => setSource('AUDIUS')}
@@ -1178,6 +1281,102 @@ export const OnlineMusicScreen: React.FC<OnlineMusicScreenProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Local semantic AI playlist builder — adapted from Android LocalMusicAssistant */}
+      {showAiPlaylistModal && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div
+            className="w-full max-w-lg rounded-2xl border p-4 sm:p-5 space-y-4 shadow-2xl"
+            style={{
+              backgroundColor: themeColors.surface,
+              borderColor: themeColors.border,
+              color: themeColors.textPrimary,
+            }}
+          >
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ backgroundColor: `${themeColors.primary}20`, color: themeColors.primary }}>
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="font-bold text-sm">{isArabic ? 'مساعد قوائم التشغيل الذكي' : 'Smart Playlist Assistant'}</div>
+                  <div className="text-[10px] opacity-60">{isArabic ? 'بحث دلالي محلي • بدون استهلاك رصيد AI' : 'On-device semantic search • no AI credit usage'}</div>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowAiPlaylistModal(false)}
+                disabled={aiPlaylistBusy}
+                className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-40"
+                aria-label="Close smart playlist builder"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <label className="block space-y-1.5">
+              <span className="text-xs font-semibold">{isArabic ? 'صف مزاجك أو نوع الموسيقى التي تريدها' : 'Describe the mood or sound you want'}</span>
+              <textarea
+                value={aiPlaylistPrompt}
+                onChange={(event) => setAiPlaylistPrompt(event.target.value)}
+                rows={3}
+                maxLength={180}
+                placeholder={isArabic ? 'مثلاً: حزين خليجي للسفر بالليل، أو أغاني حماس للجيم...' : 'Example: sad Gulf songs for a late-night drive, or energetic gym music...'}
+                className="w-full resize-none rounded-xl border p-3 text-sm outline-none"
+                style={{ backgroundColor: themeColors.background, borderColor: themeColors.border, color: themeColors.textPrimary }}
+                disabled={aiPlaylistBusy}
+              />
+            </label>
+
+            <div className="space-y-2">
+              <div className="text-xs font-semibold">{isArabic ? 'اختيار سريع للمزاج' : 'Quick mood and style'}</div>
+              <div className="flex flex-wrap gap-1.5">
+                {MOOD_CATEGORIES.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => setAiPlaylistCategory((current) => current === category.id ? '' : category.id)}
+                    disabled={aiPlaylistBusy}
+                    className="rounded-full border px-2.5 py-1.5 text-[11px] font-semibold transition-colors disabled:opacity-50"
+                    style={{
+                      backgroundColor: aiPlaylistCategory === category.id ? themeColors.primary : themeColors.surfaceVariant,
+                      borderColor: aiPlaylistCategory === category.id ? themeColors.primary : themeColors.border,
+                      color: aiPlaylistCategory === category.id ? '#fff' : themeColors.textPrimary,
+                    }}
+                    aria-pressed={aiPlaylistCategory === category.id}
+                  >
+                    {category.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border p-3" style={{ borderColor: themeColors.border, backgroundColor: themeColors.surfaceVariant }}>
+              <div>
+                <div className="text-xs font-semibold">{isArabic ? 'عدد الأغاني' : 'Playlist size'}</div>
+                <div className="text-[10px] opacity-60">{isArabic ? 'ستُحلّل النتائج وتُنوّع الفنانين' : 'Results are filtered and diversified by artist'}</div>
+              </div>
+              <select
+                value={aiPlaylistSize}
+                onChange={(event) => setAiPlaylistSize(Number(event.target.value))}
+                disabled={aiPlaylistBusy}
+                className="rounded-lg border px-3 py-2 text-xs font-bold outline-none"
+                style={{ backgroundColor: themeColors.background, borderColor: themeColors.border, color: themeColors.textPrimary }}
+              >
+                {[10, 20, 30, 40, 50].map((size) => <option key={size} value={size}>{size}</option>)}
+              </select>
+            </div>
+
+            <button
+              onClick={() => void generateMoodPlaylist()}
+              disabled={aiPlaylistBusy || (!aiPlaylistPrompt.trim() && !aiPlaylistCategory)}
+              className="w-full rounded-xl py-3 text-sm font-bold text-white flex items-center justify-center gap-2 disabled:opacity-45"
+              style={{ backgroundColor: themeColors.primary }}
+            >
+              {aiPlaylistBusy ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+              {aiPlaylistBusy ? (isArabic ? 'جاري البحث وتجهيز الأغاني...' : 'Finding and preparing tracks...') : (isArabic ? 'أنشئ قائمة التشغيل' : 'Create smart playlist')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Playlist Picker Modal */}
       {showPlaylistPicker && pendingPlaylistTrack && (
