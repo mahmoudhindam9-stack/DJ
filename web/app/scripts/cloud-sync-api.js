@@ -32,7 +32,7 @@ function getRealtime() {
   if (!process.env.NEON_REALTIME_SECRET) throw new Error('DJ-Cloud Realtime is not configured.');
   if (!realtime) realtime = createRealtime({
     secret: process.env.NEON_REALTIME_SECRET,
-    db: 'dj_cloud',
+    db: 'neondb',
   });
   return realtime;
 }
@@ -56,7 +56,6 @@ async function requireUser(req) {
   try {
     const { payload } = await jwtVerify(token, getJwks(), {
       issuer,
-      audience: issuer,
       algorithms: ['EdDSA'],
     });
     return typeof payload.sub === 'string' && payload.sub.length > 0
@@ -229,34 +228,174 @@ export async function handleCloudApi(req, res, url, sendJson) {
       return true;
     }
 
+    if (route === 'commands' && method === 'GET') {
+      const deviceId = url.searchParams.get('device_id');
+      if (!validDeviceId(deviceId)) {
+        sendError(sendJson, res, 400, 'Invalid device identifier.');
+        return true;
+      }
+      const pending = await db.query(
+        `SELECT command_id::text, target_device_id::text, source_device_id::text,
+                command_type, payload, created_at
+         FROM public.dj_device_commands
+         WHERE user_id = $1 AND target_device_id = $2::uuid AND acknowledged_at IS NULL
+         ORDER BY created_at ASC
+         LIMIT 20`,
+        [user.id, deviceId]
+      );
+      sendJson(res, 200, { ok: true, data: pending.rows });
+      return true;
+    }
+
     if (route === 'claim' && method === 'POST') {
       const body = await readJsonBody(req);
       if (!validDeviceId(body.device_id)) {
         sendError(sendJson, res, 400, 'Invalid device identifier.');
         return true;
       }
-      const result = await db.query(
-        `UPDATE public.dj_playback_state s
-         SET active_device_id = $2::uuid,
-             revision = s.revision + 1,
-             updated_at = now()
-         WHERE s.user_id = $1
-           AND EXISTS (
-             SELECT 1 FROM public.dj_devices d
-             WHERE d.user_id = $1 AND d.device_id = $2::uuid
-           )
-         RETURNING s.user_id, s.active_device_id::text, s.current_track, s.queue,
-                   s.is_playing, s.position_ms::text, s.duration_ms::text,
-                   s.playback_mode, s.revision::text, s.updated_at`,
-        [user.id, body.device_id]
-      );
-      if (!result.rowCount) {
-        sendError(sendJson, res, 404, 'Register this device before taking control.');
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        const registered = await client.query(
+          'SELECT device_id::text FROM public.dj_devices WHERE user_id = $1 AND device_id = $2::uuid',
+          [user.id, body.device_id]
+        );
+        if (!registered.rowCount) {
+          await client.query('ROLLBACK');
+          sendError(sendJson, res, 404, 'Register this device before taking control.');
+          return true;
+        }
+        await client.query(
+          'INSERT INTO public.dj_playback_state (user_id, active_device_id) VALUES ($1, $2::uuid) ON CONFLICT (user_id) DO NOTHING',
+          [user.id, body.device_id]
+        );
+        const currentResult = await client.query(
+          `SELECT active_device_id::text, is_playing, position_ms::text, current_track
+           FROM public.dj_playback_state WHERE user_id = $1 FOR UPDATE`,
+          [user.id]
+        );
+        const current = currentResult.rows[0];
+        const oldDeviceId = current.active_device_id;
+        if (oldDeviceId && oldDeviceId !== body.device_id && current.is_playing) {
+          const online = await client.query(
+            `SELECT 1 FROM public.dj_devices
+             WHERE user_id = $1 AND device_id = $2::uuid
+               AND last_seen_at > now() - interval '45 seconds'`,
+            [user.id, oldDeviceId]
+          );
+          if (online.rowCount) {
+            const alreadyPending = await client.query(
+              `SELECT command_id::text FROM public.dj_device_commands
+               WHERE user_id = $1 AND target_device_id = $2::uuid
+                 AND command_type = 'pause' AND acknowledged_at IS NULL
+               ORDER BY created_at DESC LIMIT 1`,
+              [user.id, oldDeviceId]
+            );
+            let commandId = alreadyPending.rows[0]?.command_id;
+            if (!commandId) {
+              const command = await client.query(
+                `INSERT INTO public.dj_device_commands
+                   (user_id, target_device_id, source_device_id, command_type, payload)
+                 VALUES ($1, $2::uuid, $3::uuid, 'pause',
+                         jsonb_build_object('next_device_id', $3::text))
+                 RETURNING command_id::text`,
+                [user.id, oldDeviceId, body.device_id]
+              );
+              commandId = command.rows[0].command_id;
+            }
+            await client.query('COMMIT');
+            sendJson(res, 200, { ok: true, data: { status: 'handoff_pending', command_id: commandId, active_device_id: oldDeviceId } });
+            return true;
+          }
+        }
+
+        const claimed = await client.query(
+          `UPDATE public.dj_playback_state
+           SET active_device_id = $2::uuid, is_playing = false,
+               revision = revision + 1, updated_at = now()
+           WHERE user_id = $1
+           RETURNING active_device_id::text, current_track, queue, position_ms::text,
+                     duration_ms::text, playback_mode, is_playing, revision::text, updated_at`,
+          [user.id, body.device_id]
+        );
+        await client.query('COMMIT');
+        sendJson(res, 200, { ok: true, data: { status: 'active', player: claimed.rows[0] } });
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
+    if (route === 'commands/ack' && method === 'POST') {
+      const body = await readJsonBody(req);
+      if (!validDeviceId(body.device_id) || typeof body.command_id !== 'string') {
+        sendError(sendJson, res, 400, 'Invalid command acknowledgement.');
         return true;
       }
-      const state = result.rows[0];
-      sendJson(res, 200, { ok: true, data: state });
-      return true;
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        const command = await client.query(
+          `SELECT command_id::text, command_type, payload
+           FROM public.dj_device_commands
+           WHERE user_id = $1 AND command_id = $2::uuid
+             AND target_device_id = $3::uuid AND acknowledged_at IS NULL
+           FOR UPDATE`,
+          [user.id, body.command_id, body.device_id]
+        );
+        if (!command.rowCount) {
+          await client.query('ROLLBACK');
+          sendError(sendJson, res, 404, 'This command is no longer pending.');
+          return true;
+        }
+        const state = await client.query(
+          `SELECT active_device_id::text FROM public.dj_playback_state
+           WHERE user_id = $1 FOR UPDATE`,
+          [user.id]
+        );
+        if (state.rows[0]?.active_device_id !== body.device_id) {
+          await client.query('ROLLBACK');
+          sendError(sendJson, res, 409, 'Only the active playback device can acknowledge this handoff.');
+          return true;
+        }
+
+        const record = command.rows[0];
+        if (record.command_type === 'pause') {
+          const nextDeviceId = record.payload?.next_device_id;
+          if (!validDeviceId(nextDeviceId)) {
+            await client.query('ROLLBACK');
+            sendError(sendJson, res, 400, 'The target device for this handoff is invalid.');
+            return true;
+          }
+          await client.query(
+            `UPDATE public.dj_playback_state
+             SET active_device_id = $2::uuid, is_playing = false,
+                 position_ms = $3, revision = revision + 1, updated_at = now()
+             WHERE user_id = $1 AND active_device_id = $4::uuid`,
+            [
+              user.id,
+              nextDeviceId,
+              Math.max(0, Math.min(86_400_000, Math.floor(Number(body.position_ms) || 0))),
+              body.device_id,
+            ]
+          );
+        }
+        await client.query(
+          'UPDATE public.dj_device_commands SET acknowledged_at = now() WHERE user_id = $1 AND command_id = $2::uuid',
+          [user.id, body.command_id]
+        );
+        await client.query('COMMIT');
+        sendJson(res, 200, { ok: true, data: { acknowledged: true } });
+        return true;
+      } catch (error) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
     }
 
     if (route === 'state' && method === 'PUT') {
