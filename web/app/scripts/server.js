@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { NEON_CLOUD_CONFIG, neonCloudStore } from './neon-cloud.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1792,6 +1793,124 @@ async function handleApi(req, res) {
         const requestedName = requestUrl.searchParams.get('name') || 'song.mp3';
         const safeName = requestedName.toLowerCase().endsWith('.mp3') ? requestedName : requestedName + '.mp3';
         await proxyAudioStream(req, res, target, safeName);
+      }
+      return true;
+    }
+
+    // Neon Cloud Config, Auth (Email/Password + Google), User Isolation, and Single-Output Playback Sync
+    if (requestUrl.pathname === '/api/cloud/config' && req.method === 'GET') {
+      sendJson(res, 200, {
+        ok: true,
+        data: {
+          project: NEON_CLOUD_CONFIG.projectName,
+          projectId: NEON_CLOUD_CONFIG.projectId,
+          organizationId: NEON_CLOUD_CONFIG.organizationId,
+          branch: NEON_CLOUD_CONFIG.branchName,
+          branchId: NEON_CLOUD_CONFIG.branchId,
+          region: NEON_CLOUD_CONFIG.region,
+          database: NEON_CLOUD_CONFIG.database,
+          authBaseUrl: NEON_CLOUD_CONFIG.authBaseUrl,
+          jwksUrl: NEON_CLOUD_CONFIG.jwksUrl,
+          realtimeUrl: NEON_CLOUD_CONFIG.realtimeUrl,
+          databaseConnected: NEON_CLOUD_CONFIG.hasDatabaseUrl,
+        },
+      });
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/auth/signup' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req, 32768);
+        const user = await neonCloudStore.signUpEmail(body);
+        sendJson(res, 200, { ok: true, ...user, data: user });
+      } catch (err) {
+        sendJson(res, err?.statusCode || 400, { ok: false, error: err?.message || 'Sign-up failed' });
+      }
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/auth/signin' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req, 32768);
+        const user = await neonCloudStore.signInEmail(body);
+        sendJson(res, 200, { ok: true, ...user, data: user });
+      } catch (err) {
+        sendJson(res, err?.statusCode || 401, { ok: false, error: err?.message || 'Sign-in failed' });
+      }
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/auth/google' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req, 65536);
+        const user = await neonCloudStore.signInGoogle(body);
+        sendJson(res, 200, { ok: true, ...user, data: user });
+      } catch (err) {
+        sendJson(res, err?.statusCode || 400, { ok: false, error: err?.message || 'Google sign-in failed' });
+      }
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/auth/exchange-handoff' && req.method === 'POST') {
+      try {
+        const body = await readJsonBody(req, 65536);
+        const handoffRaw = String(body.handoff || '').trim();
+        if (!handoffRaw) {
+          sendJson(res, 400, { ok: false, error: 'Missing handoff token' });
+          return true;
+        }
+        const decodedJson = JSON.parse(Buffer.from(handoffRaw, 'base64url').toString('utf8'));
+        const email = String(decodedJson.email || '').trim().toLowerCase();
+        if (!email.includes('@')) {
+          sendJson(res, 400, { ok: false, error: 'Invalid handoff payload' });
+          return true;
+        }
+        const user = await neonCloudStore.signInGoogle({
+          email,
+          displayName: decodedJson.displayName || email.split('@')[0],
+          idToken: decodedJson.sessionToken || '',
+        });
+        sendJson(res, 200, { ok: true, ...user, data: user });
+      } catch (err) {
+        sendJson(res, 400, { ok: false, error: err?.message || 'Invalid handoff token' });
+      }
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/sync/state' && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        if (req.method === 'GET') {
+          const requestedUserId = requestUrl.searchParams.get('userId') || '';
+          const userId = neonCloudStore.resolveAuthorizedUserId(req, requestedUserId);
+          const state = await neonCloudStore.getUserState(userId);
+          sendJson(res, 200, { ok: true, ...state, data: state });
+        } else {
+          const body = await readJsonBody(req, 512000);
+          const userId = neonCloudStore.resolveAuthorizedUserId(req, body.userId);
+          const state = await neonCloudStore.updateUserState(userId, body);
+          sendJson(res, 200, { ok: true, ...state, data: state });
+        }
+      } catch (err) {
+        sendJson(res, err?.statusCode || 401, { ok: false, error: err?.message || 'Sync state error' });
+      }
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/sync/playback' && (req.method === 'GET' || req.method === 'POST')) {
+      try {
+        if (req.method === 'GET') {
+          const requestedUserId = requestUrl.searchParams.get('userId') || '';
+          const userId = neonCloudStore.resolveAuthorizedUserId(req, requestedUserId);
+          const state = await neonCloudStore.getUserState(userId);
+          sendJson(res, 200, { ok: true, playbackState: state.playbackState, data: state.playbackState });
+        } else {
+          const body = await readJsonBody(req, 131072);
+          const userId = neonCloudStore.resolveAuthorizedUserId(req, body.userId);
+          const result = await neonCloudStore.updatePlaybackState(userId, body);
+          sendJson(res, 200, { ok: true, ...result, data: result.playbackState });
+        }
+      } catch (err) {
+        sendJson(res, err?.statusCode || 401, { ok: false, error: err?.message || 'Playback sync error' });
       }
       return true;
     }

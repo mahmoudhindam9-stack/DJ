@@ -10,12 +10,13 @@ import {
   Music,
   Globe,
   BookOpen,
+  Film,
   Settings,
   Languages,
   Palette,
   Sparkles,
 } from 'lucide-react';
-import { TabType, AppThemeOption, ThemeColors } from '../types';
+import { TabType, AppThemeOption, ThemeColors, LanguageMode } from '../types';
 import { THEMES } from '../utils/theme';
 import { APP_VERSION } from '../services/UpdateService';
 
@@ -25,6 +26,7 @@ interface TitleBarProps {
   currentTheme: AppThemeOption;
   onThemeChange: (theme: AppThemeOption) => void;
   isArabic: boolean;
+  languageMode?: LanguageMode;
   onToggleLanguage: () => void;
   themeColors: ThemeColors;
   onOpenSetupModal: () => void;
@@ -37,6 +39,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
   currentTheme,
   onThemeChange,
   isArabic,
+  languageMode,
   onToggleLanguage,
   themeColors,
 }) => {
@@ -48,6 +51,7 @@ export const TitleBar: React.FC<TitleBarProps> = ({
     { id: 'RADIO', labelEn: 'Radio FM', labelAr: 'راديو مباشر', icon: <Radio className="w-4 h-4" /> },
     { id: 'ONLINE_MUSIC', labelEn: 'Online Music', labelAr: 'موسيقى أونلاين', icon: <Globe className="w-4 h-4" /> },
     { id: 'QURAN', labelEn: 'Holy Quran', labelAr: 'القرآن الكريم', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'VIDEO', labelEn: 'Video', labelAr: 'فيديو', icon: <Film className="w-4 h-4" /> },
     { id: 'AI_STUDIO', labelEn: 'AI Studio', labelAr: 'استوديو الذكاء الاصطناعي', icon: <Sparkles className="w-4 h-4" /> },
     { id: 'SETTINGS', labelEn: 'Settings', labelAr: 'الإعدادات', icon: <Settings className="w-4 h-4" /> },
   ];

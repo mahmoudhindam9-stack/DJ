@@ -1,33 +1,36 @@
+import React, { useEffect, useState } from 'react';
 import {
   Settings as SettingsIcon,
   Palette,
   Languages,
   Info,
-  Sliders,
   Check,
   Headphones,
-  HardDrive,
   Monitor,
   Download,
-  Terminal,
   Sparkles,
   Trash2,
-  FolderTree,
   RefreshCw,
   CheckCircle2,
   AlertCircle,
   CloudDownload,
   Loader2,
+  Cloud,
+  LogOut,
+  Volume2,
 } from 'lucide-react';
-import { AppThemeOption, ThemeColors } from '../../types';
+import { AppThemeOption, CloudPlaybackState, CloudUser, LanguageMode, ThemeColors } from '../../types';
 import { APP_VERSION, type UpdateInfo, type UpdateStatus } from '../../services/UpdateService';
 import { THEMES } from '../../utils/theme';
 import { downloadSetupBat, downloadUninstallBat, downloadShortcutBat } from '../../utils/setupDownloader';
+import { cloudSyncService } from '../../services/CloudSyncService';
 
 interface SettingsScreenProps {
   currentTheme: AppThemeOption;
   onThemeChange: (th: AppThemeOption) => void;
   isArabic: boolean;
+  languageMode?: LanguageMode;
+  onLanguageModeChange?: (mode: LanguageMode) => void;
   onToggleLanguage: () => void;
   themeColors: ThemeColors;
   onOpenSetupModal: () => void;
@@ -44,6 +47,8 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   currentTheme,
   onThemeChange,
   isArabic,
+  languageMode = 'auto',
+  onLanguageModeChange,
   onToggleLanguage,
   themeColors,
   onOpenSetupModal,
@@ -56,6 +61,56 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   onInstallUpdate,
 }) => {
   const themeList = Object.keys(THEMES) as AppThemeOption[];
+
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(cloudSyncService.getUser());
+  const [cloudPlayback, setCloudPlayback] = useState<CloudPlaybackState | null>(
+    cloudSyncService.getPlaybackState()
+  );
+  const [cloudStatus, setCloudStatus] = useState<string>('Ready');
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [displayNameInput, setDisplayNameInput] = useState('');
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return cloudSyncService.subscribe(({ user, playbackState, status }) => {
+      setCloudUser(user);
+      setCloudPlayback(playbackState);
+      setCloudStatus(status);
+    });
+  }, []);
+
+  const handleAuthSubmit = async () => {
+    setAuthError(null);
+    try {
+      if (isSignUp) {
+        await cloudSyncService.signUpWithEmail(emailInput, passwordInput, displayNameInput);
+      } else {
+        await cloudSyncService.signInWithEmail(emailInput, passwordInput);
+      }
+      setPasswordInput('');
+    } catch (err: any) {
+      setAuthError(err?.message || 'Authentication failed');
+    }
+  };
+
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    const email =
+      emailInput.trim() ||
+      window.prompt(
+        isArabic ? 'أدخل بريد Google للمزامنة مع Neon Cloud:' : 'Enter your Google email for Neon Cloud Sync:',
+        'user@gmail.com'
+      ) ||
+      '';
+    if (!email.trim()) return;
+    try {
+      await cloudSyncService.signInWithGoogle(email.trim(), displayNameInput.trim() || undefined);
+    } catch (err: any) {
+      setAuthError(err?.message || 'Google Sign-In failed');
+    }
+  };
 
   return (
     <div
@@ -71,12 +126,190 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <SettingsIcon className="w-6 h-6" style={{ color: themeColors.primary }} />
         <div>
           <h1 className="text-lg font-black tracking-wide">
-            {isArabic ? 'إعدادات التطبيق' : 'APPLICATION SETTINGS'}
+            {isArabic ? 'إعدادات التطبيق والمزامنة السحابية' : 'APPLICATION & CLOUD SYNC SETTINGS'}
           </h1>
         </div>
       </div>
 
-      {/* Language Section */}
+      {/* Neon Cloud Authentication & Single Active Output Sync Section */}
+      <div
+        data-testid="settings-cloud-auth-card"
+        className="p-4 rounded-2xl border shadow-lg flex flex-col gap-3"
+        style={{
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Cloud className="w-5 h-5" style={{ color: themeColors.primary }} />
+            <div>
+              <h2 className="font-bold text-sm">
+                {isArabic
+                  ? 'حساب Neon Cloud والمزامنة الفورية مع الهاتف'
+                  : 'Neon Cloud Account & Real-Time Android/Web Sync'}
+              </h2>
+              <p className="text-[11px] opacity-70">{cloudStatus}</p>
+            </div>
+          </div>
+          {cloudUser && (
+            <button
+              onClick={() => cloudSyncService.signOut()}
+              data-testid="web-cloud-signout-btn"
+              className="px-3 py-1.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 text-red-400 border-red-500/40 hover:bg-red-500/10"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+              <span>{isArabic ? 'تسجيل الخروج' : 'Sign Out'}</span>
+            </button>
+          )}
+        </div>
+
+        {cloudUser ? (
+          <div className="flex flex-col gap-2.5 pt-1">
+            <div
+              className="p-3 rounded-xl border flex items-center justify-between"
+              style={{
+                backgroundColor: themeColors.surfaceVariant,
+                borderColor: themeColors.border,
+              }}
+            >
+              <div>
+                <div className="text-xs font-bold">{cloudUser.displayName}</div>
+                <div className="text-[11px] opacity-75">
+                  {cloudUser.email} • {cloudUser.authProvider.toUpperCase()} • ID: {cloudUser.userId}
+                </div>
+              </div>
+              <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300">
+                {isArabic ? 'معزول ومؤمن' : 'Isolated Vault Active'}
+              </span>
+            </div>
+
+            <div
+              className="p-3 rounded-xl border flex flex-wrap items-center justify-between gap-2"
+              style={{ borderColor: themeColors.border }}
+            >
+              <div className="flex items-center gap-2">
+                <Volume2 className="w-4 h-4" style={{ color: themeColors.primary }} />
+                <div className="text-xs">
+                  <div className="font-bold">
+                    {isArabic
+                      ? 'التحكم في مخرج الصوت النشط (جهاز واحد فقط في نفس الوقت)'
+                      : 'Single Active Audio Output Arbitration'}
+                  </div>
+                  <div className="text-[11px] opacity-70">
+                    {cloudPlayback?.activeDeviceId
+                      ? `Active Platform: ${cloudPlayback.activeDevicePlatform.toUpperCase()} (${cloudPlayback.activeDeviceId})`
+                      : isArabic
+                      ? 'الويب جاهز لإخراج الصوت'
+                      : 'Web output ready'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() =>
+                  void cloudSyncService.claimWebAudioOutput({
+                    isPlaying: true
+                  })
+                }
+                data-testid="web-claim-audio-output-btn"
+                className="px-3 py-1.5 rounded-xl text-xs font-bold text-white"
+                style={{ backgroundColor: themeColors.primary }}
+              >
+                {isArabic ? 'تفعيل الصوت هنا وإيقاف الهاتف' : 'Claim Audio Output on Web'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2.5 pt-1">
+            {authError && (
+              <div className="text-xs text-red-400 font-semibold">{authError}</div>
+            )}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              {isSignUp && (
+                <input
+                  type="text"
+                  value={displayNameInput}
+                  onChange={(e) => setDisplayNameInput(e.target.value)}
+                  placeholder={isArabic ? 'الاسم' : 'Display Name'}
+                  className="px-3 py-2 rounded-xl border text-xs outline-none"
+                  style={{
+                    backgroundColor: themeColors.background,
+                    borderColor: themeColors.border,
+                    color: themeColors.textPrimary,
+                  }}
+                />
+              )}
+              <input
+                type="email"
+                value={emailInput}
+                onChange={(e) => setEmailInput(e.target.value)}
+                placeholder={isArabic ? 'البريد الإلكتروني' : 'Email address'}
+                data-testid="web-auth-email-input"
+                className="px-3 py-2 rounded-xl border text-xs outline-none"
+                style={{
+                  backgroundColor: themeColors.background,
+                  borderColor: themeColors.border,
+                  color: themeColors.textPrimary,
+                }}
+              />
+              <input
+                type="password"
+                value={passwordInput}
+                onChange={(e) => setPasswordInput(e.target.value)}
+                placeholder={isArabic ? 'كلمة المرور' : 'Password'}
+                data-testid="web-auth-password-input"
+                className="px-3 py-2 rounded-xl border text-xs outline-none"
+                style={{
+                  backgroundColor: themeColors.background,
+                  borderColor: themeColors.border,
+                  color: themeColors.textPrimary,
+                }}
+              />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => void handleAuthSubmit()}
+                data-testid="web-auth-submit-btn"
+                className="px-4 py-2 rounded-xl text-xs font-bold text-white"
+                style={{ backgroundColor: themeColors.primary }}
+              >
+                {isSignUp
+                  ? isArabic
+                    ? 'إنشاء حساب'
+                    : 'Sign Up'
+                  : isArabic
+                  ? 'تسجيل الدخول'
+                  : 'Sign In'}
+              </button>
+              <button
+                onClick={() => void handleGoogleSignIn()}
+                data-testid="web-auth-google-btn"
+                className="px-4 py-2 rounded-xl border text-xs font-bold"
+                style={{
+                  backgroundColor: themeColors.surfaceVariant,
+                  borderColor: themeColors.border,
+                }}
+              >
+                {isArabic ? 'الدخول بحساب Google' : 'Continue with Google'}
+              </button>
+              <button
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="px-3 py-2 rounded-xl text-xs underline opacity-80"
+              >
+                {isSignUp
+                  ? isArabic
+                    ? 'لدي حساب بالفعل'
+                    : 'Already have an account? Sign In'
+                  : isArabic
+                  ? 'إنشاء حساب جديد'
+                  : 'Create new account'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Language Section (Auto / Arabic RTL / English LTR) */}
       <div
         className="p-4 rounded-2xl border shadow-lg flex flex-col gap-3"
         style={{
@@ -87,41 +320,58 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
         <div className="flex items-center gap-2">
           <Languages className="w-5 h-5" style={{ color: themeColors.primary }} />
           <h2 className="font-bold text-sm">
-            {isArabic ? 'اللغة والاتجاه (Language & Direction)' : 'Language & Layout Direction'}
+            {isArabic ? 'اللغة والاتجاه (تلقائي / عربي / إنجليزي)' : 'Language & Layout Direction (Auto / Arabic / English)'}
           </h2>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-1">
           <button
-            onClick={() => isArabic && onToggleLanguage()}
+            onClick={() => onLanguageModeChange ? onLanguageModeChange('auto') : onToggleLanguage()}
+            data-testid="lang-mode-auto"
             className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
-              !isArabic ? 'ring-2' : 'opacity-70 hover:opacity-100'
+              languageMode === 'auto' ? 'ring-2' : 'opacity-70 hover:opacity-100'
             }`}
             style={{
-              backgroundColor: !isArabic ? `${themeColors.primary}20` : themeColors.surfaceVariant,
-              borderColor: !isArabic ? themeColors.primary : themeColors.border,
+              backgroundColor: languageMode === 'auto' ? `${themeColors.primary}20` : themeColors.surfaceVariant,
+              borderColor: languageMode === 'auto' ? themeColors.primary : themeColors.border,
+            }}
+          >
+            <div>{isArabic ? 'تلقائي حسب لغة الجهاز (Auto)' : 'Auto (System Language)'}</div>
+            {languageMode === 'auto' && <Check className="w-4 h-4" style={{ color: themeColors.primary }} />}
+          </button>
+
+          <button
+            onClick={() => onLanguageModeChange ? onLanguageModeChange('en') : (isArabic && onToggleLanguage())}
+            data-testid="lang-mode-en"
+            className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
+              languageMode === 'en' ? 'ring-2' : 'opacity-70 hover:opacity-100'
+            }`}
+            style={{
+              backgroundColor: languageMode === 'en' ? `${themeColors.primary}20` : themeColors.surfaceVariant,
+              borderColor: languageMode === 'en' ? themeColors.primary : themeColors.border,
             }}
           >
             <div className="text-left">
               <div>English (Left-to-Right)</div>
             </div>
-            {!isArabic && <Check className="w-4 h-4" style={{ color: themeColors.primary }} />}
+            {languageMode === 'en' && <Check className="w-4 h-4" style={{ color: themeColors.primary }} />}
           </button>
 
           <button
-            onClick={() => !isArabic && onToggleLanguage()}
+            onClick={() => onLanguageModeChange ? onLanguageModeChange('ar') : (!isArabic && onToggleLanguage())}
+            data-testid="lang-mode-ar"
             className={`p-3 rounded-xl border flex items-center justify-between text-xs font-bold transition-all ${
-              isArabic ? 'ring-2' : 'opacity-70 hover:opacity-100'
+              languageMode === 'ar' ? 'ring-2' : 'opacity-70 hover:opacity-100'
             }`}
             style={{
-              backgroundColor: isArabic ? `${themeColors.primary}20` : themeColors.surfaceVariant,
-              borderColor: isArabic ? themeColors.primary : themeColors.border,
+              backgroundColor: languageMode === 'ar' ? `${themeColors.primary}20` : themeColors.surfaceVariant,
+              borderColor: languageMode === 'ar' ? themeColors.primary : themeColors.border,
             }}
           >
             <div className="text-right">
               <div>العربية (من اليمين إلى اليسار)</div>
             </div>
-            {isArabic && <Check className="w-4 h-4" style={{ color: themeColors.primary }} />}
+            {languageMode === 'ar' && <Check className="w-4 h-4" style={{ color: themeColors.primary }} />}
           </button>
         </div>
       </div>

@@ -12,8 +12,7 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import com.example.MainActivity
-import com.example.widget.MusicWidgetProvider
-import android.appwidget.AppWidgetManager
+import com.example.widget.TimeWeatherWidgetProvider
 import kotlinx.coroutines.*
 
 
@@ -160,9 +159,7 @@ class MusicService : Service() {
     }
 
     private fun updateWidget(title: String, artist: String, isPlaying: Boolean) {
-        val widgetManager = AppWidgetManager.getInstance(this)
-        val widgetComponent = ComponentName(this, MusicWidgetProvider::class.java)
-        widgetManager.getAppWidgetIds(widgetComponent).forEach { id -> MusicWidgetProvider.updateAppWidget(this, widgetManager, id, title, artist, isPlaying) }
+        TimeWeatherWidgetProvider.requestAllUpdates(this)
     }
 
     private fun refreshWidgetFromStoredState() {

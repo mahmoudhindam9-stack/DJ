@@ -109,8 +109,35 @@ export type TabType =
   | 'RADIO'
   | 'ONLINE_MUSIC'
   | 'QURAN'
+  | 'VIDEO'
   | 'AI_STUDIO'
   | 'SETTINGS';
+
+export type LanguageMode = 'auto' | 'ar' | 'en';
+export type AudioTrack = AudioItem;
+
+export interface CloudUser {
+  userId: string;
+  email: string;
+  displayName: string;
+  authProvider: 'email' | 'google';
+  sessionToken: string;
+}
+
+export interface CloudPlaybackState {
+  userId: string;
+  activeDeviceId: string;
+  activeDevicePlatform: 'android' | 'web';
+  isPlaying: boolean;
+  currentTrackId: string;
+  currentTrackTitle: string;
+  currentTrackArtist: string;
+  currentTrackUri: string;
+  positionMs: number;
+  playbackMode: string;
+  queueIds: string[];
+  updatedAt: number;
+}
 
 export type LibrarySubTab = 'ALL' | 'PLAYLISTS' | 'FAVORITES' | 'ARTISTS' | 'ALBUMS' | 'FOLDERS';
 

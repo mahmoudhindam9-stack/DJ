@@ -31,6 +31,7 @@ import {
   downloadOnlineItem,
   downloadOnlineItemAsync,
 } from '../../services/OnlineMusicService';
+import { QuranMushafReaderModal } from './QuranMushafReaderModal';
 
 interface QuranScreenProps {
   themeColors: ThemeColors;
@@ -76,6 +77,7 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [playlistModalItem, setPlaylistModalItem] = useState<AudioItem | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState('');
+  const [readerSurah, setReaderSurah] = useState<QuranSurah | null>(null);
 
   // Dynamic viewport pagination so zero scrolling is required
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
@@ -445,6 +447,21 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
           )}
 
           <button
+            onClick={() => setReaderSurah(availableSurahs[0] || suwar[0] || { id: 1, name: 'سورة الفاتحة', makkia: true })}
+            data-testid="open-quran-mushaf-button"
+            className="px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border shrink-0"
+            style={{
+              backgroundColor: '#EFE6CE',
+              borderColor: '#8C6D2E',
+              color: '#3A2E18',
+            }}
+            title={isArabic ? 'فتح المصحف الورقي المتزامن' : 'Open Paper Mushaf Reader'}
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            {isArabic ? 'المصحف الورقي' : 'Mushaf Reader'}
+          </button>
+
+          <button
             onClick={() => loadData(true)}
             disabled={isLoading}
             className="p-1.5 rounded-lg border transition-colors shrink-0"
@@ -663,6 +680,21 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
                     {/* Action Buttons */}
                     <div className="flex items-center gap-1 shrink-0">
                       <button
+                        onClick={() => {
+                          handlePlaySurah(surah);
+                          setReaderSurah(surah);
+                        }}
+                        className="p-1.5 rounded-lg border"
+                        style={{
+                          backgroundColor: '#EFE6CE',
+                          borderColor: '#8C6D2E',
+                          color: '#3A2E18',
+                        }}
+                        title={isArabic ? 'قراءة في المصحف مع التلاوة' : 'Read in Mushaf with Recitation'}
+                      >
+                        <BookOpen className="w-3 h-3" />
+                      </button>
+                      <button
                         onClick={() => handlePlaySurah(surah)}
                         className="p-1.5 rounded-lg text-white"
                         style={{ backgroundColor: themeColors.primary }}
@@ -875,6 +907,15 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
           </div>
         </div>
       )}
+
+      <QuranMushafReaderModal
+        isOpen={Boolean(readerSurah)}
+        initialSurahId={readerSurah?.id || 1}
+        initialSurahName={readerSurah?.name || (isArabic ? 'سورة الفاتحة' : 'Al-Fatihah')}
+        reciterName={selectedReciter?.name}
+        isArabic={isArabic}
+        onClose={() => setReaderSurah(null)}
+      />
     </div>
   );
 };

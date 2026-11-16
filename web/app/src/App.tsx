@@ -6,6 +6,7 @@ import {
   Playlist,
   PlaybackMode,
   RadioStation,
+  LanguageMode,
 } from './types';
 import { THEMES } from './utils/theme';
 import { db } from './storage/db';
@@ -23,7 +24,9 @@ import { RadioScreen } from './components/screens/RadioScreen';
 import { OnlineMusicScreen } from './components/screens/OnlineMusicScreen';
 import { QuranScreen } from './components/screens/QuranScreen';
 import { AIMusicStudioScreen } from './components/screens/AIMusicStudioScreen';
+import { VideoPlayerScreen } from './components/screens/VideoPlayerScreen';
 import { SettingsScreen } from './components/screens/SettingsScreen';
+import { cloudSyncService } from './services/CloudSyncService';
 import { batchImportAudioFiles } from './utils/fileImporter';
 import { DesktopSetupModal } from './components/desktop/DesktopSetupModal';
 import { updateService, type UpdateInfo, type UpdateStatus } from './services/UpdateService';
@@ -60,7 +63,15 @@ function safeDownloadName(value: string): string {
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabType>('LIBRARY');
   const [currentTheme, setCurrentTheme] = useState<AppThemeOption>('DJ_BLUE');
-  const [isArabic, setIsArabic] = useState(false);
+  const [languageMode, setLanguageMode] = useState<LanguageMode>('auto');
+  const [isArabic, setIsArabic] = useState<boolean>(() => {
+    try {
+      const browserLang = (navigator.language || (navigator.languages && navigator.languages[0]) || 'en').toLowerCase();
+      return browserLang.startsWith('ar');
+    } catch {
+      return false;
+    }
+  });
 
   // Music State - Clean initial state without default songs
   const [library, setLibrary] = useState<AudioItem[]>([]);
@@ -155,8 +166,18 @@ export const App: React.FC = () => {
         const savedTheme = await db.getSetting<AppThemeOption>('app_theme', 'DJ_BLUE');
         setCurrentTheme(savedTheme);
 
-        const savedLang = await db.getSetting<boolean>('is_arabic', false);
-        setIsArabic(savedLang);
+        const savedLangMode = await db.getSetting<LanguageMode>('language_mode', 'auto');
+        setLanguageMode(savedLangMode);
+        if (savedLangMode === 'ar') {
+          setIsArabic(true);
+        } else if (savedLangMode === 'en') {
+          setIsArabic(false);
+        } else {
+          const browserLang = (navigator.language || (navigator.languages && navigator.languages[0]) || 'en').toLowerCase();
+          const detectedAr = browserLang.startsWith('ar');
+          setIsArabic(detectedAr);
+          await db.setSetting('is_arabic', detectedAr);
+        }
         setAutoUpdatesEnabled(await db.getSetting<boolean>('auto_updates_enabled', true));
 
         // Restore custom equalizer state
@@ -193,6 +214,23 @@ export const App: React.FC = () => {
     document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
     document.documentElement.lang = isArabic ? 'ar' : 'en';
   }, [isArabic]);
+
+  // Initialize Neon Cloud Sync & Single Active Audio Output Arbitration
+  useEffect(() => {
+    cloudSyncService.init({
+      onRemoteAudioClaimed: (playback) => {
+        if (playback.active_output_platform !== 'web' && playback.is_playing) {
+          mainAudioEngine.pause();
+          deckAEngine.pause();
+          deckBEngine.pause();
+          setIsPlaying(false);
+        }
+      },
+      onUserChanged: () => {
+        // User vault changed
+      },
+    });
+  }, []);
 
   // Handle Audio Engine subscriptions
   useEffect(() => {
@@ -344,6 +382,7 @@ export const App: React.FC = () => {
     setCurrentTimeMs(0);
     setDurationMs(song.duration || 0);
     setCurrentRadioStationId(null);
+    void cloudSyncService.claimWebAudioOutput(song.id, song.title, 0);
     void mainAudioEngine.loadTrack(song).then(() => mainAudioEngine.play());
   };
 
@@ -360,7 +399,9 @@ export const App: React.FC = () => {
 
     if (isPlaying) {
       mainAudioEngine.pause();
+      void cloudSyncService.pauseWebAudioOutput(currentTimeMs);
     } else {
+      void cloudSyncService.claimWebAudioOutput(currentSong.id, currentSong.title, currentTimeMs);
       mainAudioEngine.play();
     }
   };
@@ -645,10 +686,24 @@ export const App: React.FC = () => {
     await db.setSetting('app_theme', th);
   };
 
+  const resolveLanguageMode = (mode: LanguageMode): boolean => {
+    if (mode === 'ar') return true;
+    if (mode === 'en') return false;
+    const browserLang = (navigator.language || (navigator.languages && navigator.languages[0]) || 'en').toLowerCase();
+    return browserLang.startsWith('ar');
+  };
+
+  const handleLanguageModeChange = async (mode: LanguageMode) => {
+    const resolvedAr = resolveLanguageMode(mode);
+    setLanguageMode(mode);
+    setIsArabic(resolvedAr);
+    await db.setSetting('language_mode', mode);
+    await db.setSetting('is_arabic', resolvedAr);
+  };
+
   const handleToggleLanguage = async () => {
-    const next = !isArabic;
-    setIsArabic(next);
-    await db.setSetting('is_arabic', next);
+    const nextMode: LanguageMode = isArabic ? 'en' : 'ar';
+    await handleLanguageModeChange(nextMode);
   };
 
   const handleAutoUpdatesEnabledChange = async (enabled: boolean) => {
@@ -968,7 +1023,9 @@ export const App: React.FC = () => {
         currentTheme={currentTheme}
         onThemeChange={handleThemeChange}
         isArabic={isArabic}
+        languageMode={languageMode}
         onToggleLanguage={handleToggleLanguage}
+        onLanguageModeChange={handleLanguageModeChange}
         themeColors={themeColors}
         onOpenSetupModal={() => setIsSetupModalOpen(true)}
         onOpenControlPanel={handleOpenControlPanel}
@@ -1094,12 +1151,26 @@ export const App: React.FC = () => {
           />
         )}
 
+        {activeTab === 'VIDEO' && (
+          <VideoPlayerScreen
+            isAr={isArabic}
+            onPauseAllAudio={() => {
+              mainAudioEngine.pause();
+              deckAEngine.pause();
+              deckBEngine.pause();
+              setIsPlaying(false);
+            }}
+          />
+        )}
+
         {activeTab === 'SETTINGS' && (
           <SettingsScreen
             currentTheme={currentTheme}
             onThemeChange={handleThemeChange}
             isArabic={isArabic}
+            languageMode={languageMode}
             onToggleLanguage={handleToggleLanguage}
+            onLanguageModeChange={handleLanguageModeChange}
             themeColors={themeColors}
             onOpenSetupModal={() => setIsSetupModalOpen(true)}
             autoUpdatesEnabled={autoUpdatesEnabled}

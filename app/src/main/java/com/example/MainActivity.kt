@@ -83,6 +83,8 @@ class MainActivity : ComponentActivity() {
         }
         RuntimeDiagnostics.initialize(applicationContext)
         com.example.ui.theme.ThemeManager.init(this)
+        com.example.ui.locale.AppLanguageManager.init(this)
+        com.example.cloud.CloudSyncManager.init(this)
         enableEdgeToEdge()
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
@@ -96,8 +98,12 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val appTheme by com.example.ui.theme.ThemeManager.currentTheme.collectAsState()
-            MyApplicationTheme(appTheme = appTheme) {
-                MainApp()
+            val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
+            val layoutDirection = com.example.ui.locale.AppLanguageManager.currentLayoutDirection(isArabic)
+            CompositionLocalProvider(androidx.compose.ui.platform.LocalLayoutDirection provides layoutDirection) {
+                MyApplicationTheme(appTheme = appTheme) {
+                    MainApp()
+                }
             }
         }
     }
@@ -261,9 +267,26 @@ fun MainApp() {
         }
     }
 
-    // Synchronize progress for seekbar
+    // Synchronize progress for seekbar & cloud single-output arbitration
     LaunchedEffect(Unit) {
         eqController.attachToSession(playerController.exoPlayer.audioSessionId)
+        com.example.cloud.CloudSyncManager.registerAudioOutputCallbacks(
+            onRemoteOutputClaimed = {
+                playerController.pause()
+                djMixerController.pauseAll()
+            }
+        )
+    }
+
+    LaunchedEffect(playerController.isPlaying, playerController.currentSong?.id) {
+        if (playerController.isPlaying) {
+            com.example.cloud.CloudSyncManager.claimAudioOutput(
+                context = context,
+                isPlaying = true,
+                currentSong = playerController.currentSong,
+                positionMs = playerController.currentPositionMs
+            )
+        }
     }
 
     DisposableEffect(Unit) {
@@ -495,6 +518,11 @@ fun MainApp() {
                             launchSingleTop = true
                         }
                     }
+                )
+            }
+            composable("web_access") {
+                com.example.cloud.WebAccessScreen(
+                    onBack = { navController.popBackStack() }
                 )
             }
         }

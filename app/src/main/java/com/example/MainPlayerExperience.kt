@@ -213,6 +213,42 @@ fun PlayerScreenV2(
                     Text("MUSIC LIBRARY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
                     Text("Local audio and playlists", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                var showLanguageMenu by remember { mutableStateOf(false) }
+                val currentLangMode by com.example.ui.locale.AppLanguageManager.languageMode.collectAsState()
+                val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
+                IconButton(
+                    onClick = { navController.navigate("web_access") { launchSingleTop = true } }
+                ) {
+                    Icon(Icons.Filled.Public, contentDescription = if (isArabic) "بوابة الويب والمزامنة" else "DJ Web & Cloud Sync")
+                }
+                Box {
+                    IconButton(onClick = { showLanguageMenu = true }) {
+                        Icon(Icons.Filled.Language, contentDescription = "Language")
+                    }
+                    DropdownMenu(expanded = showLanguageMenu, onDismissRequest = { showLanguageMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(if (currentLangMode == com.example.ui.locale.LanguageMode.AUTO) "✓ Auto (System)" else "Auto (System)") },
+                            onClick = {
+                                showLanguageMenu = false
+                                com.example.ui.locale.AppLanguageManager.setLanguageMode(context, com.example.ui.locale.LanguageMode.AUTO)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (currentLangMode == com.example.ui.locale.LanguageMode.ARABIC) "✓ العربية (RTL)" else "العربية (RTL)") },
+                            onClick = {
+                                showLanguageMenu = false
+                                com.example.ui.locale.AppLanguageManager.setLanguageMode(context, com.example.ui.locale.LanguageMode.ARABIC)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text(if (currentLangMode == com.example.ui.locale.LanguageMode.ENGLISH) "✓ English (LTR)" else "English (LTR)") },
+                            onClick = {
+                                showLanguageMenu = false
+                                com.example.ui.locale.AppLanguageManager.setLanguageMode(context, com.example.ui.locale.LanguageMode.ENGLISH)
+                            }
+                        )
+                    }
+                }
                 var showThemeMenu by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { showThemeMenu = true }, modifier = Modifier) {

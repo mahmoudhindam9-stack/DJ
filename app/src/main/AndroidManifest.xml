@@ -117,6 +117,19 @@
                 <data android:pathPattern=".*\\.3gp" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".cloud.WebAccessActivity"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_web"
+            android:roundIcon="@mipmap/ic_launcher_web_round"
+            android:label="@string/web_access_app_name"
+            android:theme="@style/Theme.MyApplication"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
         <activity android:name=".widget.LocationWeatherActivity" android:exported="false" android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service android:name=".player.MusicService" android:exported="false" android:foregroundServiceType="mediaPlayback|microphone">
@@ -125,27 +138,6 @@
         </service>
         <receiver android:name="androidx.media.session.MediaButtonReceiver" android:exported="true">
             <intent-filter><action android:name="android.intent.action.MEDIA_BUTTON" /></intent-filter>
-        </receiver>
-        <receiver android:name=".widget.MusicWidgetProvider" android:exported="true" android:label="@string/widget_music_player_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/music_widget_info" />
-        </receiver>
-        <receiver android:name=".widget.QuickPlayerWidgetProvider" android:exported="true" android:label="@string/widget_quick_player_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/quick_player_widget_info" />
-        </receiver>
-        <receiver android:name=".widget.DJMixerWidgetProvider" android:exported="true" android:label="@string/widget_dj_mixer_label">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
-            </intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/dj_mixer_widget_info" />
         </receiver>
         <receiver android:name=".widget.TimeWeatherWidgetProvider" android:exported="true" android:label="@string/widget_time_weather_label">
             <intent-filter>
