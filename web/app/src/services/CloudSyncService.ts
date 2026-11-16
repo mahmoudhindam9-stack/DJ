@@ -27,28 +27,34 @@ class CloudSyncService {
   private deviceId = '';
   private pollTimer: number | null = null;
   private listeners = new Set<SyncListener>();
-  private onRemoteClaimedOutput: (() => void) | null = null;
+  private onRemoteClaimedOutput: ((playback: CloudPlaybackState) => void) | null = null;
+  private onUserChanged: ((user: CloudUser | null) => void | Promise<void>) | null = null;
+  private lastVaultSignature = '';
   private onVaultLoaded:
     | ((vault: {
         tracks: AudioTrack[];
-        playlists: Playlist[];
+        playlists: Array<Playlist & { songIds?: string[] }>;
         favoriteIds: string[];
         languageMode?: 'auto' | 'ar' | 'en';
+        themeName?: string;
       }) => void)
     | null = null;
 
   init(callbacks?: {
-    onRemoteOutputClaimed?: () => void;
+    onRemoteAudioClaimed?: (playback: CloudPlaybackState) => void;
+    onRemoteOutputClaimed?: (playback: CloudPlaybackState) => void;
+    onUserChanged?: (user: CloudUser | null) => void | Promise<void>;
     onVaultLoaded?: (vault: {
       tracks: AudioTrack[];
-      playlists: Playlist[];
+      playlists: Array<Playlist & { songIds?: string[] }>;
       favoriteIds: string[];
       languageMode?: 'auto' | 'ar' | 'en';
+      themeName?: string;
     }) => void;
   }) {
-    if (callbacks?.onRemoteOutputClaimed) {
-      this.onRemoteClaimedOutput = callbacks.onRemoteOutputClaimed;
-    }
+    const audioCallback = callbacks?.onRemoteAudioClaimed || callbacks?.onRemoteOutputClaimed;
+    if (audioCallback) this.onRemoteClaimedOutput = audioCallback;
+    if (callbacks?.onUserChanged) this.onUserChanged = callbacks.onUserChanged;
     if (callbacks?.onVaultLoaded) {
       this.onVaultLoaded = callbacks.onVaultLoaded;
     }
@@ -66,7 +72,7 @@ class CloudSyncService {
       try {
         const parsed = JSON.parse(rawSession);
         if (parsed?.userId && parsed?.email && parsed?.sessionToken) {
-          this.setSession(parsed);
+          void this.setSession(parsed);
         }
       } catch {
         // ignore invalid JSON
@@ -94,7 +100,7 @@ class CloudSyncService {
     window.addEventListener('dj-cloud-session-handoff', ((ev: CustomEvent) => {
       const detail = ev.detail;
       if (detail?.userId && detail?.email && detail?.sessionToken) {
-        this.setSession({
+        void this.setSession({
           userId: detail.userId,
           email: detail.email,
           displayName: detail.displayName || detail.email.split('@')[0],
@@ -142,11 +148,13 @@ class CloudSyncService {
     }
   }
 
-  private setSession(user: CloudUser) {
+  private async setSession(user: CloudUser): Promise<void> {
     this.currentUser = user;
     localStorage.setItem(STORAGE_SESSION_KEY, JSON.stringify(user));
-    this.status = `Synced (${user.email})`;
+    this.status = `Checking cloud session (${user.email})`;
+    this.lastVaultSignature = '';
     this.emit();
+    await this.onUserChanged?.(user);
     this.pullRemoteStateOnce();
     this.startPolling();
   }
@@ -158,39 +166,26 @@ class CloudSyncService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ handoff })
       });
-      const json = await resp.json();
-      if (resp.ok && json?.userId) {
-        const user: CloudUser = {
-          userId: json.userId,
-          email: json.email,
-          displayName: json.displayName,
-          authProvider: json.authProvider || 'google',
-          sessionToken: json.sessionToken
-        };
-        this.setSession(user);
-        return user;
+      const json = await resp.json().catch(() => null);
+      if (!resp.ok || !json?.userId || !json?.sessionToken) {
+        this.status = json?.error || 'Android cloud session could not be verified.';
+        this.emit();
+        return null;
       }
+      const user: CloudUser = {
+        userId: json.userId,
+        email: json.email,
+        displayName: json.displayName,
+        authProvider: json.authProvider || 'email',
+        sessionToken: json.sessionToken
+      };
+      await this.setSession(user);
+      return user;
     } catch {
-      // Fallback: decode base64url locally if offline
-      try {
-        const base64 = handoff.replace(/-/g, '+').replace(/_/g, '/');
-        const decoded = JSON.parse(atob(base64));
-        if (decoded?.userId && decoded?.email) {
-          const user: CloudUser = {
-            userId: decoded.userId,
-            email: decoded.email,
-            displayName: decoded.displayName || decoded.email.split('@')[0],
-            authProvider: decoded.authProvider || 'email',
-            sessionToken: decoded.sessionToken || 'local_handoff_token'
-          };
-          this.setSession(user);
-          return user;
-        }
-      } catch {
-        // ignore
-      }
+      this.status = 'Cloud handoff could not be verified. Connect to the internet and try again.';
+      this.emit();
+      return null;
     }
-    return null;
   }
 
   async signUpWithEmail(email: string, password: string, displayName?: string): Promise<CloudUser> {
@@ -210,7 +205,7 @@ class CloudSyncService {
       authProvider: 'email',
       sessionToken: json.sessionToken
     };
-    this.setSession(user);
+    await this.setSession(user);
     return user;
   }
 
@@ -231,18 +226,18 @@ class CloudSyncService {
       authProvider: 'email',
       sessionToken: json.sessionToken
     };
-    this.setSession(user);
+    await this.setSession(user);
     return user;
   }
 
-  async signInWithGoogle(email: string, displayName?: string, idToken?: string): Promise<CloudUser> {
+  async signInWithGoogle(idToken: string): Promise<CloudUser> {
     const resp = await fetch('/api/auth/google', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, displayName, idToken, deviceId: this.getDeviceId() })
+      body: JSON.stringify({ idToken, deviceId: this.getDeviceId() })
     });
-    const json = await resp.json();
-    if (!resp.ok || !json?.userId) {
+    const json = await resp.json().catch(() => null);
+    if (!resp.ok || !json?.userId || !json?.sessionToken) {
       throw new Error(json?.error || 'Google Sign-In failed');
     }
     const user: CloudUser = {
@@ -252,11 +247,11 @@ class CloudSyncService {
       authProvider: 'google',
       sessionToken: json.sessionToken
     };
-    this.setSession(user);
+    await this.setSession(user);
     return user;
   }
 
-  signOut() {
+  async signOut(): Promise<void> {
     if (this.pollTimer !== null) {
       window.clearInterval(this.pollTimer);
       this.pollTimer = null;
@@ -265,7 +260,9 @@ class CloudSyncService {
     this.currentUser = null;
     this.playbackState = null;
     this.status = 'Signed out';
+    this.lastVaultSignature = '';
     this.emit();
+    await this.onUserChanged?.(null);
   }
 
   async claimWebAudioOutput(params: {
@@ -327,7 +324,7 @@ class CloudSyncService {
     const user = this.currentUser;
     if (!user) return;
     try {
-      await fetch('/api/sync/state', {
+      const response = await fetch('/api/sync/state', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -339,8 +336,14 @@ class CloudSyncService {
           ...params
         })
       });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        this.status = payload?.error || ('Cloud save failed (' + response.status + ').');
+        this.emit();
+      }
     } catch {
-      // ignore network error
+      this.status = 'Cloud save failed. Check your connection.';
+      this.emit();
     }
   }
 
@@ -354,7 +357,23 @@ class CloudSyncService {
           'X-User-Id': user.userId
         }
       });
-      if (!resp.ok) return;
+      if (resp.status === 401 || resp.status === 403) {
+        localStorage.removeItem(STORAGE_SESSION_KEY);
+        this.currentUser = null;
+        this.playbackState = null;
+        this.status = 'Cloud session expired or invalid. Please sign in again.';
+        this.lastVaultSignature = '';
+        this.emit();
+        void this.onUserChanged?.(null);
+        if (this.pollTimer !== null) window.clearInterval(this.pollTimer);
+        this.pollTimer = null;
+        return;
+      }
+      if (!resp.ok) {
+        this.status = 'Cloud sync request failed (' + resp.status + ').';
+        this.emit();
+        return;
+      }
       const json = await resp.json();
       if (json?.userId && json.userId === user.userId) {
         if (json.playbackState) {
@@ -370,19 +389,30 @@ class CloudSyncService {
             remotePb.updatedAt >= prevUpdatedAt
           ) {
             this.status = `Audio active on ${remotePb.activeDevicePlatform.toUpperCase()}`;
-            this.onRemoteClaimedOutput?.();
+            this.onRemoteClaimedOutput?.(remotePb);
             window.dispatchEvent(new CustomEvent('dj-remote-audio-claimed', { detail: remotePb }));
           }
           this.emit();
         }
-        if (this.onVaultLoaded && (Array.isArray(json.tracks) || Array.isArray(json.playlists))) {
-          this.onVaultLoaded({
-            tracks: json.tracks || [],
-            playlists: json.playlists || [],
-            favoriteIds: json.favoriteIds || [],
-            languageMode: json.settings?.languageMode
-          });
+        const remoteVault = {
+          tracks: Array.isArray(json.tracks) ? json.tracks : [],
+          playlists: Array.isArray(json.playlists) ? json.playlists : [],
+          favoriteIds: Array.isArray(json.favoriteIds) ? json.favoriteIds : [],
+          languageMode: json.settings?.languageMode,
+          themeName: json.settings?.themeName || json.settings?.theme
+        };
+        const signature = JSON.stringify({
+          tracks: remoteVault.tracks,
+          playlists: remoteVault.playlists,
+          favoriteIds: remoteVault.favoriteIds,
+          settings: json.settings || {}
+        });
+        if (this.onVaultLoaded && signature !== this.lastVaultSignature) {
+          this.lastVaultSignature = signature;
+          this.onVaultLoaded(remoteVault);
         }
+        this.status = 'Synced (' + user.email + ')';
+        this.emit();
       }
     } catch {
       // ignore

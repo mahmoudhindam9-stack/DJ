@@ -87,6 +87,22 @@ test('Email/Password & Google Authentication + Strict User Isolation between Use
   assert.deepEqual(stateB.favoriteIds, ['track_b_1']);
   assert.equal(stateB.settings.languageMode, 'en');
 
+  // A user ID header is never an authentication credential.
+  assert.throws(
+    () =>
+      neonCloudStore.resolveAuthorizedUserId(
+        { headers: { 'x-user-id': authA.userId } },
+        authA.userId
+      ),
+    /valid signed session/
+  );
+
+  // Signed tokens cannot be modified without invalidating their signature.
+  const tokenParts = authA.sessionToken.split('.');
+  tokenParts[2] = (tokenParts[2].startsWith('a') ? 'b' : 'a') + tokenParts[2].slice(1);
+  const modifiedToken = tokenParts.join('.');
+  assert.equal(verifySessionToken(modifiedToken), null);
+
   // Cross-user access is strictly rejected with 403 Forbidden
   assert.throws(
     () =>

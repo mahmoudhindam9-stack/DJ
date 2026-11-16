@@ -70,6 +70,7 @@ object CloudSyncManager {
     private const val KEY_ACTIVE_NAME = "active_display_name"
     private const val KEY_ACTIVE_PROVIDER = "active_auth_provider"
     private const val KEY_ACTIVE_TOKEN = "active_session_token"
+    private const val KEY_ACTIVE_CLOUD_READY = "active_cloud_session_ready"
     private const val KEY_WEB_BASE_URL = "web_base_url"
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -89,6 +90,7 @@ object CloudSyncManager {
 
     private var onRemoteClaimedAudioOutput: (() -> Unit)? = null
     private var onUserVaultLoaded: ((UserIsolatedDataSnapshot) -> Unit)? = null
+    private val lastRemoteVaultSignature = mutableMapOf<String, String>()
 
     fun init(context: Context) {
         val prefs = context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
@@ -118,7 +120,12 @@ object CloudSyncManager {
             )
             _currentUser.value = user
             _playbackState.value = loadUserPlaybackState(context, userId)
-            startRealtimeSyncLoop(context)
+            if (prefs.getBoolean(KEY_ACTIVE_CLOUD_READY, false)) {
+                _syncStatus.value = "Neon Cloud connected"
+                startRealtimeSyncLoop(context)
+            } else {
+                _syncStatus.value = "Local account active — sign in again to reconnect Neon Cloud"
+            }
         }
     }
 
@@ -269,6 +276,11 @@ object CloudSyncManager {
         if (!normalizedEmail.contains("@")) {
             return Result.failure(IllegalArgumentException("Valid Google account email is required"))
         }
+        if (idToken.isNullOrBlank()) {
+            return Result.failure(
+                SecurityException("Google sign-in requires a verified Google OAuth ID token. Email-only account selection is not sufficient for cloud authentication.")
+            )
+        }
 
         val registry = context.getSharedPreferences(PREFS_ACCOUNTS_REGISTRY, Context.MODE_PRIVATE)
         val userId = registry.getString("uid_$normalizedEmail", null)
@@ -313,6 +325,7 @@ object CloudSyncManager {
             .remove(KEY_ACTIVE_NAME)
             .remove(KEY_ACTIVE_PROVIDER)
             .remove(KEY_ACTIVE_TOKEN)
+            .putBoolean(KEY_ACTIVE_CLOUD_READY, false)
             .apply()
 
         _currentUser.value = null
@@ -327,6 +340,11 @@ object CloudSyncManager {
         }
     }
 
+    private fun hasVerifiedCloudSession(context: Context): Boolean {
+        return context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
+            .getBoolean(KEY_ACTIVE_CLOUD_READY, false)
+    }
+
     private fun activateUserSession(context: Context, user: CloudUser) {
         context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
             .edit()
@@ -335,13 +353,35 @@ object CloudSyncManager {
             .putString(KEY_ACTIVE_NAME, user.displayName)
             .putString(KEY_ACTIVE_PROVIDER, user.authProvider)
             .putString(KEY_ACTIVE_TOKEN, user.sessionToken)
+            .putBoolean(KEY_ACTIVE_CLOUD_READY, false)
             .apply()
 
+        syncPollingJob?.cancel()
+        syncPollingJob = null
         _currentUser.value = user
         val snapshot = loadUserIsolatedSnapshot(context, user.userId)
         _playbackState.value = snapshot.playbackState
-        _syncStatus.value = "Synced (${user.email})"
+        _syncStatus.value = "Verifying Neon Cloud account…"
         onUserVaultLoaded?.invoke(snapshot)
+    }
+
+    private fun saveVerifiedRemoteSession(context: Context, user: CloudUser) {
+        if (user.sessionToken.split('.').size != 3) {
+            _syncStatus.value = "Cloud sign-in returned an invalid session."
+            return
+        }
+        context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
+            .edit()
+            .putString(KEY_ACTIVE_USER_ID, user.userId)
+            .putString(KEY_ACTIVE_EMAIL, user.email)
+            .putString(KEY_ACTIVE_NAME, user.displayName)
+            .putString(KEY_ACTIVE_PROVIDER, user.authProvider)
+            .putString(KEY_ACTIVE_TOKEN, user.sessionToken)
+            .putBoolean(KEY_ACTIVE_CLOUD_READY, true)
+            .apply()
+        _currentUser.value = user
+        _syncStatus.value = "Neon Cloud connected"
+        lastRemoteVaultSignature.remove(user.userId)
         startRealtimeSyncLoop(context)
     }
 
@@ -355,7 +395,8 @@ object CloudSyncManager {
         favoriteIds: Set<String>? = null,
         languageMode: String? = null,
         themeName: String? = null,
-        forUserId: String? = _currentUser.value?.userId
+        forUserId: String? = _currentUser.value?.userId,
+        syncToCloud: Boolean = true
     ) {
         val userId = forUserId ?: return
         val vault = context.getSharedPreferences("dj_user_vault_$userId", Context.MODE_PRIVATE)
@@ -404,7 +445,9 @@ object CloudSyncManager {
         editor.putLong("updated_at", System.currentTimeMillis())
         editor.apply()
 
-        pushStateToCloudAsync(context, userId)
+        if (syncToCloud && hasVerifiedCloudSession(context)) {
+            pushStateToCloudAsync(context, userId)
+        }
     }
 
     fun loadUserIsolatedSnapshot(
@@ -593,6 +636,11 @@ object CloudSyncManager {
     fun buildAuthenticatedWebUrl(context: Context): String {
         val baseUrl = getWebBaseUrl(context)
         val user = _currentUser.value ?: return baseUrl
+        val authPrefs = context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
+        if (!authPrefs.getBoolean(KEY_ACTIVE_CLOUD_READY, false)) {
+            // Never put a locally generated unsigned token into the browser handoff URL.
+            return baseUrl
+        }
         val handoffPayload = JSONObject().apply {
             put("userId", user.userId)
             put("email", user.email)
@@ -615,6 +663,7 @@ object CloudSyncManager {
      * so the Web app receives the authenticated Neon/DJ Cloud session without re-entering credentials.
      */
     fun buildWebViewSessionBootstrapScript(context: Context): String {
+        if (!hasVerifiedCloudSession(context)) return ""
         val user = _currentUser.value ?: return ""
         val safeObj = JSONObject().apply {
             put("userId", user.userId)
@@ -653,13 +702,13 @@ object CloudSyncManager {
         isSignUp: Boolean
     ) {
         scope.launch {
-            runCatching {
+            try {
                 val endpoint = if (isSignUp) "/api/auth/signup" else "/api/auth/signin"
                 val url = URL(getWebBaseUrl(context) + endpoint)
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = 8000
+                    readTimeout = 10000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                 }
@@ -671,17 +720,27 @@ object CloudSyncManager {
                     put("deviceId", getDeviceId(context))
                 }.toString()
                 OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
-                if (conn.responseCode in 200..299) {
-                    val respText = conn.inputStream.bufferedReader().use { it.readText() }
-                    val json = JSONObject(respText)
-                    val remoteToken = json.optString("sessionToken", user.sessionToken)
-                    val remoteUserId = json.optString("userId", user.userId)
-                    if (remoteUserId.isNotBlank()) {
-                        val updated = user.copy(userId = remoteUserId, sessionToken = remoteToken)
-                        _currentUser.value = updated
-                    }
-                }
+                val responseCode = conn.responseCode
+                val responseStream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = responseStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 conn.disconnect()
+                if (responseCode !in 200..299) {
+                    val message = runCatching { JSONObject(responseText).optString("error") }.getOrNull()
+                    _syncStatus.value = message?.takeIf { it.isNotBlank() }
+                        ?: "Neon Cloud authentication failed (HTTP $responseCode)."
+                    return@launch
+                }
+                val json = JSONObject(responseText)
+                val remoteToken = json.optString("sessionToken", "")
+                val remoteUserId = json.optString("userId", "")
+                if (remoteUserId.isBlank() || remoteToken.split('.').size != 3) {
+                    _syncStatus.value = "Neon Cloud returned an invalid session. Local account remains available."
+                    return@launch
+                }
+                val updated = user.copy(userId = remoteUserId, sessionToken = remoteToken)
+                saveVerifiedRemoteSession(context, updated)
+            } catch (error: Exception) {
+                _syncStatus.value = "Neon Cloud could not be reached. Local account remains available."
             }
         }
     }
@@ -692,30 +751,56 @@ object CloudSyncManager {
         idToken: String?
     ) {
         scope.launch {
-            runCatching {
+            try {
+                if (idToken.isNullOrBlank()) {
+                    _syncStatus.value = "Google account selection is local only. Configure Google OAuth ID-token sign-in to enable Neon Cloud."
+                    return@launch
+                }
                 val url = URL(getWebBaseUrl(context) + "/api/auth/google")
                 val conn = (url.openConnection() as HttpURLConnection).apply {
                     requestMethod = "POST"
-                    connectTimeout = 5000
-                    readTimeout = 5000
+                    connectTimeout = 8000
+                    readTimeout = 10000
                     doOutput = true
                     setRequestProperty("Content-Type", "application/json")
                 }
                 val body = JSONObject().apply {
-                    put("email", user.email)
-                    put("displayName", user.displayName)
-                    put("userId", user.userId)
-                    put("idToken", idToken ?: "")
+                    put("idToken", idToken)
                     put("deviceId", getDeviceId(context))
                 }.toString()
                 OutputStreamWriter(conn.outputStream, Charsets.UTF_8).use { it.write(body) }
-                conn.responseCode
+                val responseCode = conn.responseCode
+                val responseStream = if (responseCode in 200..299) conn.inputStream else conn.errorStream
+                val responseText = responseStream?.bufferedReader()?.use { it.readText() }.orEmpty()
                 conn.disconnect()
+                if (responseCode !in 200..299) {
+                    val message = runCatching { JSONObject(responseText).optString("error") }.getOrNull()
+                    _syncStatus.value = message?.takeIf { it.isNotBlank() }
+                        ?: "Google Cloud authentication failed (HTTP $responseCode)."
+                    return@launch
+                }
+                val json = JSONObject(responseText)
+                val remoteToken = json.optString("sessionToken", "")
+                val remoteUserId = json.optString("userId", "")
+                if (remoteUserId.isBlank() || remoteToken.split('.').size != 3) {
+                    _syncStatus.value = "Google Cloud authentication returned an invalid session."
+                    return@launch
+                }
+                val updated = user.copy(
+                    userId = remoteUserId,
+                    email = json.optString("email", user.email),
+                    displayName = json.optString("displayName", user.displayName),
+                    sessionToken = remoteToken
+                )
+                saveVerifiedRemoteSession(context, updated)
+            } catch (error: Exception) {
+                _syncStatus.value = "Google Cloud authentication could not be completed."
             }
         }
     }
 
     private fun pushPlaybackToCloudAsync(context: Context, user: CloudUser, state: CloudPlaybackState) {
+        if (!hasVerifiedCloudSession(context)) return
         scope.launch {
             runCatching {
                 val url = URL(getWebBaseUrl(context) + "/api/sync/playback")
@@ -750,6 +835,7 @@ object CloudSyncManager {
     }
 
     private fun pushStateToCloudAsync(context: Context, userId: String) {
+        if (!hasVerifiedCloudSession(context)) return
         val user = _currentUser.value ?: return
         if (user.userId != userId) return
         scope.launch {
@@ -801,46 +887,153 @@ object CloudSyncManager {
     }
 
     private suspend fun pullCloudStateOnce(context: Context, user: CloudUser) {
+        if (!hasVerifiedCloudSession(context)) return
         runCatching {
-            val url = URL(getWebBaseUrl(context) + "/api/sync/state?userId=" + URLEncoder.encode(user.userId, "UTF-8"))
+            val url = URL(
+                getWebBaseUrl(context) + "/api/sync/state?userId=" +
+                    URLEncoder.encode(user.userId, "UTF-8")
+            )
             val conn = (url.openConnection() as HttpURLConnection).apply {
                 requestMethod = "GET"
-                connectTimeout = 4000
-                readTimeout = 4000
-                setRequestProperty("Authorization", "Bearer ${user.sessionToken}")
+                connectTimeout = 5000
+                readTimeout = 7000
+                setRequestProperty("Authorization", "Bearer " + user.sessionToken)
                 setRequestProperty("X-User-Id", user.userId)
             }
-            if (conn.responseCode in 200..299) {
-                val text = conn.inputStream.bufferedReader().use { it.readText() }
-                val json = JSONObject(text)
-                val pbObj = json.optJSONObject("playbackState")
-                if (pbObj != null) {
-                    val qArr = pbObj.optJSONArray("queueIds") ?: JSONArray()
-                    val qList = mutableListOf<String>()
-                    for (i in 0 until qArr.length()) qList.add(qArr.getString(i))
-                    val remotePb = CloudPlaybackState(
-                        userId = pbObj.optString("userId", user.userId),
-                        activeDeviceId = pbObj.optString("activeDeviceId"),
-                        activeDevicePlatform = pbObj.optString("activeDevicePlatform", "web"),
-                        isPlaying = pbObj.optBoolean("isPlaying", false),
-                        currentTrackId = pbObj.optString("currentTrackId"),
-                        currentTrackTitle = pbObj.optString("currentTrackTitle"),
-                        currentTrackArtist = pbObj.optString("currentTrackArtist"),
-                        currentTrackUri = pbObj.optString("currentTrackUri"),
-                        positionMs = pbObj.optLong("positionMs", 0L),
-                        playbackMode = pbObj.optString("playbackMode", "NORMAL"),
-                        queueIds = qList,
-                        updatedAt = pbObj.optLong("updatedAt", 0L)
+            val responseCode = conn.responseCode
+            if (responseCode !in 200..299) {
+                if (responseCode == 401 || responseCode == 403) {
+                    _syncStatus.value = "Neon Cloud session expired. Sign in again."
+                }
+                conn.disconnect()
+                return@runCatching
+            }
+            val responseText = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val json = JSONObject(responseText)
+            if (json.optString("userId") != user.userId) return@runCatching
+
+            val remoteTracks = json.optJSONArray("tracks") ?: JSONArray()
+            val remotePlaylists = json.optJSONArray("playlists") ?: JSONArray()
+            val remoteFavorites = json.optJSONArray("favoriteIds") ?: JSONArray()
+            val remoteSettings = json.optJSONObject("settings") ?: JSONObject()
+            val signature = JSONObject().apply {
+                put("tracks", remoteTracks)
+                put("playlists", remotePlaylists)
+                put("favoriteIds", remoteFavorites)
+                put("settings", remoteSettings)
+            }.toString()
+
+            if (signature != lastRemoteVaultSignature[user.userId]) {
+                val localSnapshot = loadUserIsolatedSnapshot(context, user.userId)
+                if (remoteTracks.length() > 0 || remotePlaylists.length() > 0) {
+                    val tracks = mutableListOf<AudioItem>()
+                    for (i in 0 until remoteTracks.length()) {
+                        val item = remoteTracks.optJSONObject(i) ?: continue
+                        val id = item.optString("id")
+                        if (id.isBlank()) continue
+                        tracks.add(
+                            AudioItem(
+                                id = id,
+                                title = item.optString("title"),
+                                artist = item.optString("artist"),
+                                album = item.optString("album"),
+                                durationMs = item.optLong("durationMs", item.optLong("duration", 0L)),
+                                uri = Uri.parse(item.optString("uri", "")),
+                                sizeBytes = item.optLong("sizeBytes", 0L)
+                            )
+                        )
+                    }
+
+                    val playlists = mutableListOf<Playlist>()
+                    for (i in 0 until remotePlaylists.length()) {
+                        val item = remotePlaylists.optJSONObject(i) ?: continue
+                        val id = item.optString("id")
+                        if (id.isBlank()) continue
+                        val songs = item.optJSONArray("songIds") ?: JSONArray()
+                        val songIds = mutableListOf<String>()
+                        for (j in 0 until songs.length()) songIds.add(songs.optString(j))
+                        playlists.add(
+                            Playlist(
+                                id = id,
+                                name = item.optString("name"),
+                                songIds = songIds
+                            )
+                        )
+                    }
+                    val favorites = mutableSetOf<String>()
+                    for (i in 0 until remoteFavorites.length()) {
+                        val id = remoteFavorites.optString(i)
+                        if (id.isNotBlank()) favorites.add(id)
+                    }
+                    val language = remoteSettings.optString("languageMode", "auto")
+                    val theme = remoteSettings.optString(
+                        "themeName",
+                        remoteSettings.optString("theme", "DARK")
                     )
-                    val localUpdated = _playbackState.value?.updatedAt ?: 0L
-                    if (remotePb.updatedAt > localUpdated) {
-                        withContext(Dispatchers.Main) {
-                            onRemotePlaybackStateReceived(context, remotePb)
+                    saveUserIsolatedData(
+                        context = context,
+                        tracks = tracks,
+                        playlists = playlists,
+                        favoriteIds = favorites,
+                        languageMode = language,
+                        themeName = theme,
+                        forUserId = user.userId,
+                        syncToCloud = false
+                    )
+                    lastRemoteVaultSignature[user.userId] = signature
+                    val snapshot = loadUserIsolatedSnapshot(context, user.userId)
+                    withContext(Dispatchers.Main) {
+                        if (_currentUser.value?.userId == user.userId) {
+                            onUserVaultLoaded?.invoke(snapshot)
                         }
+                    }
+                } else if (localSnapshot.tracks.isNotEmpty() || localSnapshot.playlists.isNotEmpty()) {
+                    // Migrate local data only when Neon has no library data for this user.
+                    lastRemoteVaultSignature[user.userId] = signature
+                    pushStateToCloudAsync(context, user.userId)
+                } else {
+                    if (json.optBoolean("settingsPersisted", false)) {
+                        saveUserIsolatedData(
+                            context = context,
+                            languageMode = remoteSettings.optString("languageMode", "auto"),
+                            themeName = remoteSettings.optString("themeName", remoteSettings.optString("theme", "DARK")),
+                            forUserId = user.userId,
+                            syncToCloud = false
+                        )
+                    }
+                    lastRemoteVaultSignature[user.userId] = signature
+                }
+            }
+
+            val remotePlayback = json.optJSONObject("playbackState")
+            if (remotePlayback != null) {
+                val queueArray = remotePlayback.optJSONArray("queueIds") ?: JSONArray()
+                val queueIds = mutableListOf<String>()
+                for (i in 0 until queueArray.length()) queueIds.add(queueArray.optString(i))
+                val remoteState = CloudPlaybackState(
+                    userId = remotePlayback.optString("userId", user.userId),
+                    activeDeviceId = remotePlayback.optString("activeDeviceId"),
+                    activeDevicePlatform = remotePlayback.optString("activeDevicePlatform", "web"),
+                    isPlaying = remotePlayback.optBoolean("isPlaying", false),
+                    currentTrackId = remotePlayback.optString("currentTrackId"),
+                    currentTrackTitle = remotePlayback.optString("currentTrackTitle"),
+                    currentTrackArtist = remotePlayback.optString("currentTrackArtist"),
+                    currentTrackUri = remotePlayback.optString("currentTrackUri"),
+                    positionMs = remotePlayback.optLong("positionMs", 0L),
+                    playbackMode = remotePlayback.optString("playbackMode", "NORMAL"),
+                    queueIds = queueIds,
+                    updatedAt = remotePlayback.optLong("updatedAt", 0L)
+                )
+                val localUpdatedAt = _playbackState.value?.updatedAt ?: 0L
+                if (remoteState.updatedAt > localUpdatedAt) {
+                    withContext(Dispatchers.Main) {
+                        onRemotePlaybackStateReceived(context, remoteState)
                     }
                 }
             }
-            conn.disconnect()
+        }.onFailure {
+            _syncStatus.value = "Neon Cloud sync failed. Your local library is still available."
         }
     }
 

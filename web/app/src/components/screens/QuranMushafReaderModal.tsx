@@ -195,7 +195,7 @@ export const QuranMushafReaderModal: React.FC<Props> = ({
     <div
       data-testid="quran-mushaf-reader-modal"
       dir="rtl"
-      className="fixed inset-0 z-50 bg-[#FBF6E9] text-[#1A1612] flex flex-col justify-between overflow-hidden select-none"
+      className="fixed inset-0 z-50 h-[100dvh] w-screen bg-[#FBF6E9] text-[#1A1612] flex flex-col justify-between overflow-hidden select-none"
     >
       {/* Top Mushaf Header Bar */}
       <div className="flex items-center justify-between px-4 py-2 bg-[#EFE6CE] border-b border-[#C8B273] shrink-0">
