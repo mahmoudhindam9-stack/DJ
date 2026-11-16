@@ -134,6 +134,7 @@ fun HibaMusicScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val repository = remember { HibaMusicRepository() }
     var tracks by remember { mutableStateOf<List<HibaTrackLink>>(emptyList()) }
     var query by remember { mutableStateOf("") }
@@ -145,10 +146,10 @@ fun HibaMusicScreen(
         val item = pending
         pending = null
         if (uri != null && item != null) scope.launch {
-            message = "جاري تنزيل " + item.first
+            message = if (isArabic) "جاري تنزيل ${item.first}" else "Downloading ${item.first}"
             runCatching { repository.download(item.second, context.contentResolver, uri) }
-                .onSuccess { message = "تم تنزيل الملف" }
-                .onFailure { message = it.message ?: "فشل التنزيل" }
+                .onSuccess { message = if (isArabic) "تم تنزيل الملف" else "File downloaded" }
+                .onFailure { message = it.message ?: if (isArabic) "فشل التنزيل" else "Download failed" }
         }
     }
 
@@ -158,7 +159,7 @@ fun HibaMusicScreen(
         runCatching {
             if (term.isBlank()) repository.home() else repository.search(term)
         }.onSuccess { tracks = it }
-            .onFailure { message = it.message ?: "تعذر تحميل مكتبة Hiba Music" }
+            .onFailure { message = it.message ?: if (isArabic) "تعذر تحميل مكتبة Hiba Music" else "Failed to load Hiba Music library" }
         loading = false
     }
 
@@ -179,13 +180,13 @@ fun HibaMusicScreen(
             com.example.player.UnifiedPlaybackQueue.hibaTrackToAudioItem(it)
         }
         playerController.playCollection(queue, startIndex = idx)
-        message = "جاري تجهيز: ${track.title}"
+        message = if (isArabic) "جاري تجهيز: ${track.title}" else "Preparing: ${track.title}"
     }
 
     fun queue(track: HibaTrackLink) {
         val item = com.example.player.UnifiedPlaybackQueue.hibaTrackToAudioItem(track)
         playerController.enqueueOnlineSong(item)
-        message = "أضيفت إلى قائمة التشغيل"
+        message = if (isArabic) "أضيفت إلى قائمة التشغيل" else "Added to play queue"
     }
 
     fun download(track: HibaTrackLink) {
@@ -193,7 +194,7 @@ fun HibaMusicScreen(
             runCatching { repository.resolve(track) }.onSuccess { url ->
                 pending = track.title to url
                 saveLauncher.launch(track.title.replace(Regex("[\\\\/:*?\"<>|]"), "_") + ".mp3")
-            }.onFailure { message = it.message ?: "تعذر تجهيز التنزيل" }
+            }.onFailure { message = it.message ?: if (isArabic) "تعذر تجهيز التنزيل" else "Failed to prepare download" }
         }
     }
 
@@ -204,8 +205,8 @@ fun HibaMusicScreen(
                 AudioItem("hiba:" + track.url, track.title, "Hiba Music", "Oldies & Classics", 0L, Uri.parse(url))
             }.onSuccess { item ->
                 OnlineDjBridge.send(item, deck)
-                message = "تم إرسال الأغنية إلى Deck " + deck.name
-            }.onFailure { message = it.message ?: "تعذر إرسال الأغنية إلى DJ" }
+                message = if (isArabic) "تم إرسال الأغنية إلى Deck ${deck.name}" else "Sent track to Deck ${deck.name}"
+            }.onFailure { message = it.message ?: if (isArabic) "تعذر إرسال الأغنية إلى DJ" else "Failed to send track to DJ" }
         }
     }
 
@@ -218,12 +219,12 @@ fun HibaMusicScreen(
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             singleLine = true,
             shape = androidx.compose.foundation.shape.RoundedCornerShape(14.dp),
-            placeholder = { Text("ابحث في أرشيف الأغاني القديمة") },
+            placeholder = { Text(if (isArabic) "ابحث في أرشيف الأغاني القديمة" else "Search classic & oldies archive") },
             leadingIcon = { Icon(Icons.Filled.Search, null) },
             trailingIcon = if (query.isNotBlank()) {
                 {
                     IconButton(onClick = { query = "" }) {
-                        Icon(Icons.Filled.Close, contentDescription = "مسح")
+                        Icon(Icons.Filled.Close, contentDescription = if (isArabic) "مسح" else "Clear")
                     }
                 }
             } else null,
@@ -233,7 +234,9 @@ fun HibaMusicScreen(
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
         } else if (tracks.isEmpty()) {
             Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                TextButton(onClick = { scope.launch { refresh(query.trim()) } }) { Text("إعادة المحاولة") }
+                TextButton(onClick = { scope.launch { refresh(query.trim()) } }) {
+                    Text(if (isArabic) "إعادة المحاولة" else "Retry")
+                }
             }
         } else {
             LazyColumn(
@@ -248,10 +251,10 @@ fun HibaMusicScreen(
                             Icon(Icons.Filled.MusicNote, null, Modifier.size(24.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(track.title, Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis, fontWeight = FontWeight.SemiBold)
-                            IconButton(onClick = { play(track) }) { Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play") }
-                            IconButton(onClick = { queue(track) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "Add to queue") }
-                            IconButton(onClick = { deckTrack = track }) { Icon(Icons.Filled.Headset, "Send to DJ Deck") }
-                            IconButton(onClick = { download(track) }) { Icon(Icons.Filled.Download, "Download") }
+                            IconButton(onClick = { play(track) }) { Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (isArabic) "تشغيل" else "Play") }
+                            IconButton(onClick = { queue(track) }) { Icon(Icons.AutoMirrored.Filled.PlaylistAdd, if (isArabic) "إضافة للقائمة" else "Add to queue") }
+                            IconButton(onClick = { deckTrack = track }) { Icon(Icons.Filled.Headset, if (isArabic) "إرسال للـ DJ" else "Send to DJ Deck") }
+                            IconButton(onClick = { download(track) }) { Icon(Icons.Filled.Download, if (isArabic) "تنزيل" else "Download") }
                         }
                     }
                 }
@@ -262,15 +265,15 @@ fun HibaMusicScreen(
     deckTrack?.let { selected ->
         AlertDialog(
             onDismissRequest = { deckTrack = null },
-            title = { Text("إرسال الأغنية إلى DJ") },
-            text = { Text(selected.title + " — اختر Deck") },
+            title = { Text(if (isArabic) "إرسال الأغنية إلى DJ" else "Send Song to DJ") },
+            text = { Text(selected.title + if (isArabic) " — اختر Deck" else " — Choose Deck") },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.A) }) { Text("Deck A") }
                     TextButton(onClick = { deckTrack = null; sendToDeck(selected, OnlineDeckTarget.B) }) { Text("Deck B") }
                 }
             },
-            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text("إلغاء") } }
+            dismissButton = { TextButton(onClick = { deckTrack = null }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
         )
     }
 }

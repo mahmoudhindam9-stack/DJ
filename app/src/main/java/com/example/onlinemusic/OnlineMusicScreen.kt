@@ -58,6 +58,7 @@ fun OnlineMusicScreen(
     playlistRepo: PlaylistRepository
 ) {
     val scope = rememberCoroutineScope()
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var selectedSource by rememberSaveable { mutableStateOf("albumaty") }
     var showQueue by remember { mutableStateOf(false) }
 
@@ -72,19 +73,19 @@ fun OnlineMusicScreen(
             FilterChip(
                 selected = selectedSource == "albumaty",
                 onClick = { selectedSource = "albumaty" },
-                label = { Text("🇦🇪 عربي", maxLines = 1) },
+                label = { Text(if (isArabic) "🇦🇪 عربي" else "🇦🇪 Arabic", maxLines = 1) },
                 modifier = Modifier.weight(1f)
             )
             FilterChip(
                 selected = selectedSource == "hiba",
                 onClick = { selectedSource = "hiba" },
-                label = { Text("🎼 كلاسيك", maxLines = 1) },
+                label = { Text(if (isArabic) "🎼 كلاسيك" else "🎼 Classics", maxLines = 1) },
                 modifier = Modifier.weight(1f)
             )
             FilterChip(
                 selected = selectedSource == "audius",
                 onClick = { selectedSource = "audius" },
-                label = { Text("🌎 أجنبي", maxLines = 1) },
+                label = { Text(if (isArabic) "🌎 أجنبي" else "🌎 Foreign", maxLines = 1) },
                 modifier = Modifier.weight(1f)
             )
             IconButton(
@@ -96,13 +97,13 @@ fun OnlineMusicScreen(
                 },
                 modifier = Modifier.size(36.dp)
             ) {
-                Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                Icon(Icons.Filled.Refresh, contentDescription = if (isArabic) "تحديث" else "Refresh")
             }
             IconButton(
                 onClick = { showQueue = true },
                 modifier = Modifier.size(36.dp)
             ) {
-                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = "Queue")
+                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = if (isArabic) "قائمة التشغيل" else "Queue")
             }
         }
 
@@ -140,6 +141,7 @@ private fun AlbumatyOnlineScreen(
     scope: CoroutineScope
 ) {
     val context = LocalContext.current
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
 
@@ -270,18 +272,18 @@ private fun AlbumatyOnlineScreen(
                 modifier = Modifier.weight(1f).testTag("ai_prompt_input"),
                 singleLine = true,
                 shape = RoundedCornerShape(14.dp),
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "بحث") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = if (isArabic) "بحث" else "Search") },
                 trailingIcon = if (query.isNotBlank()) {
                     {
                         IconButton(onClick = {
                             query = ""
                             viewModel.clearAlbumatySearch()
                         }) {
-                            Icon(Icons.Filled.Close, contentDescription = "مسح")
+                            Icon(Icons.Filled.Close, contentDescription = if (isArabic) "مسح" else "Clear")
                         }
                     }
                 } else null,
-                placeholder = { Text("ابحث أو اطلب مود (مثال: حزين، روقان، فرح)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                placeholder = { Text(if (isArabic) "ابحث أو اطلب مود (مثال: حزين، روقان، فرح)" else "Search or ask AI mood (e.g. sad, chill, party)", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                 keyboardActions = KeyboardActions(onSearch = {
                     val trimmed = query.trim()
@@ -300,7 +302,7 @@ private fun AlbumatyOnlineScreen(
                 enabled = query.isNotBlank() && !viewModel.isBuildingMoodPlaylist,
                 modifier = Modifier.size(48.dp).testTag("ai_generate_button")
             ) {
-                Icon(Icons.Filled.AutoAwesome, contentDescription = "اختيار ذكي")
+                Icon(Icons.Filled.AutoAwesome, contentDescription = if (isArabic) "اختيار ذكي" else "Smart AI Pick")
             }
         }
 
@@ -316,7 +318,7 @@ private fun AlbumatyOnlineScreen(
                 item(key = "clear_mood") {
                     AssistChip(
                         onClick = { viewModel.clearMoodPlaylist() },
-                        label = { Text("✕ إغلاق القائمة") }
+                        label = { Text(if (isArabic) "✕ إغلاق القائمة" else "✕ Close Mix") }
                     )
                 }
             }
@@ -357,7 +359,7 @@ private fun AlbumatyOnlineScreen(
                         onClick = { viewModel.retryLastMoodPlaylist() },
                         modifier = Modifier.testTag("mood_retry_button")
                     ) {
-                        Text("إعادة المحاولة")
+                        Text(if (isArabic) "إعادة المحاولة" else "Retry")
                     }
                 }
             }
@@ -407,7 +409,7 @@ private fun AlbumatyOnlineScreen(
                                 enabled = !viewModel.isBuildingMoodPlaylist,
                                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
-                                Text("تحديث")
+                                Text(if (isArabic) "تحديث" else "Refresh")
                             }
                             FilledTonalButton(
                                 onClick = {
@@ -420,7 +422,7 @@ private fun AlbumatyOnlineScreen(
                                 enabled = !viewModel.isBuildingMoodPlaylist,
                                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
                             ) {
-                                Text("إضافة الكل")
+                                Text(if (isArabic) "إضافة الكل" else "Queue All")
                             }
                         }
                     }
@@ -450,13 +452,13 @@ private fun AlbumatyOnlineScreen(
                         }
                     }
                     if (searchAlbums.isNotEmpty()) {
-                        item(key = "s_albums_hdr") { SectionHeader("الألبومات") }
+                        item(key = "s_albums_hdr") { SectionHeader(if (isArabic) "الألبومات" else "Albums") }
                         items(searchAlbums, key = { "s_album_${it.url}" }) { link ->
                             SectionLinkCard(link) { activate(it, searchAlbums) }
                         }
                     }
                     if (searchArtists.isNotEmpty()) {
-                        item(key = "s_artists_hdr") { SectionHeader("الفنانون") }
+                        item(key = "s_artists_hdr") { SectionHeader(if (isArabic) "الفنانون" else "Artists") }
                         items(searchArtists, key = { "s_artist_${it.url}" }) { link ->
                             SectionLinkCard(link) { activate(it, searchArtists) }
                         }
@@ -515,13 +517,13 @@ private fun AlbumatyOnlineScreen(
                         }
                     }
                     if (localAlbums.isNotEmpty()) {
-                        item(key = "h_albums_hdr") { SectionHeader("ألبومات جديدة") }
+                        item(key = "h_albums_hdr") { SectionHeader(if (isArabic) "ألبومات جديدة" else "New Albums") }
                         items(localAlbums.take(20), key = { "h_album_${it.url}" }) { link ->
                             SectionLinkCard(link) { activate(it, localAlbums) }
                         }
                     }
                     if (localArtists.isNotEmpty()) {
-                        item(key = "h_artists_hdr") { SectionHeader("فنانون") }
+                        item(key = "h_artists_hdr") { SectionHeader(if (isArabic) "فنانون" else "Artists") }
                         items(localArtists.take(24), key = { "h_artist_${it.url}" }) { link ->
                             SectionLinkCard(link) { activate(it, localArtists) }
                         }
@@ -549,6 +551,7 @@ private fun AudiusOnlineScreen(
     scope: CoroutineScope
 ) {
     val context = LocalContext.current
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var query by rememberSaveable { mutableStateOf("") }
     var pendingDownload by remember { mutableStateOf<PendingOnlineDownload?>(null) }
 
@@ -659,18 +662,18 @@ private fun AudiusOnlineScreen(
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             singleLine = true,
             shape = RoundedCornerShape(14.dp),
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = if (isArabic) "بحث" else "Search") },
             trailingIcon = if (query.isNotBlank()) {
                 {
                     IconButton(onClick = {
                         query = ""
                         viewModel.clearAudiusSearch()
                     }) {
-                        Icon(Icons.Filled.Close, contentDescription = "Clear")
+                        Icon(Icons.Filled.Close, contentDescription = if (isArabic) "مسح" else "Clear")
                     }
                 }
             } else null,
-            placeholder = { Text("Search foreign music") },
+            placeholder = { Text(if (isArabic) "ابحث في الموسيقى الأجنبية" else "Search foreign music") },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
             keyboardActions = KeyboardActions(onSearch = {
                 val trimmed = query.trim()
@@ -886,6 +889,7 @@ private fun OnlineSectionScreen(
 
 @Composable
 private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     com.example.ui.components.DjSurfaceCard(Modifier.fillMaxWidth().clickable { onOpen(link) }) {
         Row(
             Modifier
@@ -916,7 +920,7 @@ private fun SectionLinkCard(link: AlbumatyLink, onOpen: (AlbumatyLink) -> Unit) 
                 style = MaterialTheme.typography.bodyMedium
             )
             TextButton(onClick = { onOpen(link) }) {
-                Text("فتح", fontWeight = FontWeight.Bold)
+                Text(if (isArabic) "فتح" else "Open", fontWeight = FontWeight.Bold)
             }
         }
     }
@@ -1032,26 +1036,30 @@ enum class OnlineDeckTarget { A, B }
 
 @Composable
 private fun OnlineDeckButton(onSelected: (OnlineDeckTarget) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var showPicker by remember { mutableStateOf(false) }
     IconButton(onClick = { showPicker = true }) {
-        Icon(Icons.Filled.Headset, "Send to DJ Deck")
+        Icon(Icons.Filled.Headset, if (isArabic) "إرسال إلى DJ Deck" else "Send to DJ Deck")
     }
     if (showPicker) {
         AlertDialog(
             onDismissRequest = { showPicker = false },
-            title = { Text("Send song to which Deck?") },
-            text = { Text("Select A or B") },
+            title = { Text(if (isArabic) "إرسال الأغنية إلى أي Deck؟" else "Send song to which Deck?") },
+            text = { Text(if (isArabic) "اختر Deck A أو Deck B" else "Select A or B") },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     TextButton(onClick = {
                         showPicker = false
                         onSelected(OnlineDeckTarget.A)
-                    }) { Text("A") }
+                    }) { Text("Deck A") }
                     TextButton(onClick = {
                         showPicker = false
                         onSelected(OnlineDeckTarget.B)
-                    }) { Text("B") }
+                    }) { Text("Deck B") }
                 }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) { Text(if (isArabic) "إلغاء" else "Cancel") }
             }
         )
     }

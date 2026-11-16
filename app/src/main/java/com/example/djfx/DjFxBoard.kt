@@ -24,6 +24,7 @@ import androidx.compose.ui.unit.sp
 
 @Composable
 fun DjFxBoard(controller: DjFxController) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var showBrowser by remember { mutableStateOf(false) }
 
     Column(
@@ -37,7 +38,7 @@ fun DjFxBoard(controller: DjFxController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "DJ FX / SAMPLER",
+                if (isArabic) "لوحة السامبلر والمؤثرات" else "DJ FX / SAMPLER",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary
@@ -47,9 +48,9 @@ fun DjFxBoard(controller: DjFxController) {
                 contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
                 modifier = Modifier.height(32.dp)
             ) {
-                Icon(Icons.Filled.LibraryMusic, contentDescription = "Browse FX", modifier = Modifier.size(16.dp))
+                Icon(Icons.Filled.LibraryMusic, contentDescription = if (isArabic) "تصفح المؤثرات" else "Browse FX", modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("Library", fontSize = 12.sp)
+                Text(if (isArabic) "المكتبة" else "Library", fontSize = 12.sp)
             }
         }
 
@@ -75,7 +76,7 @@ fun DjFxBoard(controller: DjFxController) {
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Text(
-                                    controller.bankLabels[bank] ?: "BANK $bank",
+                                    controller.bankLabels[bank] ?: (if (isArabic) "بنك $bank" else "BANK $bank"),
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
@@ -129,10 +130,10 @@ fun DjFxBoard(controller: DjFxController) {
                                         onClick = { controller.removeFxFromPad(controller.currentBank, index) },
                                         modifier = Modifier.align(Alignment.TopEnd).size(20.dp)
                                     ) {
-                                        Icon(Icons.Filled.Close, contentDescription = "Remove", modifier = Modifier.size(12.dp))
+                                        Icon(Icons.Filled.Close, contentDescription = if (isArabic) "إزالة" else "Remove", modifier = Modifier.size(12.dp))
                                     }
                                 } else {
-                                    Icon(Icons.Filled.Add, contentDescription = "Add FX", modifier = Modifier.size(24.dp))
+                                    Icon(Icons.Filled.Add, contentDescription = if (isArabic) "إضافة مؤثر" else "Add FX", modifier = Modifier.size(24.dp))
                                 }
                             }
                         }
@@ -150,6 +151,7 @@ fun DjFxBoard(controller: DjFxController) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var selectedCategory by remember { mutableStateOf("All") }
     val categories = listOf("All", "Favorites") + controller.allFx.map { it.category }.distinct().filter { it.isNotBlank() }
 
@@ -167,8 +169,8 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
         modifier = Modifier.fillMaxSize().padding(16.dp),
         title = {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("FX Library", fontWeight = FontWeight.Bold)
-                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = "Close") }
+                Text(if (isArabic) "مكتبة المؤثرات الصوتية" else "FX Library", fontWeight = FontWeight.Bold)
+                IconButton(onClick = onDismiss) { Icon(Icons.Filled.Close, contentDescription = if (isArabic) "إغلاق" else "Close") }
             }
         },
         text = {
@@ -177,19 +179,24 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                     onClick = { pickerLauncher.launch(arrayOf("audio/*")) },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Icon(Icons.Filled.Folder, contentDescription = "Import Local Files")
+                    Icon(Icons.Filled.Folder, contentDescription = if (isArabic) "استيراد ملفات محلية" else "Import Local Files")
                     Spacer(Modifier.width(8.dp))
-                    Text("Import Local Files")
+                    Text(if (isArabic) "استيراد ملفات محلية" else "Import Local Files")
                 }
 
                 Spacer(Modifier.height(12.dp))
 
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     lazyItems(categories) { cat ->
+                        val catLabel = when (cat) {
+                            "All" -> if (isArabic) "الكل" else "All"
+                            "Favorites" -> if (isArabic) "المفضلة" else "Favorites"
+                            else -> cat
+                        }
                         FilterChip(
                             selected = selectedCategory == cat,
                             onClick = { selectedCategory = cat },
-                            label = { Text(cat) }
+                            label = { Text(catLabel) }
                         )
                     }
                 }
@@ -224,7 +231,7 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                                     ) {
                                         Icon(
                                             if (fx.isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                            contentDescription = "Favorite",
+                                            contentDescription = if (isArabic) "مفضلة" else "Favorite",
                                             tint = if (fx.isFavorite) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
@@ -232,14 +239,14 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                                         onClick = { controller.playPreview(fx.localUri ?: fx.sourceUrl) },
                                         modifier = Modifier.size(36.dp)
                                     ) {
-                                        Icon(Icons.Filled.PlayArrow, contentDescription = "Preview")
+                                        Icon(Icons.Filled.PlayArrow, contentDescription = if (isArabic) "معاينة" else "Preview")
                                     }
                                     Button(
                                         onClick = { showPadSelector = fx },
                                         contentPadding = PaddingValues(horizontal = 12.dp),
                                         modifier = Modifier.height(36.dp)
                                     ) {
-                                        Text("Assign")
+                                        Text(if (isArabic) "تعيين" else "Assign")
                                     }
                                 }
                             }
@@ -254,7 +261,7 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
     if (showPadSelector != null) {
         AlertDialog(
             onDismissRequest = { showPadSelector = null },
-            title = { Text("Assign to Pad") },
+            title = { Text(if (isArabic) "تعيين للزر (Pad)" else "Assign to Pad") },
             text = {
                 Column {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
@@ -262,7 +269,7 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                             FilterChip(
                                 selected = selectedPadBank == b,
                                 onClick = { selectedPadBank = b },
-                                label = { Text(controller.bankLabels[b] ?: "Bank $b") }
+                                label = { Text(controller.bankLabels[b] ?: (if (isArabic) "بنك $b" else "Bank $b")) }
                             )
                         }
                     }
@@ -295,11 +302,12 @@ fun DjFxBrowserDialog(controller: DjFxController, onDismiss: () -> Unit) {
                     showPadSelector = null
                     onDismiss()
                 }) {
-                    Text("Assign to ${controller.bankLabels[selectedPadBank] ?: "Bank $selectedPadBank"} ${selectedPadIndex + 1}")
+                    val bankLabel = controller.bankLabels[selectedPadBank] ?: (if (isArabic) "بنك $selectedPadBank" else "Bank $selectedPadBank")
+                    Text(if (isArabic) "تعيين إلى $bankLabel رقم ${selectedPadIndex + 1}" else "Assign to $bankLabel ${selectedPadIndex + 1}")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showPadSelector = null }) { Text("Cancel") }
+                TextButton(onClick = { showPadSelector = null }) { Text(if (isArabic) "إلغاء" else "Cancel") }
             }
         )
     }

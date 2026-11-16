@@ -30,9 +30,32 @@ import com.example.ui.components.DjSurfaceCard
 import com.example.ui.components.PremiumBackdrop
 import kotlin.math.roundToInt
 
+private fun translateEqPreset(preset: String, isArabic: Boolean): String {
+    if (!isArabic) return preset
+    return when (preset.lowercase()) {
+        "flat" -> "مسطح (Flat)"
+        "bass boost" -> "تعزيز الباس"
+        "treble boost" -> "تعزيز الحدة"
+        "vocal" -> "صوت بشري"
+        "rock" -> "روك"
+        "pop" -> "بوب"
+        "jazz" -> "جاز"
+        "electronic" -> "إلكتروني"
+        "classical" -> "كلاسيكي"
+        "hip hop" -> "هيب هوب"
+        "dance" -> "دانس"
+        "live" -> "حفل مباشر"
+        "club" -> "نادي"
+        "acoustic" -> "أكوستيك"
+        "techno" -> "تكنو"
+        else -> preset
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EqualizerScreen(eqController: EqualizerController) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var showSaveDialog by remember { mutableStateOf(false) }
     var presetNameInput by remember { mutableStateOf("") }
     var presetSaveError by remember { mutableStateOf<String?>(null) }
@@ -54,14 +77,14 @@ fun EqualizerScreen(eqController: EqualizerController) {
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "MASTER EQUALIZER",
+                    text = if (isArabic) "معادل الصوت الاحترافي" else "MASTER EQUALIZER",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Black,
-                    letterSpacing = 2.sp,
+                    letterSpacing = if (isArabic) 0.sp else 2.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "System-wide audio processing",
+                    text = if (isArabic) "معالجة الصوت الشاملة للتطبيق" else "System-wide audio processing",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -86,11 +109,11 @@ fun EqualizerScreen(eqController: EqualizerController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "PRESETS",
+                if (isArabic) "الأوضاع المسبقة" else "PRESETS",
                 modifier = Modifier,
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
-                letterSpacing = 1.sp,
+                letterSpacing = if (isArabic) 0.sp else 1.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Row(
@@ -102,7 +125,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     FilledTonalButton(
                         onClick = {
                             eqController.updateCustomPreset(editingName)
-                                .onSuccess { presetStatusMessage = "Updated \"${it.name}\"" }
+                                .onSuccess { presetStatusMessage = if (isArabic) "تم تحديث \"${it.name}\"" else "Updated \"${it.name}\"" }
                                 .onFailure { presetStatusMessage = it.message }
                         },
                         enabled = eqController.isEnabled,
@@ -111,7 +134,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     ) {
                         Icon(Icons.Filled.Save, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(Modifier.width(4.dp))
-                        Text("Update $editingName", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (isArabic) "تحديث $editingName" else "Update $editingName", maxLines = 1, overflow = TextOverflow.Ellipsis)
                     }
                 }
                 OutlinedButton(
@@ -126,7 +149,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                 ) {
                     Icon(Icons.Filled.BookmarkAdd, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Save Preset")
+                    Text(if (isArabic) "حفظ الوضع" else "Save Preset")
                 }
             }
         }
@@ -170,7 +193,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                             ) {
                                 Icon(
                                     Icons.Filled.Close,
-                                    contentDescription = "Delete ${custom.name}",
+                                    contentDescription = if (isArabic) "حذف ${custom.name}" else "Delete ${custom.name}",
                                     modifier = Modifier.size(14.dp)
                                 )
                             }
@@ -194,7 +217,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     onClick = { eqController.applyPreset(preset) },
                     label = {
                         Text(
-                            preset,
+                            translateEqPreset(preset, isArabic),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                         )
@@ -220,11 +243,11 @@ fun EqualizerScreen(eqController: EqualizerController) {
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
-                    "FREQUENCIES",
+                    if (isArabic) "نطاقات الترددات" else "FREQUENCIES",
                     modifier = Modifier,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.sp,
+                    letterSpacing = if (isArabic) 0.sp else 1.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Spacer(modifier = Modifier.height(16.dp))
@@ -295,7 +318,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "BASS BOOST",
+                        if (isArabic) "تعزيز الباس (Bass)" else "BASS BOOST",
                         modifier = Modifier,
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
@@ -331,7 +354,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        "TREBLE BOOST",
+                        if (isArabic) "تعزيز الحدة (Treble)" else "TREBLE BOOST",
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
@@ -373,11 +396,11 @@ fun EqualizerScreen(eqController: EqualizerController) {
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        "PREAMP GAIN",
+                        if (isArabic) "تضخيم مسبق (Preamp)" else "PREAMP GAIN",
                         modifier = Modifier,
                         style = MaterialTheme.typography.labelMedium,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp,
+                        letterSpacing = if (isArabic) 0.sp else 1.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
@@ -407,7 +430,7 @@ fun EqualizerScreen(eqController: EqualizerController) {
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("Save Custom Preset") },
+            title = { Text(if (isArabic) "حفظ وضع مخصص" else "Save Custom Preset") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
@@ -416,13 +439,13 @@ fun EqualizerScreen(eqController: EqualizerController) {
                             presetNameInput = it
                             presetSaveError = null
                         },
-                        label = { Text("Preset Name") },
+                        label = { Text(if (isArabic) "اسم الوضع" else "Preset Name") },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().testTag("eq_preset_name_input")
                     )
                     if (eqController.customPresets.isNotEmpty()) {
                         Text(
-                            "Or tap to overwrite:",
+                            if (isArabic) "أو اضغط للكتابة فوق وضع موجود:" else "Or tap to overwrite:",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -453,19 +476,19 @@ fun EqualizerScreen(eqController: EqualizerController) {
                         val trimmed = presetNameInput.trim()
                         val res = eqController.saveCustomPreset(trimmed)
                         res.onSuccess {
-                            presetStatusMessage = "Saved custom preset \"${it.name}\""
+                            presetStatusMessage = if (isArabic) "تم حفظ الوضع المخصص \"${it.name}\"" else "Saved custom preset \"${it.name}\""
                             showSaveDialog = false
                         }.onFailure {
-                            presetSaveError = it.message ?: "Invalid preset name"
+                            presetSaveError = it.message ?: (if (isArabic) "اسم غير صالح" else "Invalid preset name")
                         }
                     },
                     modifier = Modifier.testTag("eq_confirm_save_preset")
                 ) {
-                    Text(if (eqController.isCustomPreset(presetNameInput)) "Overwrite" else "Save")
+                    Text(if (eqController.isCustomPreset(presetNameInput)) (if (isArabic) "استبدال" else "Overwrite") else (if (isArabic) "حفظ" else "Save"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSaveDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showSaveDialog = false }) { Text(if (isArabic) "إلغاء" else "Cancel") }
             }
         )
     }
@@ -473,23 +496,28 @@ fun EqualizerScreen(eqController: EqualizerController) {
     presetToDelete?.let { targetName ->
         AlertDialog(
             onDismissRequest = { presetToDelete = null },
-            title = { Text("Delete Custom Preset") },
-            text = { Text("Delete custom preset \"$targetName\"? Built-in presets are unaffected.") },
+            title = { Text(if (isArabic) "حذف الوضع المخصص" else "Delete Custom Preset") },
+            text = {
+                Text(
+                    if (isArabic) "هل تريد حذف الوضع المخصص \"$targetName\"؟ لن تتأثر الأوضاع الافتراضية."
+                    else "Delete custom preset \"$targetName\"? Built-in presets are unaffected."
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
                         if (eqController.deleteCustomPreset(targetName)) {
-                            presetStatusMessage = "Deleted \"$targetName\""
+                            presetStatusMessage = if (isArabic) "تم حذف \"$targetName\"" else "Deleted \"$targetName\""
                         }
                         presetToDelete = null
                     },
                     modifier = Modifier.testTag("eq_confirm_delete_preset")
                 ) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                    Text(if (isArabic) "حذف" else "Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { presetToDelete = null }) { Text("Cancel") }
+                TextButton(onClick = { presetToDelete = null }) { Text(if (isArabic) "إلغاء" else "Cancel") }
             }
         )
     }

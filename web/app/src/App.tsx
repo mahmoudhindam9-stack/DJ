@@ -108,6 +108,7 @@ export const App: React.FC = () => {
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
+  const [updateBannerDismissed, setUpdateBannerDismissed] = useState(false);
 
   const themeColors = THEMES[currentTheme] || THEMES.DJ_BLUE;
 
@@ -291,15 +292,17 @@ export const App: React.FC = () => {
       } else if (e.key === '1' && e.altKey) {
         setActiveTab('LIBRARY');
       } else if (e.key === '2' && e.altKey) {
-        setActiveTab('DJ_MIXER');
-      } else if (e.key === '3' && e.altKey) {
         setActiveTab('EQUALIZER');
-      } else if (e.key === '4' && e.altKey) {
-        setActiveTab('KARAOKE');
-      } else if (e.key === '5' && e.altKey) {
-        setActiveTab('RADIO');
-      } else if (e.key === '6' && e.altKey) {
+      } else if (e.key === '3' && e.altKey) {
         setActiveTab('ONLINE_MUSIC');
+      } else if (e.key === '4' && e.altKey) {
+        setActiveTab('RADIO');
+      } else if (e.key === '5' && e.altKey) {
+        setActiveTab('QURAN');
+      } else if (e.key === '6' && e.altKey) {
+        setActiveTab('DJ_MIXER');
+      } else if (e.key === '7' && e.altKey) {
+        setActiveTab('KARAOKE');
       }
     };
 
@@ -769,18 +772,9 @@ export const App: React.FC = () => {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [appDataLoaded, autoUpdatesEnabled, isArabic]);
 
-  useEffect(() => {
-    if (!appDataLoaded || !autoUpdatesEnabled || isPlaying || !updateInfo?.updateAvailable ||
-        !updateInfo.canAutoInstall || updateStatus === 'installing' || updateStatus === 'error') return;
-    setUpdateStatus('installing');
-    setUpdateMessage(updateInfo.downloadedPackageAvailable
-      ? (isArabic ? 'يتم التحقق من ملف التحديث الموجود في Downloads قبل التثبيت...' : 'Verifying the saved update ZIP in Downloads before installation...')
-      : (isArabic ? 'يتم تنزيل التحديث إلى Downloads والتحقق منه قبل التثبيت...' : 'Downloading the update to Downloads and verifying it before installation...'));
-    updateService.installUpdate().catch((error) => {
-      setUpdateStatus('error');
-      setUpdateMessage(error instanceof Error ? error.message : (isArabic ? 'تعذر بدء التحديث التلقائي.' : 'Automatic installation failed.'));
-    });
-  }, [appDataLoaded, autoUpdatesEnabled, isPlaying, isArabic, updateInfo, updateStatus]);
+  // Note: Automatic background downloading/installation of updates is disabled by design.
+  // When a newer release is detected, a compact notification banner appears at the top of the app,
+  // and downloading/installing happens only when the user explicitly clicks the update button.
 
 
 
@@ -1031,6 +1025,43 @@ export const App: React.FC = () => {
         onOpenControlPanel={handleOpenControlPanel}
       />
 
+      {/* Very small compact top update notification banner when a new version is detected */}
+      {updateInfo?.updateAvailable && !updateBannerDismissed && (
+        <div
+          data-testid="top-update-banner"
+          className="px-3 py-1 border-b flex items-center justify-between gap-2 text-[11px] font-bold shrink-0"
+          style={{
+            backgroundColor: `${themeColors.primary}22`,
+            borderColor: `${themeColors.primary}55`,
+            color: themeColors.textPrimary,
+          }}
+        >
+          <span>
+            {isArabic
+              ? `🔔 تتوفر نسخة جديدة (${updateInfo.latestVersion}) • يمكنك تنزيلها من زر التحديثات في الإعدادات`
+              : `🔔 New version available (${updateInfo.latestVersion}) • Download via Check for Updates in Settings`}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={() => setActiveTab('SETTINGS')}
+              className="px-2 py-0.5 rounded text-[10px] font-extrabold"
+              style={{ backgroundColor: themeColors.primary, color: '#ffffff' }}
+            >
+              {isArabic ? 'صفحة التحديث' : 'Open Updates'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setUpdateBannerDismissed(true)}
+              className="px-1.5 py-0.5 rounded hover:bg-white/10 text-xs"
+              title={isArabic ? 'إغلاق التنبيه' : 'Dismiss'}
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Screen Content Viewport */}
       <main className="flex-1 flex flex-col min-h-0 overflow-hidden relative">
         {activeTab === 'LIBRARY' && (
@@ -1184,29 +1215,32 @@ export const App: React.FC = () => {
         )}
       </main>
 
-      {/* Docked Desktop MiniPlayer */}
-      <MiniPlayer
-        currentSong={currentSong}
-        isPlaying={isPlaying}
-        currentTimeMs={currentTimeMs}
-        durationMs={durationMs}
-        playbackMode={playbackMode}
-        volume={volume}
-        crossfadeDurationSeconds={crossfadeDurationSeconds}
-        themeColors={themeColors}
-        isArabic={isArabic}
-        onCrossfadeDurationChange={handleCrossfadeDurationChange}
-        onPlayPause={handlePlayPause}
-        onNext={handleNext}
-        onPrev={handlePrev}
-        onSeek={handleSeek}
-        onSeekBy={handleSeekBy}
-        onVolumeChange={handleVolumeChange}
-        onTogglePlaybackMode={handleTogglePlaybackMode}
-        onOpenQueue={() => setShowQueue(true)}
-        onOpenNowPlaying={() => setShowNowPlaying(true)}
-        onOpenEqualizer={() => setActiveTab('EQUALIZER')}
-      />
+      {/* Docked Desktop MiniPlayer (hidden on DJ Studio so the decks and pads have full screen space; compact single-line bar on Equalizer) */}
+      {activeTab !== 'DJ_MIXER' && (
+        <MiniPlayer
+          currentSong={currentSong}
+          isPlaying={isPlaying}
+          currentTimeMs={currentTimeMs}
+          durationMs={durationMs}
+          playbackMode={playbackMode}
+          volume={volume}
+          crossfadeDurationSeconds={crossfadeDurationSeconds}
+          themeColors={themeColors}
+          isArabic={isArabic}
+          compact={activeTab === 'EQUALIZER'}
+          onCrossfadeDurationChange={handleCrossfadeDurationChange}
+          onPlayPause={handlePlayPause}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          onSeek={handleSeek}
+          onSeekBy={handleSeekBy}
+          onVolumeChange={handleVolumeChange}
+          onTogglePlaybackMode={handleTogglePlaybackMode}
+          onOpenQueue={() => setShowQueue(true)}
+          onOpenNowPlaying={() => setShowNowPlaying(true)}
+          onOpenEqualizer={() => setActiveTab('EQUALIZER')}
+        />
+      )}
 
       {/* Fullscreen Now Playing Overlay */}
       {showNowPlaying && (

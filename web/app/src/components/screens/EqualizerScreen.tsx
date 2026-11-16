@@ -22,6 +22,25 @@ interface EqualizerScreenProps {
   isArabic: boolean;
 }
 
+const PRESET_AR_NAMES: Record<string, string> = {
+  Flat: 'مسطح (Flat)',
+  'Bass Boost': 'تعزيز الباص',
+  'Treble Boost': 'تعزيز التريبل',
+  Vocal: 'إبراز الصوت (Vocal)',
+  Rock: 'روك (Rock)',
+  Pop: 'بوب (Pop)',
+  Jazz: 'جاز (Jazz)',
+  Electronic: 'إلكتروني (EDM)',
+  Classical: 'كلاسيكي',
+  'Hip Hop': 'هيب هوب',
+  Dance: 'دانس (Dance)',
+  Live: 'حفل مباشر (Live)',
+  Club: 'نادي (Club)',
+  Acoustic: 'أكوستيك',
+  Techno: 'تكنو (Techno)',
+  Custom: 'مخصص (Custom)',
+};
+
 export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, isArabic }) => {
   const [eqEnabled, setEqEnabled] = useState(mainAudioEngine.eqEnabled);
   const [bands, setBands] = useState<EqualizerBand[]>(mainAudioEngine.getBands());
@@ -295,14 +314,22 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
     reader.readAsText(file);
   };
 
+  const updateBandFromPointer = (bandId: number, clientY: number, rect: DOMRect) => {
+    if (!eqEnabled || rect.height <= 0) return;
+    const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+    const rawDb = -15 + ratio * 30;
+    const snappedDb = Math.round(rawDb * 2) / 2;
+    handleBandChange(bandId, Math.max(-15, Math.min(15, snappedDb)));
+  };
+
   return (
     <div
-      className="h-full min-h-0 flex flex-col justify-between overflow-hidden p-3 gap-2.5 select-none"
+      className="h-full min-h-0 flex flex-col justify-between overflow-y-auto p-3 gap-2.5 select-none"
       style={{ color: themeColors.textPrimary }}
     >
-      {/* Top Control Header (No Subtitles) */}
+      {/* Top Control Header */}
       <div
-        className="rounded-xl p-2.5 border shrink-0 flex flex-wrap items-center justify-between gap-2"
+        className="rounded-xl px-3.5 py-2.5 border shrink-0 flex flex-wrap items-center justify-between gap-2 shadow-sm"
         style={{
           backgroundColor: themeColors.surface,
           borderColor: themeColors.border,
@@ -310,19 +337,29 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
       >
         <div className="flex items-center gap-2.5">
           <div
-            className="w-8 h-8 rounded-lg flex items-center justify-center"
-            style={{ backgroundColor: `${themeColors.primary}20` }}
+            className="w-9 h-9 rounded-lg flex items-center justify-center border"
+            style={{
+              backgroundColor: `${themeColors.primary}20`,
+              borderColor: `${themeColors.primary}45`,
+            }}
           >
             <Sliders className="w-4 h-4" style={{ color: themeColors.primary }} />
           </div>
-          <h1 className="text-sm font-bold tracking-tight">
-            {isArabic ? 'معادل الصوت الاحترافي' : 'Pro Studio Equalizer'}
-          </h1>
+          <div>
+            <h1 className="text-sm font-extrabold tracking-tight leading-tight">
+              {isArabic ? 'معادل الصوت الاحترافي (10-Band EQ)' : 'Pro Studio Equalizer (10-Band EQ)'}
+            </h1>
+            <p className="text-[11px] leading-tight" style={{ color: themeColors.textMuted }}>
+              {isArabic
+                ? `الوضع الحالي: ${selectedPreset} • اسحب المفاتيح العمودية لضبط كل تردد`
+                : `Active Preset: ${selectedPreset} • Drag vertical fader knobs to sculpt sound`}
+            </p>
+          </div>
           {statusMessage && (
             <span
-              className="text-xs px-2 py-0.5 rounded-md font-semibold"
+              className="text-xs px-2.5 py-1 rounded-md font-bold"
               style={{
-                backgroundColor: `${themeColors.primary}20`,
+                backgroundColor: `${themeColors.primary}25`,
                 color: themeColors.primary,
               }}
             >
@@ -331,37 +368,37 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
           )}
         </div>
 
-        <div className="flex items-center gap-1.5 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={() => setShowSaveDialog((prev) => !prev)}
-            className="px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1"
+            className="px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition hover:opacity-90"
             style={{
               backgroundColor: showSaveDialog
-                ? `${themeColors.primary}20`
+                ? `${themeColors.primary}25`
                 : themeColors.surfaceVariant,
               borderColor: showSaveDialog ? themeColors.primary : themeColors.border,
               color: showSaveDialog ? themeColors.primary : themeColors.textPrimary,
             }}
           >
             <BookmarkPlus className="w-3.5 h-3.5" />
-            {isArabic ? 'حفظ' : 'Save Preset'}
+            {isArabic ? 'حفظ الإعداد' : 'Save Preset'}
           </button>
 
           <button
             onClick={handleReset}
-            className="px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1"
+            className="px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition hover:opacity-90"
             style={{
               backgroundColor: themeColors.surfaceVariant,
               borderColor: themeColors.border,
             }}
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            {isArabic ? 'تصفير' : 'Reset'}
+            {isArabic ? 'تصفير (Flat)' : 'Reset (Flat)'}
           </button>
 
           <button
             onClick={handleExportJson}
-            className="px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1"
+            className="px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 transition hover:opacity-90"
             style={{
               backgroundColor: themeColors.surfaceVariant,
               borderColor: themeColors.border,
@@ -372,7 +409,7 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
           </button>
 
           <label
-            className="px-2.5 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1 cursor-pointer"
+            className="px-3 py-1.5 rounded-lg border text-xs font-bold flex items-center gap-1.5 cursor-pointer transition hover:opacity-90"
             style={{
               backgroundColor: themeColors.surfaceVariant,
               borderColor: themeColors.border,
@@ -385,14 +422,15 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
 
           <button
             onClick={handleToggleEq}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5"
+            className="px-3.5 py-1.5 rounded-lg text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition"
             style={{
               backgroundColor: eqEnabled ? themeColors.primary : themeColors.surfaceVariant,
               color: eqEnabled ? '#ffffff' : themeColors.textMuted,
+              border: `1px solid ${eqEnabled ? themeColors.primary : themeColors.border}`,
             }}
           >
             <Power className="w-3.5 h-3.5" />
-            {eqEnabled ? 'ON' : 'OFF'}
+            {eqEnabled ? (isArabic ? 'مُفعّل ON' : 'ON') : (isArabic ? 'مُعطّل OFF' : 'OFF')}
           </button>
         </div>
       </div>
@@ -444,19 +482,25 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
 
       {/* Presets Strip */}
       <div
-        className="rounded-xl p-2 border shrink-0 flex flex-wrap items-center gap-1.5"
+        className="rounded-xl px-3 py-2 border shrink-0 flex flex-wrap items-center gap-1.5"
         style={{
           backgroundColor: themeColors.surface,
           borderColor: themeColors.border,
         }}
       >
+        <span
+          className="text-[11px] font-extrabold uppercase tracking-wider mr-1"
+          style={{ color: themeColors.textMuted }}
+        >
+          {isArabic ? 'الأوضاع الجاهزة:' : 'Presets:'}
+        </span>
         {Object.keys(BUILTIN_PRESETS).map((preset) => {
           const isSelected = selectedPreset === preset;
           return (
             <button
               key={preset}
               onClick={() => handlePresetSelect(preset)}
-              className="px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all border"
+              className="px-3 py-1 rounded-lg text-xs font-bold transition-all border"
               style={{
                 backgroundColor: isSelected
                   ? themeColors.primary
@@ -465,7 +509,7 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
                 color: isSelected ? '#ffffff' : themeColors.textPrimary,
               }}
             >
-              {preset}
+              {isArabic ? PRESET_AR_NAMES[preset] || preset : preset}
             </button>
           );
         })}
@@ -476,7 +520,7 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             <div
               key={preset.id}
               onClick={() => handleCustomPresetSelect(preset)}
-              className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-[11px] font-bold border cursor-pointer"
+              className="inline-flex items-center gap-1 pl-2.5 pr-1.5 py-1 rounded-lg text-xs font-bold border cursor-pointer"
               style={{
                 backgroundColor: isSelected
                   ? themeColors.secondary
@@ -497,39 +541,61 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
         })}
       </div>
 
-      {/* 10-Band Vertical Sliders (Flexible Middle Section) */}
+      {/* 10-Band Vertical Faders Section with Visible Knobs & Unclipped Frequency Labels */}
       <div
-        className="flex-1 min-h-0 rounded-xl p-3 border flex flex-col justify-between overflow-hidden"
+        className="flex-1 min-h-[250px] rounded-xl px-4 py-3 border flex flex-col justify-between"
         style={{
           backgroundColor: themeColors.surface,
           borderColor: themeColors.border,
-          opacity: eqEnabled ? 1 : 0.5,
+          opacity: eqEnabled ? 1 : 0.55,
         }}
       >
-        <div className="flex items-center justify-between shrink-0 mb-1">
-          <span className="text-xs font-bold">
-            {isArabic ? 'نطاقات التردد (10-Band EQ)' : 'Frequency Bands (10-Band EQ)'}
-          </span>
-          <span className="text-[11px] font-mono opacity-60">-15 dB — +15 dB</span>
+        <div className="flex items-center justify-between shrink-0 mb-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-extrabold">
+              {isArabic ? 'مفاتيح الترددات (10-Band Graphic EQ)' : 'Frequency Bands (10-Band Graphic EQ)'}
+            </span>
+            <span
+              className="text-[10px] px-2 py-0.5 rounded font-mono font-semibold"
+              style={{
+                backgroundColor: themeColors.surfaceVariant,
+                color: themeColors.textSecondary,
+              }}
+            >
+              31Hz — 16kHz
+            </span>
+          </div>
+          <div className="flex items-center gap-3 text-[11px] font-mono" style={{ color: themeColors.textMuted }}>
+            <span>{isArabic ? 'الأدنى: -15 dB' : 'Min: -15 dB'}</span>
+            <span>{isArabic ? 'المنتصف: 0 dB' : 'Center: 0 dB'}</span>
+            <span>{isArabic ? 'الأقصى: +15 dB' : 'Max: +15 dB'}</span>
+          </div>
         </div>
 
-        <div className="flex-1 min-h-0 grid grid-cols-10 gap-2 items-center py-1">
+        <div className="flex-1 min-h-[190px] grid grid-cols-10 gap-2 sm:gap-3 items-stretch">
           {bands.map((band) => {
-            const pct = ((band.currentLevelDb + 15) / 30) * 100;
+            const pct = Math.max(0, Math.min(100, ((band.currentLevelDb + 15) / 30) * 100));
             return (
               <div
                 key={band.id}
-                className="h-full flex flex-col items-center justify-between gap-1"
+                className="h-full flex flex-col items-center justify-between rounded-xl px-1.5 py-2 border"
+                style={{
+                  backgroundColor: `${themeColors.surfaceVariant}65`,
+                  borderColor: themeColors.border,
+                }}
               >
+                {/* Top dB Readout Badge */}
                 <span
-                  className="text-[10px] font-mono font-bold"
+                  className="text-[11px] font-mono font-extrabold px-1.5 py-0.5 rounded shrink-0"
                   style={{
+                    backgroundColor:
+                      band.currentLevelDb !== 0 ? `${themeColors.primary}22` : 'transparent',
                     color:
                       band.currentLevelDb > 0
                         ? themeColors.primary
                         : band.currentLevelDb < 0
                         ? themeColors.secondary
-                        : themeColors.textMuted,
+                        : themeColors.textSecondary,
                   }}
                 >
                   {band.currentLevelDb > 0
@@ -537,13 +603,56 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
                     : band.currentLevelDb.toFixed(1)}
                 </span>
 
-                <div className="relative flex-1 min-h-[80px] w-7 flex items-center justify-center">
+                {/* Vertical Fader Track with Prominent Visible Hardware Knob */}
+                <div
+                  role="slider"
+                  aria-label={`${band.name} Equalizer Band`}
+                  aria-valuemin={-15}
+                  aria-valuemax={15}
+                  aria-valuenow={band.currentLevelDb}
+                  tabIndex={eqEnabled ? 0 : -1}
+                  onPointerDown={(e) => {
+                    if (!eqEnabled) return;
+                    e.currentTarget.setPointerCapture(e.pointerId);
+                    updateBandFromPointer(band.id, e.clientY, e.currentTarget.getBoundingClientRect());
+                  }}
+                  onPointerMove={(e) => {
+                    if (!eqEnabled || (e.buttons & 1) === 0) return;
+                    updateBandFromPointer(band.id, e.clientY, e.currentTarget.getBoundingClientRect());
+                  }}
+                  onDoubleClick={() => eqEnabled && handleBandChange(band.id, 0)}
+                  className="relative flex-1 w-full min-h-[120px] my-1.5 flex items-center justify-center cursor-ns-resize touch-none"
+                  title={
+                    isArabic
+                      ? `${band.name}: اسحب للأعلى أو الأسفل (نقر مزدوج للتصفير)`
+                      : `${band.name}: Drag up/down (Double-click to reset to 0 dB)`
+                  }
+                >
+                  {/* Tick marks (-15, 0, +15) */}
                   <div
-                    className="w-2 h-full rounded-full overflow-hidden relative"
-                    style={{ backgroundColor: themeColors.surfaceVariant }}
+                    className="absolute inset-x-2 top-0 border-t border-dashed opacity-25 pointer-events-none"
+                    style={{ borderColor: themeColors.textMuted }}
+                  />
+                  <div
+                    className="absolute inset-x-1 top-1/2 -translate-y-1/2 border-t-2 opacity-50 pointer-events-none"
+                    style={{ borderColor: themeColors.textMuted }}
+                  />
+                  <div
+                    className="absolute inset-x-2 bottom-0 border-t border-dashed opacity-25 pointer-events-none"
+                    style={{ borderColor: themeColors.textMuted }}
+                  />
+
+                  {/* Vertical Rail */}
+                  <div
+                    className="w-2.5 h-full rounded-full overflow-hidden relative border"
+                    style={{
+                      backgroundColor: themeColors.background,
+                      borderColor: themeColors.border,
+                    }}
                   >
+                    {/* Active Fill Bar */}
                     <div
-                      className="absolute bottom-0 left-0 right-0 rounded-full transition-all"
+                      className="absolute bottom-0 left-0 right-0 rounded-full transition-all duration-75"
                       style={{
                         height: `${pct}%`,
                         background: `linear-gradient(to top, ${themeColors.primary}, ${themeColors.secondary})`,
@@ -551,21 +660,34 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
                     />
                   </div>
 
-                  <input
-                    type="range"
-                    min={-15}
-                    max={15}
-                    step={0.5}
-                    disabled={!eqEnabled}
-                    value={band.currentLevelDb}
-                    onChange={(e) => handleBandChange(band.id, Number(e.target.value))}
-                    className="absolute w-28 h-7 -rotate-90 opacity-0 cursor-pointer"
-                  />
+                  {/* Prominent Hardware Fader Cap / Knob */}
+                  <div
+                    className="absolute left-1/2 -translate-x-1/2 w-7 h-4 rounded-md border-2 shadow-md flex items-center justify-center pointer-events-none transition-all duration-75"
+                    style={{
+                      bottom: `calc(${pct}% - 8px)`,
+                      backgroundColor: themeColors.surface,
+                      borderColor:
+                        band.currentLevelDb !== 0 ? themeColors.primary : themeColors.textSecondary,
+                      boxShadow: `0 2px 8px rgba(0,0,0,0.45)`,
+                    }}
+                  >
+                    <div
+                      className="w-4 h-0.5 rounded-full"
+                      style={{
+                        backgroundColor:
+                          band.currentLevelDb !== 0 ? themeColors.primary : themeColors.textPrimary,
+                      }}
+                    />
+                  </div>
                 </div>
 
+                {/* Bottom Frequency Label (Always visible & unclipped) */}
                 <span
-                  className="text-[10px] font-semibold"
-                  style={{ color: themeColors.textSecondary }}
+                  className="text-[11px] font-extrabold tracking-tight shrink-0 px-1 py-0.5 rounded"
+                  style={{
+                    color: themeColors.textPrimary,
+                    backgroundColor: themeColors.surface,
+                  }}
                 >
                   {band.name}
                 </span>
@@ -575,11 +697,11 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
         </div>
       </div>
 
-      {/* Bottom 3-Column Enhancers Row */}
-      <div className="grid grid-cols-3 gap-2.5 shrink-0">
+      {/* Bottom 3-Column Enhancers Row (Preamp, Bass Boost, Treble Clarity) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0">
         {/* Preamp */}
         <div
-          className="rounded-xl p-2.5 border flex flex-col gap-1.5"
+          className="rounded-xl px-3.5 py-2.5 border flex flex-col gap-2"
           style={{
             backgroundColor: themeColors.surface,
             borderColor: themeColors.border,
@@ -589,15 +711,29 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             <div className="flex items-center gap-1.5">
               <Volume2 className="w-4 h-4" style={{ color: themeColors.primary }} />
               <span className="font-bold text-xs">
-                {isArabic ? 'مضخم أولي (Preamp)' : 'Preamp Gain'}
+                {isArabic ? 'مضخم الصوت الأولي (Preamp)' : 'Preamp Gain'}
               </span>
             </div>
-            <span
-              className="text-xs font-mono font-bold"
-              style={{ color: themeColors.primary }}
-            >
-              {preampDb > 0 ? `+${preampDb}` : preampDb} dB
-            </span>
+            <div className="flex items-center gap-1.5">
+              <span
+                className="text-xs font-mono font-extrabold px-2 py-0.5 rounded"
+                style={{
+                  color: themeColors.primary,
+                  backgroundColor: `${themeColors.primary}20`,
+                }}
+              >
+                {preampDb > 0 ? `+${preampDb}` : preampDb} dB
+              </span>
+              {preampDb !== 0 && (
+                <button
+                  onClick={() => handlePreampChange(0)}
+                  className="text-[10px] px-1.5 py-0.5 rounded border hover:opacity-80"
+                  style={{ borderColor: themeColors.border, color: themeColors.textMuted }}
+                >
+                  0dB
+                </button>
+              )}
+            </div>
           </div>
           <input
             type="range"
@@ -606,17 +742,22 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             step={0.5}
             value={preampDb}
             onChange={(e) => handlePreampChange(Number(e.target.value))}
-            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 rounded-lg cursor-pointer"
             style={{
               accentColor: themeColors.primary,
               backgroundColor: themeColors.surfaceVariant,
             }}
           />
+          <div className="flex justify-between text-[10px] font-mono" style={{ color: themeColors.textMuted }}>
+            <span>-12 dB</span>
+            <span>0 dB</span>
+            <span>+12 dB</span>
+          </div>
         </div>
 
         {/* Bass Boost */}
         <div
-          className="rounded-xl p-2.5 border flex flex-col gap-1.5"
+          className="rounded-xl px-3.5 py-2.5 border flex flex-col gap-2"
           style={{
             backgroundColor: themeColors.surface,
             borderColor: themeColors.border,
@@ -626,12 +767,15 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" style={{ color: themeColors.secondary }} />
               <span className="font-bold text-xs">
-                {isArabic ? 'تعزيز الباص (Bass)' : 'Bass Boost'}
+                {isArabic ? 'تعزيز الباص العميق (Bass Boost)' : 'Bass Boost'}
               </span>
             </div>
             <span
-              className="text-xs font-mono font-bold"
-              style={{ color: themeColors.secondary }}
+              className="text-xs font-mono font-extrabold px-2 py-0.5 rounded"
+              style={{
+                color: themeColors.secondary,
+                backgroundColor: `${themeColors.secondary}20`,
+              }}
             >
               {Math.round(bassBoost * 100)}%
             </span>
@@ -643,17 +787,22 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             step={0.01}
             value={bassBoost}
             onChange={(e) => handleBassBoostChange(Number(e.target.value))}
-            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 rounded-lg cursor-pointer"
             style={{
               accentColor: themeColors.secondary,
               backgroundColor: themeColors.surfaceVariant,
             }}
           />
+          <div className="flex justify-between text-[10px] font-mono" style={{ color: themeColors.textMuted }}>
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
         </div>
 
         {/* Treble Boost */}
         <div
-          className="rounded-xl p-2.5 border flex flex-col gap-1.5"
+          className="rounded-xl px-3.5 py-2.5 border flex flex-col gap-2"
           style={{
             backgroundColor: themeColors.surface,
             borderColor: themeColors.border,
@@ -663,12 +812,15 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             <div className="flex items-center gap-1.5">
               <Sparkles className="w-4 h-4" style={{ color: themeColors.tertiary }} />
               <span className="font-bold text-xs">
-                {isArabic ? 'تعزيز التريبل (Treble)' : 'Treble Clarity'}
+                {isArabic ? 'وضوح التريبل (Treble Clarity)' : 'Treble Clarity'}
               </span>
             </div>
             <span
-              className="text-xs font-mono font-bold"
-              style={{ color: themeColors.tertiary }}
+              className="text-xs font-mono font-extrabold px-2 py-0.5 rounded"
+              style={{
+                color: themeColors.tertiary,
+                backgroundColor: `${themeColors.tertiary}20`,
+              }}
             >
               {Math.round(trebleBoost * 100)}%
             </span>
@@ -680,12 +832,17 @@ export const EqualizerScreen: React.FC<EqualizerScreenProps> = ({ themeColors, i
             step={0.01}
             value={trebleBoost}
             onChange={(e) => handleTrebleBoostChange(Number(e.target.value))}
-            className="w-full h-1.5 rounded-lg appearance-none cursor-pointer"
+            className="w-full h-2 rounded-lg cursor-pointer"
             style={{
               accentColor: themeColors.tertiary,
               backgroundColor: themeColors.surfaceVariant,
             }}
           />
+          <div className="flex justify-between text-[10px] font-mono" style={{ color: themeColors.textMuted }}>
+            <span>0%</span>
+            <span>50%</span>
+            <span>100%</span>
+          </div>
         </div>
       </div>
     </div>

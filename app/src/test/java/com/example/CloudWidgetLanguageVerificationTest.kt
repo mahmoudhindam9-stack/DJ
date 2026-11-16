@@ -46,6 +46,8 @@ class CloudWidgetLanguageVerificationTest {
     fun neonCloudConfig_matchesProjectSpecificationAndNoSupabase() {
         assertEquals("dark-fire-99620103", CloudSyncManager.NEON_PROJECT_ID)
         assertEquals("br-spring-term-baakf0qx", CloudSyncManager.NEON_BRANCH_ID)
+        assertEquals("https://dj-web-topaz.vercel.app", CloudSyncManager.WEB_APP_SHARED_URL)
+        assertEquals("https://dj-web-topaz.vercel.app", CloudSyncManager.getWebBaseUrl(context))
         assertTrue(CloudSyncManager.NEON_AUTH_URL.contains("ep-morning-bird-bad5xn0x.neonauth"))
         assertTrue(CloudSyncManager.NEON_REALTIME_URL.contains("ep-morning-bird-bad5xn0x.rt"))
         assertFalse(CloudSyncManager.NEON_AUTH_URL.contains("supabase", ignoreCase = true))

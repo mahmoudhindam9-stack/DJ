@@ -395,18 +395,27 @@ fun RadioScreen(
         failedStationId = station.id
     }
 
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val visibleStations = if (favorites.isEmpty()) stations else stations.sortedByDescending { favorites.contains(it.id) }
 
     Column(Modifier.fillMaxSize().padding(14.dp)) {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("📻 Radio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                Text(if (country == "EG") "الإذاعات المصرية — Live" else "إذاعات من حول العالم — Live", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(if (isArabic) "📻 الراديو المباشر" else "📻 Live Radio", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Text(
+                    if (country == "EG") {
+                        if (isArabic) "الإذاعات المصرية — بث مباشر" else "Egyptian Radio Stations — Live"
+                    } else {
+                        if (isArabic) "إذاعات من حول العالم — بث مباشر" else "World Radio Stations — Live"
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box {
                     IconButton(onClick = { showQueue = true }) {
-                        Icon(Icons.Filled.QueueMusic, "الكيو")
+                        Icon(Icons.Filled.QueueMusic, if (isArabic) "قائمة الانتظار" else "Queue")
                     }
                     if (playerController.playlist.isNotEmpty()) {
                         Badge(
@@ -418,17 +427,44 @@ fun RadioScreen(
                     }
                 }
                 IconButton(onClick = { refreshToken++ }) {
-                    Icon(Icons.Filled.Refresh, "تحديث")
+                    Icon(Icons.Filled.Refresh, if (isArabic) "تحديث" else "Refresh")
                 }
             }
         }
         Spacer(Modifier.height(10.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(selected = country == "EG", onClick = { country = "EG" }, label = { Text("🇪🇬 مصر") }, leadingIcon = { Icon(Icons.Filled.Radio, null, Modifier.size(18.dp)) })
-            FilterChip(selected = country.isEmpty(), onClick = { country = "" }, label = { Text("🌍 العالم") }, leadingIcon = { Icon(Icons.Filled.Public, null, Modifier.size(18.dp)) })
+            FilterChip(
+                selected = country == "EG",
+                onClick = { country = "EG" },
+                label = { Text(if (isArabic) "🇪🇬 مصر" else "🇪🇬 Egypt") },
+                leadingIcon = { Icon(Icons.Filled.Radio, null, Modifier.size(18.dp)) }
+            )
+            FilterChip(
+                selected = country.isEmpty(),
+                onClick = { country = "" },
+                label = { Text(if (isArabic) "🌍 العالم" else "🌍 World") },
+                leadingIcon = { Icon(Icons.Filled.Public, null, Modifier.size(18.dp)) }
+            )
         }
         Spacer(Modifier.height(8.dp))
-        OutlinedTextField(value = search, onValueChange = { search = it }, modifier = Modifier.fillMaxWidth(), singleLine = true, shape = RoundedCornerShape(24.dp), placeholder = { Text(if (country == "EG") "ابحث في الإذاعات المصرية..." else "ابحث عن محطة...") }, leadingIcon = { Icon(Icons.Filled.Search, null) }, trailingIcon = if (search.isNotEmpty()) ({ IconButton(onClick = { search = "" }) { Icon(Icons.Filled.Close, "مسح") } }) else null)
+        OutlinedTextField(
+            value = search,
+            onValueChange = { search = it },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            shape = RoundedCornerShape(24.dp),
+            placeholder = {
+                Text(
+                    if (country == "EG") {
+                        if (isArabic) "ابحث في الإذاعات المصرية..." else "Search Egyptian radio stations..."
+                    } else {
+                        if (isArabic) "ابحث عن محطة..." else "Search radio stations..."
+                    }
+                )
+            },
+            leadingIcon = { Icon(Icons.Filled.Search, null) },
+            trailingIcon = if (search.isNotEmpty()) ({ IconButton(onClick = { search = "" }) { Icon(Icons.Filled.Close, if (isArabic) "مسح" else "Clear") } }) else null
+        )
         Spacer(Modifier.height(10.dp))
 
         if (loading) { LinearProgressIndicator(Modifier.fillMaxWidth()); Spacer(Modifier.height(10.dp)) }
@@ -437,17 +473,26 @@ fun RadioScreen(
                 CircularProgressIndicator(Modifier.size(16.dp), strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
                 Text(
-    if (country == "EG") "جاري التحقق من المحطات المصرية..." else "جاري التحقق من المحطات العالمية...",
-    style = MaterialTheme.typography.bodySmall,
-    color = MaterialTheme.colorScheme.onSurfaceVariant
-)
+                    if (country == "EG") {
+                        if (isArabic) "جاري التحقق من المحطات المصرية..." else "Verifying Egyptian radio stations..."
+                    } else {
+                        if (isArabic) "جاري التحقق من المحطات العالمية..." else "Verifying world radio stations..."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             Spacer(Modifier.height(10.dp))
         }
 
         error?.let {
             Card(Modifier.fillMaxWidth(), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
-                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) { Icon(Icons.Filled.WifiOff, null); Spacer(Modifier.width(8.dp)); Text(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer); TextButton(onClick = { refreshToken++ }) { Text("إعادة المحاولة") } }
+                Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Filled.WifiOff, null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(it, Modifier.weight(1f), color = MaterialTheme.colorScheme.onErrorContainer)
+                    TextButton(onClick = { refreshToken++ }) { Text(if (isArabic) "إعادة المحاولة" else "Retry") }
+                }
             }
             Spacer(Modifier.height(8.dp))
         }
@@ -461,10 +506,10 @@ fun RadioScreen(
                 val isFavorite = favorites.contains(station.id)
 
                 val statusText = when {
-                    isStationLoading -> "تحميل البث..."
-                    isStationPlaying -> "LIVE • شغال الآن"
-                    isStationFailed -> "فشل التحميل"
-                    else -> "جاهزة للتشغيل"
+                    isStationLoading -> if (isArabic) "جاري تحميل البث..." else "Buffering stream..."
+                    isStationPlaying -> if (isArabic) "LIVE • يعمل الآن" else "LIVE • Playing Now"
+                    isStationFailed -> if (isArabic) "فشل التحميل" else "Stream failed"
+                    else -> if (isArabic) "جاهزة للتشغيل" else "Ready to play"
                 }
 
                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp), colors = CardDefaults.cardColors(containerColor = if (isCurrentStation) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant)) {
@@ -474,7 +519,7 @@ fun RadioScreen(
                             Spacer(Modifier.width(10.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(station.name, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                                Text(buildString { if (station.tags.isNotBlank()) append(station.tags.take(45)); if (station.codec.isNotBlank()) { if (isNotEmpty()) append(" • "); append(station.codec) }; if (station.bitrate > 0) { append(" • "); append(station.bitrate); append(" kbps") } }.ifBlank { "بث مباشر" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(buildString { if (station.tags.isNotBlank()) append(station.tags.take(45)); if (station.codec.isNotBlank()) { if (isNotEmpty()) append(" • "); append(station.codec) }; if (station.bitrate > 0) { append(" • "); append(station.bitrate); append(" kbps") } }.ifBlank { if (isArabic) "بث مباشر" else "Live Stream" }, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(statusText, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, color = if (isStationFailed) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary)
                             }
                             if (isStationLoading) CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 2.dp)
@@ -490,14 +535,14 @@ fun RadioScreen(
                             ) {
                                 Icon(
                                     if (isFavorite) Icons.Filled.Star else Icons.Filled.StarBorder,
-                                    "المفضلة"
+                                    if (isArabic) "المفضلة" else "Favorite"
                                 )
                             }
                             IconButton(onClick = { addStationToQueue(station) }) {
-                                Icon(Icons.Filled.QueueMusic, "إضافة للكيو")
+                                Icon(Icons.Filled.QueueMusic, if (isArabic) "إضافة لقائمة الانتظار" else "Add to queue")
                             }
                             IconButton(onClick = { deckPicker = station }) {
-                                Icon(Icons.Filled.Headset, "إرسال إلى DJ Deck")
+                                Icon(Icons.Filled.Headset, if (isArabic) "إرسال إلى DJ Deck" else "Send to DJ Deck")
                             }
                             FilledIconButton(
                                 modifier = Modifier,
@@ -520,7 +565,7 @@ fun RadioScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isStationPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                    contentDescription = if (isStationPlaying) "Pause" else "Play"
+                                    contentDescription = if (isStationPlaying) (if (isArabic) "إيقاف" else "Pause") else (if (isArabic) "تشغيل" else "Play")
                                 )
                             }
                         }
@@ -546,7 +591,7 @@ fun RadioScreen(
     deckPicker?.let { station ->
         AlertDialog(
             onDismissRequest = { deckPicker = null },
-            title = { Text("تشغيل الإذاعة على أي Deck؟") },
+            title = { Text(if (isArabic) "تشغيل الإذاعة على أي Deck؟" else "Send station to which DJ Deck?") },
             text = { Text(station.name) },
             confirmButton = {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -576,6 +621,7 @@ private fun RadioQueueSheet(
     onSavePlaylist: () -> Unit,
     onAddToExistingPlaylist: () -> Unit
 ) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             Modifier
@@ -585,17 +631,17 @@ private fun RadioQueueSheet(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(
-                        "RADIO QUEUE",
+                        if (isArabic) "قائمة انتظار الراديو" else "RADIO QUEUE",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Black
                     )
                     Text(
-                        queue.size.toString() + " station(s)",
+                        if (isArabic) "${queue.size} محطة" else "${queue.size} station(s)",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
                 if (queue.isNotEmpty()) {
-                    TextButton(onClick = onClear) { Text("Clear") }
+                    TextButton(onClick = onClear) { Text(if (isArabic) "مسح" else "Clear") }
                 }
             }
 
@@ -606,7 +652,7 @@ private fun RadioQueueSheet(
                         .height(170.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("الكيو فارغ — أضف المحطات من زر Queue")
+                    Text(if (isArabic) "قائمة الانتظار فارغة — أضف المحطات من زر القائمة" else "Queue is empty — add stations using the Queue button")
                 }
             } else {
                 LazyColumn(
@@ -642,13 +688,13 @@ private fun RadioQueueSheet(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        if (station.countryCode.equals("EG", ignoreCase = true)) "مصرية" else "عالمية",
+                                        if (station.countryCode.equals("EG", ignoreCase = true)) (if (isArabic) "مصرية" else "Egypt") else (if (isArabic) "عالمية" else "World"),
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 IconButton(onClick = { onRemove(station.id) }) {
-                                    Icon(Icons.Filled.Delete, "Remove from queue")
+                                    Icon(Icons.Filled.Delete, if (isArabic) "إزالة من القائمة" else "Remove from queue")
                                 }
                             }
                         }
@@ -663,12 +709,12 @@ private fun RadioQueueSheet(
                     Button(onClick = onSavePlaylist, Modifier.weight(1f)) {
                         Icon(Icons.Filled.Save, null)
                         Spacer(Modifier.width(5.dp))
-                        Text("Save Playlist")
+                        Text(if (isArabic) "حفظ كقائمة" else "Save Playlist")
                     }
                     OutlinedButton(onClick = onAddToExistingPlaylist, Modifier.weight(1f)) {
                         Icon(Icons.Filled.PlaylistAdd, null)
                         Spacer(Modifier.width(5.dp))
-                        Text("Add to Existing")
+                        Text(if (isArabic) "إضافة لقائمة حالية" else "Add to Existing")
                     }
                 }
             }

@@ -65,6 +65,7 @@ fun loadCustomEffects(context: Context): List<ModularEffect> {
 @Composable
 fun DJFxRack(deck: DJDeckController) {
     val context = LocalContext.current
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val manager = remember { DspPluginManager(context) }
     var allPlugins by remember { mutableStateOf(loadCustomEffects(context)) }
     
@@ -80,17 +81,17 @@ fun DJFxRack(deck: DJDeckController) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "FX RACK",
+                text = if (isArabic) "مؤثرات الصوت (FX)" else "FX RACK",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary,
-                letterSpacing = 1.sp
+                letterSpacing = if (isArabic) 0.sp else 1.sp
             )
             IconButton(
                 onClick = { showLibraryDialog = true },
                 modifier = Modifier.size(24.dp)
             ) {
-                Icon(Icons.Filled.Settings, "Effects Library", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(Icons.Filled.Settings, if (isArabic) "مكتبة المؤثرات" else "Effects Library", tint = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
 
@@ -139,7 +140,7 @@ fun DJFxRack(deck: DJDeckController) {
         // Amount slider applies to all active FX on this deck
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Text(
-                "FX AMOUNT", 
+                if (isArabic) "قوة المؤثر" else "FX AMOUNT", 
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 fontWeight = FontWeight.Bold,
@@ -165,7 +166,7 @@ fun DJFxRack(deck: DJDeckController) {
         EffectsLibraryDialog(
             manager = manager,
             allPlugins = allPlugins,
-            activePlugins = emptyList(), // Not used anymore since we just toggle directly
+            activePlugins = emptyList(),
             onToggleActive = { deck.toggleEffect(it) },
             onPresetsChanged = { 
                 allPlugins = loadCustomEffects(context)
@@ -186,16 +187,17 @@ private fun EffectsLibraryDialog(
     onPresetsChanged: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var showCreateForm by remember { mutableStateOf(false) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("FX Library", fontWeight = FontWeight.Bold) },
+        title = { Text(if (isArabic) "مكتبة المؤثرات (FX)" else "FX Library", fontWeight = FontWeight.Bold) },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column(Modifier.heightIn(max = 420.dp)) {
                 Text(
-                    "Select effects for this deck",
+                    if (isArabic) "اختر المؤثرات الصوتية لهذا المشغل" else "Select effects for this deck",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -207,7 +209,7 @@ private fun EffectsLibraryDialog(
                         modifier = Modifier.weight(1f),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant, contentColor = MaterialTheme.colorScheme.onSurface)
                     ) {
-                        Text("Create Custom", maxLines = 1, style = MaterialTheme.typography.labelSmall)
+                        Text(if (isArabic) "إنشاء مؤثر مخصص" else "Create Custom", maxLines = 1, style = MaterialTheme.typography.labelSmall)
                     }
                 }
                 
@@ -235,7 +237,7 @@ private fun EffectsLibraryDialog(
                                             },
                                             modifier = Modifier.size(32.dp)
                                         ) {
-                                            Icon(Icons.Filled.Delete, contentDescription = "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                            Icon(Icons.Filled.Delete, contentDescription = if (isArabic) "حذف" else "Delete", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
                                         }
                                     }
                                 }
@@ -246,7 +248,7 @@ private fun EffectsLibraryDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = onDismiss) { Text("Done") }
+            TextButton(onClick = onDismiss) { Text(if (isArabic) "تم" else "Done") }
         }
     )
 
@@ -269,6 +271,7 @@ private fun CreateEffectDialog(
     onCreated: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(DspPluginManager.ENGINE_TYPES.first().first) }
     var param1 by remember { mutableStateOf(0.5f) }
@@ -276,19 +279,19 @@ private fun CreateEffectDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("New Custom Effect") },
+        title = { Text(if (isArabic) "إنشاء مؤثر مخصص جديد" else "New Custom Effect") },
         containerColor = MaterialTheme.colorScheme.surface,
         text = {
             Column {
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Effect Name") },
+                    label = { Text(if (isArabic) "اسم المؤثر" else "Effect Name") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(16.dp))
                 
-                Text("Base Engine", style = MaterialTheme.typography.labelMedium)
+                Text(if (isArabic) "المحرك الأساسي" else "Base Engine", style = MaterialTheme.typography.labelMedium)
                 Spacer(Modifier.height(8.dp))
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     items(DspPluginManager.ENGINE_TYPES) { (typeKey, label) ->
@@ -305,11 +308,11 @@ private fun CreateEffectDialog(
                 }
                 
                 Spacer(Modifier.height(24.dp))
-                Text("Character: ${(param1 * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                Text(if (isArabic) "الشدة: ${(param1 * 100).toInt()}%" else "Character: ${(param1 * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
                 Slider(value = param1, onValueChange = { param1 = it }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary))
                 
                 if (selectedType == "compressor") {
-                    Text("Ratio: ${(param2 * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
+                    Text(if (isArabic) "النسبة: ${(param2 * 100).toInt()}%" else "Ratio: ${(param2 * 100).toInt()}%", style = MaterialTheme.typography.labelSmall)
                     Slider(value = param2, onValueChange = { param2 = it }, valueRange = 0f..1f, colors = SliderDefaults.colors(thumbColor = MaterialTheme.colorScheme.primary, activeTrackColor = MaterialTheme.colorScheme.primary))
                 }
             }
@@ -323,10 +326,10 @@ private fun CreateEffectDialog(
                     manager.addCustomPreset(finalName, selectedType, param1, param2)
                     onCreated()
                 }
-            ) { Text("Save") }
+            ) { Text(if (isArabic) "حفظ" else "Save") }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) { Text(if (isArabic) "إلغاء" else "Cancel") }
         }
     )
 }

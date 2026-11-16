@@ -39,6 +39,7 @@ interface MiniPlayerProps {
   onOpenNowPlaying: () => void;
   onOpenEqualizer: () => void;
   isArabic: boolean;
+  compact?: boolean;
 }
 
 export const MiniPlayer: React.FC<MiniPlayerProps> = ({
@@ -62,6 +63,7 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
   onOpenNowPlaying,
   onOpenEqualizer,
   isArabic,
+  compact = false,
 }) => {
   const formatTime = (ms: number) => {
     if (!ms || isNaN(ms)) return '0:00';
@@ -140,6 +142,151 @@ export const MiniPlayer: React.FC<MiniPlayerProps> = ({
     if (feedbackTimerRef.current !== null) window.clearTimeout(feedbackTimerRef.current);
     stopSeekHold();
   }, []);
+
+  if (compact) {
+    return (
+      <footer
+        id="dj-mini-player"
+        data-compact="true"
+        className="border-t px-3 py-1.5 select-none flex items-center justify-between gap-3 z-40 shrink-0 h-12"
+        style={{
+          backgroundColor: themeColors.surface,
+          borderColor: themeColors.border,
+          color: themeColors.textPrimary,
+        }}
+      >
+        {/* Left: Compact Track Info */}
+        <div
+          className="flex items-center gap-2 min-w-0 w-48 sm:w-56 cursor-pointer shrink-0"
+          onClick={onOpenNowPlaying}
+          title={isArabic ? 'فتح المشغل الموسع' : 'Expand Now Playing'}
+        >
+          <div
+            className="w-8 h-8 rounded-md overflow-hidden flex items-center justify-center shrink-0 border"
+            style={{
+              backgroundColor: themeColors.surfaceVariant,
+              borderColor: themeColors.border,
+            }}
+          >
+            {currentSong?.coverUri ? (
+              <img
+                src={currentSong.coverUri}
+                alt={currentSong.title}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <Music2 className="w-4 h-4" style={{ color: themeColors.primary }} />
+            )}
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-bold truncate leading-tight">
+              {currentSong ? currentSong.title : isArabic ? 'لا يوجد تشغيل' : 'No track selected'}
+            </h4>
+            <p className="text-[10px] truncate leading-tight" style={{ color: themeColors.textMuted }}>
+              {currentSong ? currentSong.artist : isArabic ? 'اختر أغنية للبدء' : 'Select a song'}
+            </p>
+          </div>
+        </div>
+
+        {/* Center: Compact Transport + Inline Seekbar */}
+        <div className="flex items-center gap-2 flex-1 max-w-2xl">
+          <button
+            type="button"
+            onClick={onPrev}
+            disabled={!currentSong}
+            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-40"
+            title={isArabic ? 'السابق' : 'Previous'}
+            style={{ color: themeColors.textSecondary }}
+          >
+            <SkipBack className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onPlayPause}
+            disabled={!currentSong}
+            className="p-1.5 rounded-lg shadow-sm disabled:opacity-40"
+            style={{
+              backgroundColor: themeColors.primary,
+              color: primaryTextColor,
+            }}
+            title={isPlaying ? (isArabic ? 'إيقاف مؤقت' : 'Pause') : (isArabic ? 'تشغيل' : 'Play')}
+          >
+            {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+          </button>
+          <button
+            type="button"
+            onClick={onNext}
+            disabled={!currentSong}
+            className="p-1.5 rounded-lg hover:bg-white/10 disabled:opacity-40"
+            title={isArabic ? 'التالي' : 'Next'}
+            style={{ color: themeColors.textSecondary }}
+          >
+            <SkipForward className="w-4 h-4" />
+          </button>
+
+          <span className="text-[10px] font-mono tabular-nums w-8 text-right shrink-0" style={{ color: themeColors.textMuted }}>
+            {formatTime(currentTimeMs)}
+          </span>
+          <input
+            type="range"
+            min={0}
+            max={durationMs || 100}
+            value={currentTimeMs || 0}
+            onChange={(e) => onSeek(Number(e.target.value))}
+            className="flex-1 h-1.5 rounded-lg cursor-pointer"
+            style={{ accentColor: themeColors.primary }}
+          />
+          <span className="text-[10px] font-mono tabular-nums w-8 shrink-0" style={{ color: themeColors.textMuted }}>
+            {formatTime(durationMs)}
+          </span>
+        </div>
+
+        {/* Right: Volume + Queue + Expand */}
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="hidden md:flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => onVolumeChange(volume === 0 ? 0.8 : 0)}
+              className="p-1 rounded hover:bg-white/10"
+              title={volume === 0 ? 'Unmute' : 'Mute'}
+            >
+              {volume === 0 ? (
+                <VolumeX className="w-3.5 h-3.5" style={{ color: themeColors.textMuted }} />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5" style={{ color: themeColors.textSecondary }} />
+              )}
+            </button>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={volume}
+              onChange={(e) => onVolumeChange(Number(e.target.value))}
+              className="w-16 h-1 rounded-lg cursor-pointer"
+              style={{ accentColor: themeColors.primary }}
+            />
+          </div>
+          <button
+            type="button"
+            onClick={onOpenQueue}
+            className="p-1.5 rounded-lg hover:bg-white/10"
+            title={isArabic ? 'قائمة التشغيل' : 'Play Queue'}
+          >
+            <ListMusic className="w-4 h-4" style={{ color: themeColors.textSecondary }} />
+          </button>
+          <button
+            type="button"
+            onClick={onOpenNowPlaying}
+            className="p-1.5 rounded-lg hover:bg-white/10"
+            title={isArabic ? 'توسيع المشغل' : 'Expand Player'}
+          >
+            <Maximize2 className="w-4 h-4" style={{ color: themeColors.textSecondary }} />
+          </button>
+        </div>
+      </footer>
+    );
+  }
 
   return (
     <footer

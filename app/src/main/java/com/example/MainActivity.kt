@@ -90,7 +90,12 @@ class MainActivity : ComponentActivity() {
             try {
                 val pInfo = packageManager.getPackageInfo(packageName, 0)
                 val version = pInfo.versionName ?: "1.0"
-                GitHubUpdater.checkForUpdates(this@MainActivity, version, showToast = false)
+                GitHubUpdater.checkForUpdates(
+                    this@MainActivity,
+                    version,
+                    showToast = false,
+                    autoDownload = false
+                )
             } catch (e: Exception) {
                 e.printStackTrace()
             }
@@ -299,10 +304,71 @@ fun MainApp() {
         }
     }
 
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
+    val availableUpdate by GitHubUpdater.availableUpdate.collectAsState()
+
     PremiumBackdrop {
     Scaffold(
         containerColor = androidx.compose.ui.graphics.Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onBackground,
+        topBar = {
+            val updateInfo = availableUpdate
+            if (updateInfo != null && currentRoute != "quran_reader" && currentRoute != "video_player") {
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .windowInsetsPadding(WindowInsets.statusBars)
+                        .padding(horizontal = 12.dp, vertical = 2.dp)
+                        .testTag("top_update_banner"),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.92f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(
+                                Icons.Filled.SystemUpdate,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = if (isArabic) {
+                                    "تتوفر نسخة جديدة (v${updateInfo.version}) • يمكنك تنزيلها من زر التحديثات"
+                                } else {
+                                    "New version available (v${updateInfo.version}) • Download via Check for updates"
+                                },
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(
+                            onClick = { GitHubUpdater.dismissUpdateBanner() },
+                            modifier = Modifier.size(22.dp)
+                        ) {
+                            Icon(
+                                Icons.Filled.Close,
+                                contentDescription = if (isArabic) "إغلاق التنبيه" else "Dismiss",
+                                modifier = Modifier.size(13.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
         bottomBar = {
             if (currentRoute != "full_player" && currentRoute != "quran_reader" && currentRoute != "video_player") {
                 val navItemColors = NavigationBarItemDefaults.colors(
@@ -327,8 +393,8 @@ fun MainApp() {
                 val currentDestination = navBackStackEntry?.destination
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_player"),
-                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = "Player") },
-                    label = { Text("Player", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.PlayArrow, contentDescription = if (isArabic) "المشغل" else "Player") },
+                    label = { Text(if (isArabic) "المشغل" else "Player", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "player",
                     colors = navItemColors,
@@ -343,8 +409,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_equalizer"),
-                    icon = { Icon(Icons.Filled.Tune, contentDescription = "Equalizer") },
-                    label = { Text("EQ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.Tune, contentDescription = if (isArabic) "الإيكولايزر" else "Equalizer") },
+                    label = { Text(if (isArabic) "الإيكولايزر" else "EQ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "equalizer",
                     colors = navItemColors,
@@ -358,8 +424,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_online_music"),
-                    icon = { Icon(Icons.Filled.Cloud, contentDescription = "Online Music") },
-                    label = { Text("Online", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.Cloud, contentDescription = if (isArabic) "أونلاين" else "Online Music") },
+                    label = { Text(if (isArabic) "أونلاين" else "Online", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "online_music",
                     colors = navItemColors,
@@ -373,8 +439,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_radio"),
-                    icon = { Icon(Icons.Filled.Radio, contentDescription = "Radio") },
-                    label = { Text("Radio", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.Radio, contentDescription = if (isArabic) "الراديو" else "Radio") },
+                    label = { Text(if (isArabic) "الراديو" else "Radio", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "radio",
                     colors = navItemColors,
@@ -388,8 +454,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_quran"),
-                    icon = { Icon(Icons.Filled.MenuBook, contentDescription = "Holy Quran") },
-                    label = { Text("Quran", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.MenuBook, contentDescription = if (isArabic) "القرآن" else "Holy Quran") },
+                    label = { Text(if (isArabic) "القرآن" else "Quran", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "quran",
                     colors = navItemColors,
@@ -403,8 +469,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_dj"),
-                    icon = { Icon(Icons.Filled.Headset, contentDescription = "DJ Mixer") },
-                    label = { Text("DJ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.Headset, contentDescription = if (isArabic) "الدي جي" else "DJ Mixer") },
+                    label = { Text(if (isArabic) "الدي جي" else "DJ", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "dj",
                     colors = navItemColors,
@@ -419,8 +485,8 @@ fun MainApp() {
                 )
                 NavigationBarItem(
                     modifier = Modifier.testTag("nav_mic"),
-                    icon = { Icon(Icons.Filled.Mic, contentDescription = "Mic/Karaoke") },
-                    label = { Text("Mic", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
+                    icon = { Icon(Icons.Filled.Mic, contentDescription = if (isArabic) "مايك" else "Mic/Karaoke") },
+                    label = { Text(if (isArabic) "مايك" else "Mic", maxLines = 1, softWrap = false, fontSize = 10.sp, overflow = TextOverflow.Clip, fontWeight = FontWeight.SemiBold) },
                     alwaysShowLabel = true,
                     selected = currentDestination?.route == "mic",
                     colors = navItemColors,

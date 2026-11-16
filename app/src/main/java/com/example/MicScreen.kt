@@ -43,18 +43,28 @@ import kotlinx.coroutines.*
 @Composable
 fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineScope) {
     val context = LocalContext.current
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var inputExpanded by remember { mutableStateOf(false) }
     var outputExpanded by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) micController.toggleMic(true, scope)
-        else Toast.makeText(context, "Microphone permission is required", Toast.LENGTH_SHORT).show()
+        else Toast.makeText(
+            context,
+            if (isArabic) "يلزم منح إذن الميكروفون" else "Microphone permission is required",
+            Toast.LENGTH_SHORT
+        ).show()
     }
     val saveRecordingLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/wav")) { uri ->
         if (uri == null) micController.discardPendingRecording()
         else scope.launch {
             val ok = withContext(kotlinx.coroutines.Dispatchers.IO) { micController.savePendingRecording(uri) }
-            Toast.makeText(context, if (ok) "Recording saved" else "Unable to save recording", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (ok) (if (isArabic) "تم حفظ التسجيل بنجاح" else "Recording saved")
+                else (if (isArabic) "تعذر حفظ التسجيل" else "Unable to save recording"),
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
 
@@ -62,8 +72,17 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text("Karaoke Studio", modifier = Modifier, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text("Live vocal monitor with DJ-style effects", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            if (isArabic) "استوديو الكاريوكي والمايك" else "Karaoke Studio",
+            modifier = Modifier,
+            style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            if (isArabic) "مراقبة صوتية مباشرة مع مؤثرات الدي جي الاحترافية" else "Live vocal monitor with DJ-style effects",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Spacer(Modifier.height(14.dp))
 
         Box(
@@ -78,7 +97,14 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
             Icon(if (micController.isMicEnabled) Icons.Filled.Mic else Icons.Filled.MicOff, null, Modifier.size(46.dp))
         }
         Spacer(Modifier.height(6.dp))
-        Text(if (micController.isMicEnabled) "LIVE MONITOR ON" else "Tap to enable microphone", fontWeight = FontWeight.SemiBold)
+        Text(
+            if (micController.isMicEnabled) {
+                if (isArabic) "البث الصوتي المباشر نشط" else "LIVE MONITOR ON"
+            } else {
+                if (isArabic) "اضغط لتفعيل الميكروفون" else "Tap to enable microphone"
+            },
+            fontWeight = FontWeight.SemiBold
+        )
         Spacer(Modifier.height(14.dp))
 
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)) {
@@ -89,31 +115,31 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Column(Modifier.weight(1f)) {
-                        Text("Audio Card", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        Text(if (isArabic) "بطاقة الصوت والتوجيه" else "Audio Card", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            "DJ Input / Master Output",
+                            if (isArabic) "مدخل المايك / مخرج الصوت الرئيسي" else "DJ Input / Master Output",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                     IconButton(onClick = { micController.refreshDevices() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh audio devices")
+                        Icon(Icons.Filled.Refresh, contentDescription = if (isArabic) "تحديث أجهزة الصوت" else "Refresh audio devices")
                     }
                 }
                 Spacer(Modifier.height(8.dp))
 
-                Text("INPUT • Microphone", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text(if (isArabic) "المدخل • الميكروفون" else "INPUT • Microphone", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { inputExpanded = true }, Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Filled.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(micController.selectedInputDevice?.displayName() ?: "System Default Mic", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(micController.selectedInputDevice?.displayName() ?: (if (isArabic) "ميكروفون النظام الافتراضي" else "System Default Mic"), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     DropdownMenu(inputExpanded, { inputExpanded = false }) {
-                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text("System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text(if (isArabic) "ميكروفون النظام الافتراضي" else "System Default Mic") }, onClick = { micController.selectInputDevice(null, scope); inputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.inputDevices.forEach { device ->
                             DropdownMenuItem(leadingIcon = { Icon(Icons.Filled.Mic, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectInputDevice(device, scope); inputExpanded = false })
                         }
@@ -121,18 +147,18 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                 }
                 Spacer(Modifier.height(10.dp))
 
-                Text("OUTPUT • Master", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Text(if (isArabic) "المخرج • السماعات الرئيسية" else "OUTPUT • Master", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(4.dp))
                 Box(Modifier.fillMaxWidth()) {
                     OutlinedButton(onClick = { outputExpanded = true }, Modifier.fillMaxWidth()) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.AutoMirrored.Filled.VolumeUp, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
-                            Text(micController.selectedOutputDevice?.displayName() ?: "System Default Output", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(micController.selectedOutputDevice?.displayName() ?: (if (isArabic) "مخرج النظام الافتراضي" else "System Default Output"), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                     DropdownMenu(outputExpanded, { outputExpanded = false }) {
-                        DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) }, text = { Text("System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
+                        DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) }, text = { Text(if (isArabic) "مخرج النظام الافتراضي" else "System Default Output") }, onClick = { micController.selectOutputDevice(null); outputExpanded = false })
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) micController.outputDevices.forEach { device ->
                             DropdownMenuItem(leadingIcon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) }, text = { Text(device.displayName(), maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { micController.selectOutputDevice(device); outputExpanded = false })
                         }
@@ -151,20 +177,20 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                Text("Mix & FX Amount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(if (isArabic) "المزج ومستوى المؤثرات" else "Mix & FX Amount", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
-                Text("Mic Volume: ${(micController.micVolume * 100).toInt()}%")
+                Text(if (isArabic) "مستوى صوت المايك: ${(micController.micVolume * 100).toInt()}%" else "Mic Volume: ${(micController.micVolume * 100).toInt()}%")
                 Slider(micController.micVolume, { micController.micVolume = it }, valueRange = 0f..2f)
-                Text("Echo: ${(micController.echoLevel * 100).toInt()}%")
+                Text(if (isArabic) "الصدى (Echo): ${(micController.echoLevel * 100).toInt()}%" else "Echo: ${(micController.echoLevel * 100).toInt()}%")
                 Slider(micController.echoLevel, { micController.echoLevel = it }, valueRange = 0f..1f)
-                Text("Reverb: ${(micController.reverbLevel * 100).toInt()}%")
+                Text(if (isArabic) "الارتداد (Reverb): ${(micController.reverbLevel * 100).toInt()}%" else "Reverb: ${(micController.reverbLevel * 100).toInt()}%")
                 Slider(micController.reverbLevel, { micController.reverbLevel = it }, valueRange = 0f..1f)
-                Text("Flanger: ${(micController.flangerMix * 100).toInt()}%")
+                Text(if (isArabic) "الفلانجر (Flanger): ${(micController.flangerMix * 100).toInt()}%" else "Flanger: ${(micController.flangerMix * 100).toInt()}%")
                 Slider(micController.flangerMix, { micController.flangerMix = it }, valueRange = 0f..1f)
-                Text("Filter: ${(micController.filterMix * 100).toInt()}%")
+                Text(if (isArabic) "الفلتر (Filter): ${(micController.filterMix * 100).toInt()}%" else "Filter: ${(micController.filterMix * 100).toInt()}%")
                 Slider(micController.filterMix, { micController.filterMix = it }, valueRange = 0f..1f)
                 Spacer(Modifier.height(4.dp))
-                Text("Vocal Filters", style = MaterialTheme.typography.labelSmall)
+                Text(if (isArabic) "فلاتر الصوت" else "Vocal Filters", style = MaterialTheme.typography.labelSmall)
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(MicFilter.values().toList().filter {
                         it !in setOf(
@@ -184,9 +210,9 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                Text("Voice Changer", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(if (isArabic) "مغير الصوت" else "Voice Changer", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Real voice transformation • affects the live microphone",
+                    if (isArabic) "تغيير طبقة وشخصية الصوت مباشرة أثناء التحدث" else "Real voice transformation • affects the live microphone",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -234,7 +260,7 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(14.dp)) {
-                Text("Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text(if (isArabic) "مؤثرات الإيقاع (Beat FX)" else "Beat FX", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                 Spacer(Modifier.height(6.dp))
                 Text("BPM: ${micController.bpm.toInt()}")
                 Slider(micController.bpm, { micController.bpm = it }, valueRange = 70f..180f)
@@ -248,8 +274,8 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
             Row(Modifier.fillMaxWidth().padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("AEC & Noise Suppression", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                    Text("Live echo cancellation and noise cleanup", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(if (isArabic) "عزل الضوضاء ومنع الصدى" else "AEC & Noise Suppression", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text(if (isArabic) "تصفية الصوت المباشر وإلغاء التشويش" else "Live echo cancellation and noise cleanup", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
                 Switch(checked = micController.voiceProcessingEnabled, onCheckedChange = micController::toggleVoiceProcessing)
             }
@@ -261,8 +287,8 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Filled.FiberManualRecord, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Recording", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                        Text("Record the processed microphone output", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(if (isArabic) "التسجيل الصوتي" else "Recording", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                        Text(if (isArabic) "تسجيل مخرج الميكروفون مع المؤثرات" else "Record the processed microphone output", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(micController.recordingDurationText, style = MaterialTheme.typography.labelSmall)
                 }
@@ -272,12 +298,15 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
                     onClick = {
                         if (micController.isOutputRecording) {
                             if (micController.stopOutputRecording()) saveRecordingLauncher.launch(micController.suggestedRecordingName())
-                        } else if (micController.startOutputRecording()) Toast.makeText(context, "Recording started", Toast.LENGTH_SHORT).show()
+                        } else if (micController.startOutputRecording()) {
+                            Toast.makeText(context, if (isArabic) "بدأ التسجيل" else "Recording started", Toast.LENGTH_SHORT).show()
+                        }
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(if (micController.isOutputRecording) Icons.Filled.Stop else Icons.Filled.FiberManualRecord, null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp)); Text(if (micController.isOutputRecording) "Stop & Save" else "Start Recording")
+                    Spacer(Modifier.width(6.dp))
+                    Text(if (micController.isOutputRecording) (if (isArabic) "إيقاف وحفظ" else "Stop & Save") else (if (isArabic) "بدء التسجيل" else "Start Recording"))
                 }
                 Text(micController.recordingStatus, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -286,7 +315,15 @@ fun MicScreen(micController: MicController, scope: kotlinx.coroutines.CoroutineS
         Spacer(Modifier.height(12.dp))
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Filled.CheckCircle, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp))
-            Text(if (micController.isMicEnabled) "Microphone monitor is active" else "Microphone monitor is off", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                if (micController.isMicEnabled) {
+                    if (isArabic) "مراقبة الميكروفون نشطة" else "Microphone monitor is active"
+                } else {
+                    if (isArabic) "مراقبة الميكروفون متوقفة" else "Microphone monitor is off"
+                },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

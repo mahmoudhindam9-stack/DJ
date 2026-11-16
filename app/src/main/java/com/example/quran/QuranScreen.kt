@@ -132,14 +132,16 @@ fun QuranScreen(
     var showQueue by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf<String?>(null) }
 
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
+
     val downloadLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("audio/mpeg")) { uri ->
         val pending = pendingDownload
         pendingDownload = null
         if (uri != null && pending != null) scope.launch {
-            message = "جاري تنزيل " + pending.first
+            message = if (isArabic) "جاري تنزيل " + pending.first else "Downloading " + pending.first
             runCatching { repository.download(pending.second, context.contentResolver, uri) }
-                .onSuccess { message = "تم تنزيل السورة بنجاح" }
-                .onFailure { message = it.message ?: "فشل تنزيل السورة" }
+                .onSuccess { message = if (isArabic) "تم تنزيل السورة بنجاح" else "Surah downloaded successfully" }
+                .onFailure { message = it.message ?: (if (isArabic) "فشل تنزيل السورة" else "Failed to download Surah") }
         }
     }
 
@@ -148,7 +150,7 @@ fun QuranScreen(
         error = null
         runCatching { repository.reciters() }
             .onSuccess { reciters = it }
-            .onFailure { error = it.message ?: "تعذر تحميل القراء" }
+            .onFailure { error = it.message ?: (if (isArabic) "تعذر تحميل القراء" else "Failed to load reciters") }
         loading = false
     }
     LaunchedEffect(Unit) { loadReciters() }
@@ -175,7 +177,11 @@ fun QuranScreen(
         val queue = moshaf.surahs.map { audioItem(reciter, moshaf, it) }
         val index = moshaf.surahs.indexOf(surah).coerceAtLeast(0)
         playerController.playCollection(queue, index)
-        message = "تشغيل " + quranSurahNames[surah - 1] + " بصوت " + reciter.name
+        message = if (isArabic) {
+            "تشغيل " + quranSurahNames[surah - 1] + " بصوت " + reciter.name
+        } else {
+            "Playing " + quranSurahNames[surah - 1] + " • " + reciter.name
+        }
     }
 
     val isQuranPlaying = playerController.currentSong?.id?.startsWith("quran:") == true
@@ -186,15 +192,19 @@ fun QuranScreen(
                 IconButton(onClick = {
                     if (selectedMoshaf != null) selectedMoshaf = null else selectedReciter = null
                     message = null
-                }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "رجوع") }
+                }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, if (isArabic) "رجوع" else "Back") }
             } else {
                 Icon(Icons.Filled.MenuBook, null, Modifier.size(28.dp))
                 Spacer(Modifier.width(8.dp))
             }
             Column(Modifier.weight(1f)) {
-                Text("القرآن الكريم", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                 Text(
-                    selectedMoshaf?.name ?: selectedReciter?.name ?: "اختر القارئ ثم الرواية ثم السورة",
+                    if (isArabic) "القرآن الكريم" else "Holy Quran",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    selectedMoshaf?.name ?: selectedReciter?.name ?: (if (isArabic) "اختر القارئ ثم الرواية ثم السورة" else "Select reciter, narration, and Surah"),
                     style = MaterialTheme.typography.bodySmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -204,21 +214,21 @@ fun QuranScreen(
                 FilledTonalIconButton(onClick = onOpenReader) {
                     Icon(
                         Icons.Filled.MenuBook,
-                        contentDescription = "قراءة المصحف مع المقرئ",
+                        contentDescription = if (isArabic) "قراءة المصحف مع المقرئ" else "Open Mushaf Reader",
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }
             }
-            IconButton(onClick = { showQueue = true }) { Icon(Icons.Filled.QueueMusic, "قائمة التشغيل") }
-            IconButton(onClick = { scope.launch { loadReciters() } }) { Icon(Icons.Filled.Refresh, "تحديث") }
+            IconButton(onClick = { showQueue = true }) { Icon(Icons.Filled.QueueMusic, if (isArabic) "قائمة الانتظار" else "Queue") }
+            IconButton(onClick = { scope.launch { loadReciters() } }) { Icon(Icons.Filled.Refresh, if (isArabic) "تحديث" else "Refresh") }
         }
 
         when {
             loading && reciters.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
             error != null && reciters.isEmpty() -> Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(error ?: "حدث خطأ", color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = { scope.launch { loadReciters() } }) { Text("إعادة المحاولة") }
+                    Text(error ?: (if (isArabic) "حدث خطأ" else "An error occurred"), color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = { scope.launch { loadReciters() } }) { Text(if (isArabic) "إعادة المحاولة" else "Retry") }
                 }
             }
             selectedMoshaf != null && selectedReciter != null -> {
@@ -240,21 +250,24 @@ fun QuranScreen(
                                     IconButton(onClick = onOpenReader) {
                                         Icon(
                                             Icons.Filled.MenuBook,
-                                            contentDescription = "فتح المصحف",
+                                            contentDescription = if (isArabic) "فتح المصحف" else "Open Mushaf",
                                             tint = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                 }
                                 IconButton(onClick = { playSurah(reciter, moshaf, surah) }) {
-                                    Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "تشغيل")
+                                    Icon(if (active && playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (isArabic) "تشغيل" else "Play")
                                 }
-                                IconButton(onClick = { playerController.enqueueOnlineSong(item); message = "أضيفت السورة لقائمة التشغيل" }) {
-                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, "إضافة للقائمة")
+                                IconButton(onClick = {
+                                    playerController.enqueueOnlineSong(item)
+                                    message = if (isArabic) "أضيفت السورة لقائمة التشغيل" else "Added Surah to queue"
+                                }) {
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, if (isArabic) "إضافة للقائمة" else "Add to queue")
                                 }
                                 IconButton(onClick = {
                                     pendingDownload = quranSurahNames[surah - 1] to audioUrl(moshaf, surah)
                                     downloadLauncher.launch(quranSurahNames[surah - 1] + ".mp3")
-                                }) { Icon(Icons.Filled.Download, "تنزيل") }
+                                }) { Icon(Icons.Filled.Download, if (isArabic) "تنزيل" else "Download") }
                             }
                         }
                     }
@@ -270,7 +283,10 @@ fun QuranScreen(
                                 Spacer(Modifier.width(12.dp))
                                 Column(Modifier.weight(1f)) {
                                     Text(moshaf.name, fontWeight = FontWeight.SemiBold)
-                                    Text(moshaf.surahs.size.toString() + " سورة متاحة", style = MaterialTheme.typography.bodySmall)
+                                    Text(
+                                        if (isArabic) "${moshaf.surahs.size} سورة متاحة" else "${moshaf.surahs.size} Surahs available",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
                                 }
                                 Icon(Icons.Filled.ChevronRight, null)
                             }
@@ -284,7 +300,7 @@ fun QuranScreen(
                     onValueChange = { query = it },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
                     singleLine = true,
-                    label = { Text("ابحث عن قارئ") },
+                    label = { Text(if (isArabic) "ابحث عن قارئ" else "Search reciter") },
                     leadingIcon = { Icon(Icons.Filled.Search, null) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
                 )
@@ -295,7 +311,10 @@ fun QuranScreen(
                                 Icon(Icons.Filled.RecordVoiceOver, null)
                                 Spacer(Modifier.width(12.dp))
                                 Text(reciter.name, Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                                Text(reciter.moshafs.size.toString() + " رواية", style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    if (isArabic) "${reciter.moshafs.size} رواية" else "${reciter.moshafs.size} narrations",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                                 Icon(Icons.Filled.ChevronRight, null)
                             }
                         }

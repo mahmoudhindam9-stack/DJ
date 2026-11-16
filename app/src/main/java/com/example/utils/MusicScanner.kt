@@ -14,7 +14,7 @@ import java.util.Locale
 object MusicScanner {
 
     private val playableExtensions = setOf(
-        "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp", "mid", "midi"
+        "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp", "mid", "midi", "wma", "weba"
     )
 
     fun isPlayableAudioName(nameOrPath: String): Boolean {
@@ -42,38 +42,38 @@ object MusicScanner {
             MediaStore.Audio.Media.MIME_TYPE
         )
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0 AND ${MediaStore.Audio.Media.SIZE} > 0"
-
         try {
             context.contentResolver.query(
                 collection,
                 projection,
-                selection,
+                null,
                 null,
                 "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE ASC"
             )?.use { cursor ->
                 val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
-                val titleColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
-                val artistColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
-                val albumColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
-                val durationColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-                val sizeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.SIZE)
+                val titleColumn = cursor.getColumnIndex(MediaStore.Audio.Media.TITLE)
+                val artistColumn = cursor.getColumnIndex(MediaStore.Audio.Media.ARTIST)
+                val albumColumn = cursor.getColumnIndex(MediaStore.Audio.Media.ALBUM)
+                val durationColumn = cursor.getColumnIndex(MediaStore.Audio.Media.DURATION)
+                val sizeColumn = cursor.getColumnIndex(MediaStore.Audio.Media.SIZE)
                 val displayCol = cursor.getColumnIndex(MediaStore.Audio.Media.DISPLAY_NAME)
                 val mimeCol = cursor.getColumnIndex(MediaStore.Audio.Media.MIME_TYPE)
 
                 while (cursor.moveToNext()) {
                     val id = cursor.getLong(idColumn)
-                    val title = cursor.getString(titleColumn) ?: "Unknown Track"
-                    val artist = cursor.getString(artistColumn) ?: "Unknown Artist"
-                    val album = cursor.getString(albumColumn) ?: "Unknown Album"
-                    val duration = cursor.getLong(durationColumn)
-                    val size = cursor.getLong(sizeColumn)
+                    val title = if (titleColumn >= 0) cursor.getString(titleColumn) ?: "Unknown Track" else "Unknown Track"
+                    val artist = if (artistColumn >= 0) cursor.getString(artistColumn) ?: "Unknown Artist" else "Unknown Artist"
+                    val album = if (albumColumn >= 0) cursor.getString(albumColumn) ?: "Unknown Album" else "Unknown Album"
+                    val duration = if (durationColumn >= 0) cursor.getLong(durationColumn) else 0L
+                    val size = if (sizeColumn >= 0) cursor.getLong(sizeColumn) else 0L
                     val displayName = if (displayCol >= 0) cursor.getString(displayCol).orEmpty() else ""
                     val mime = if (mimeCol >= 0) cursor.getString(mimeCol).orEmpty() else ""
 
-                    if (size <= 0L) continue
+                    if (mime.startsWith("image/", true) || mime.startsWith("video/", true)) continue
                     val playable = mime.startsWith("audio/", true) ||
                         mime.equals("application/ogg", true) ||
+                        mime.equals("application/x-ogg", true) ||
+                        mime.equals("application/flac", true) ||
                         isPlayableAudioName(displayName)
                     if (!playable) continue
 
@@ -83,15 +83,28 @@ object MusicScanner {
                     )
                     if (!seenUris.add(contentUri.toString())) continue
 
+                    val cleanDisplay = displayName.substringBeforeLast('.').trim()
+                    val resolvedTitle = if (title == "<unknown>" || title.isBlank()) {
+                        cleanDisplay.ifBlank { "Track $id" }
+                    } else {
+                        title
+                    }
+                    val resolvedArtist = if (artist == "<unknown>" || artist.isBlank()) {
+                        if (cleanDisplay.contains(" - ")) cleanDisplay.substringBefore(" - ").trim().ifBlank { "Unknown Artist" }
+                        else "Unknown Artist"
+                    } else {
+                        artist
+                    }
+
                     audioList.add(
                         AudioItem(
                             id = id.toString(),
-                            title = if (title == "<unknown>") displayName.substringBeforeLast('.').ifBlank { "Track $id" } else title,
-                            artist = if (artist == "<unknown>") "Unknown Artist" else artist,
-                            album = if (album == "<unknown>") "Unknown Album" else album,
-                            durationMs = duration,
+                            title = resolvedTitle,
+                            artist = resolvedArtist,
+                            album = if (album == "<unknown>" || album.isBlank()) "Unknown Album" else album,
+                            durationMs = duration.coerceAtLeast(0L),
                             uri = contentUri,
-                            sizeBytes = size
+                            sizeBytes = size.coerceAtLeast(0L)
                         )
                     )
                 }
@@ -298,17 +311,34 @@ object MusicScanner {
         var artist = "Local File"
         var album = "Imports"
         var duration = 0L
+        var sizeBytes = 0L
 
-        // Attempt to extract display name
+        // Attempt to extract display name and size
         try {
-            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+            context.contentResolver.query(
+                uri,
+                arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE),
+                null,
+                null,
+                null
+            )?.use { cursor ->
                 if (cursor.moveToFirst()) {
                     val nameIdx = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
                     if (nameIdx != -1) {
                         val displayName = cursor.getString(nameIdx)
                         if (!displayName.isNullOrBlank()) {
-                            title = displayName.substringBeforeLast(".")
+                            val base = displayName.substringBeforeLast(".").trim()
+                            if (base.contains(" - ")) {
+                                artist = base.substringBefore(" - ").trim().ifBlank { "Local File" }
+                                title = base.substringAfter(" - ").trim().ifBlank { base }
+                            } else if (base.isNotBlank()) {
+                                title = base
+                            }
                         }
+                    }
+                    val sizeIdx = cursor.getColumnIndex(OpenableColumns.SIZE)
+                    if (sizeIdx != -1 && !cursor.isNull(sizeIdx)) {
+                        sizeBytes = cursor.getLong(sizeIdx).coerceAtLeast(0L)
                     }
                 }
             }
@@ -316,33 +346,33 @@ object MusicScanner {
             e.printStackTrace()
         }
 
-        // Extract metadata using MediaMetadataRetriever
+        // Extract metadata using MediaMetadataRetriever with guaranteed release
+        val retriever = MediaMetadataRetriever()
         try {
-            val retriever = MediaMetadataRetriever()
             retriever.setDataSource(context, uri)
             val extractedTitle = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE)
             val extractedArtist = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST)
             val extractedAlbum = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM)
             val extractedDuration = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
 
-            if (!extractedTitle.isNullOrBlank()) title = extractedTitle
-            if (!extractedArtist.isNullOrBlank()) artist = extractedArtist
-            if (!extractedAlbum.isNullOrBlank()) album = extractedAlbum
+            if (!extractedTitle.isNullOrBlank() && extractedTitle != "<unknown>") title = extractedTitle
+            if (!extractedArtist.isNullOrBlank() && extractedArtist != "<unknown>") artist = extractedArtist
+            if (!extractedAlbum.isNullOrBlank() && extractedAlbum != "<unknown>") album = extractedAlbum
             if (!extractedDuration.isNullOrBlank()) duration = extractedDuration.toLongOrNull() ?: 0L
-
-            retriever.release()
-        } catch (e: Exception) {
-            e.printStackTrace()
+        } catch (_: Exception) {
+        } finally {
+            runCatching { retriever.release() }
         }
 
-        val id = uri.hashCode().toString()
+        val id = uri.toString().hashCode().toString()
         return AudioItem(
             id = id,
             title = title,
             artist = artist,
             album = album,
-            durationMs = duration,
-            uri = uri
+            durationMs = duration.coerceAtLeast(0L),
+            uri = uri,
+            sizeBytes = sizeBytes
         )
     }
 

@@ -56,6 +56,7 @@ fun DJMixerScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val deckA = djMixerController.deckA
     val deckB = djMixerController.deckB
 
@@ -72,7 +73,11 @@ fun DJMixerScreen(
             songs.forEach { song ->
                 if (existing.add(song.uri)) audioLibrary.add(song)
             }
-            Toast.makeText(context, "Added ${songs.size} song(s)", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (isArabic) "تمت إضافة ${songs.size} مقطع" else "Added ${songs.size} song(s)",
+                Toast.LENGTH_SHORT
+            ).show()
         }
     }
     
@@ -91,15 +96,19 @@ fun DJMixerScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "DJ STUDIO MIXER",
+                text = if (isArabic) "مكسر استوديو الدي جي" else "DJ STUDIO MIXER",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
                 color = MaterialTheme.colorScheme.primary,
-                letterSpacing = 2.sp,
+                letterSpacing = if (isArabic) 0.sp else 2.sp,
                 modifier = Modifier.weight(1f)
             )
             PremiumStatusPill(
-                text = if (deckA.isPlaying || deckB.isPlaying) "LIVE AUDIO" else "STANDBY",
+                text = if (deckA.isPlaying || deckB.isPlaying) {
+                    if (isArabic) "بث نشط" else "LIVE AUDIO"
+                } else {
+                    if (isArabic) "في الانتظار" else "STANDBY"
+                },
                 active = deckA.isPlaying || deckB.isPlaying
             )
         }
@@ -118,10 +127,10 @@ fun DJMixerScreen(
         ) {
             Column(modifier = Modifier.padding(16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "CROSSFADER",
+                    text = if (isArabic) "المازج الوسطي (Crossfader)" else "CROSSFADER",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    letterSpacing = 1.sp
+                    letterSpacing = if (isArabic) 0.sp else 1.sp
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 Row(
@@ -199,6 +208,7 @@ fun DJDeck(
     onPlayStarted: () -> Unit,
     accentColor: Color
 ) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var showTrackSelector by remember { mutableStateOf(false) }
 
     DjSurfaceCard(
@@ -233,7 +243,7 @@ fun DJDeck(
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = deck.currentSong?.title ?: "LOAD TRACK",
+                        text = deck.currentSong?.title ?: (if (isArabic) "تحميل مقطع" else "LOAD TRACK"),
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
                         color = if (deck.currentSong != null) MaterialTheme.colorScheme.onSurface else accentColor,
@@ -292,7 +302,7 @@ fun DJDeck(
                 ) {
                     Icon(
                         imageVector = if (deck.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = "Play/Pause",
+                        contentDescription = if (isArabic) "تشغيل/إيقاف" else "Play/Pause",
                         modifier = Modifier.size(32.dp)
                     )
                 }
@@ -352,7 +362,11 @@ fun DJDeck(
 
             // Pitch Control
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                Text("PITCH", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    if (isArabic) "السرعة (Pitch)" else "PITCH",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 Text(String.format("%.1f%%", (deck.pitch - 1f) * 100f), style = MaterialTheme.typography.labelSmall, color = accentColor, fontWeight = FontWeight.Bold)
             }
             Slider(
@@ -381,18 +395,18 @@ fun DJDeck(
     if (showTrackSelector) {
         AlertDialog(
             onDismissRequest = { showTrackSelector = false },
-            title = { Text("Load Track - ${deck.deckName}") },
+            title = { Text(if (isArabic) "تحميل مقطع - ${deck.deckName}" else "Load Track - ${deck.deckName}") },
             containerColor = MaterialTheme.colorScheme.surface,
             text = {
                 if (audioLibrary.isEmpty()) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("No tracks available in library.")
+                        Text(if (isArabic) "لا توجد مقاطع متاحة في المكتبة." else "No tracks available in library.")
                         Spacer(modifier = Modifier.height(16.dp))
                         Button(onClick = {
                             showTrackSelector = false
                             onImportClicked()
                         }) {
-                            Text("Import Audio Files")
+                            Text(if (isArabic) "استيراد ملفات صوتية" else "Import Audio Files")
                         }
                     }
                 } else {
@@ -416,7 +430,7 @@ fun DJDeck(
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showTrackSelector = false }) { Text("Cancel") }
+                TextButton(onClick = { showTrackSelector = false }) { Text(if (isArabic) "إلغاء" else "Cancel") }
             }
         )
     }

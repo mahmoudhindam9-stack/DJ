@@ -59,8 +59,8 @@ object CloudSyncManager {
     const val NEON_JWKS_URL = "https://ep-morning-bird-bad5xn0x.neonauth.c-8.eu-central-1.aws.neon.tech/neondb/auth/.well-known/jwks.json"
     const val NEON_REALTIME_URL = "https://ep-morning-bird-bad5xn0x.rt.c-8.eu-central-1.aws.neon.tech/"
 
-    const val WEB_APP_SHARED_URL = "https://ais-pre-ekucjcbjtog3dcs7gw7fdq-133142513397.europe-west1.run.app"
-    const val WEB_APP_DEV_URL = "https://ais-dev-ekucjcbjtog3dcs7gw7fdq-133142513397.europe-west1.run.app"
+    const val WEB_APP_SHARED_URL = "https://dj-web-topaz.vercel.app"
+    const val WEB_APP_DEV_URL = "https://dj-web-topaz.vercel.app"
 
     private const val PREFS_AUTH = "dj_cloud_auth_prefs"
     private const val PREFS_ACCOUNTS_REGISTRY = "dj_cloud_accounts_registry"
@@ -99,6 +99,12 @@ object CloudSyncManager {
         }
         _deviceIdFlow.value = devId
 
+        // Ensure any legacy run.app URL is upgraded to the production Vercel URL
+        val savedUrl = prefs.getString(KEY_WEB_BASE_URL, null)
+        if (savedUrl.isNullOrBlank() || savedUrl.contains("run.app", ignoreCase = true)) {
+            prefs.edit().putString(KEY_WEB_BASE_URL, WEB_APP_SHARED_URL).apply()
+        }
+
         val userId = prefs.getString(KEY_ACTIVE_USER_ID, null)
         val email = prefs.getString(KEY_ACTIVE_EMAIL, null)
         val token = prefs.getString(KEY_ACTIVE_TOKEN, null)
@@ -125,7 +131,12 @@ object CloudSyncManager {
 
     fun getWebBaseUrl(context: Context): String {
         val prefs = context.getSharedPreferences(PREFS_AUTH, Context.MODE_PRIVATE)
-        return prefs.getString(KEY_WEB_BASE_URL, WEB_APP_SHARED_URL) ?: WEB_APP_SHARED_URL
+        val saved = prefs.getString(KEY_WEB_BASE_URL, WEB_APP_SHARED_URL) ?: WEB_APP_SHARED_URL
+        if (saved.isBlank() || saved.contains("run.app", ignoreCase = true)) {
+            prefs.edit().putString(KEY_WEB_BASE_URL, WEB_APP_SHARED_URL).apply()
+            return WEB_APP_SHARED_URL
+        }
+        return saved
     }
 
     fun setWebBaseUrl(context: Context, url: String) {

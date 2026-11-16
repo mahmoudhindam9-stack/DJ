@@ -7,9 +7,12 @@ import com.example.model.AudioItem
 import com.example.utils.MusicScanner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.util.Locale
 
 object FolderAudioImporter {
-    private val supportedExtensions = setOf("mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp", "mid", "midi")
+    private val supportedExtensions = setOf(
+        "mp3", "m4a", "aac", "wav", "flac", "ogg", "opus", "amr", "3gp", "mid", "midi", "wma", "weba"
+    )
 
     suspend fun scan(
         context: Context,
@@ -18,14 +21,16 @@ object FolderAudioImporter {
         includeSubfolders: Boolean = true
     ): List<AudioItem> = withContext(Dispatchers.IO) {
         val result = ArrayList<AudioItem>()
-        val seenKeys = HashSet<String>()
+        val seenUris = HashSet<String>()
         val resolver = context.contentResolver
         val rootId = runCatching { DocumentsContract.getTreeDocumentId(treeUri) }.getOrNull() ?: return@withContext result
         val rootChildren = runCatching {
             DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, rootId)
         }.getOrNull() ?: return@withContext result
 
-        fun walk(childrenUri: Uri) {
+        val rootFolderName = rootId.substringAfterLast(':').substringAfterLast('/').ifBlank { "Local Folder" }
+
+        fun walk(childrenUri: Uri, currentFolderName: String) {
             if (result.size >= maxFiles) return
             resolver.query(
                 childrenUri,
@@ -44,42 +49,61 @@ object FolderAudioImporter {
                 val mimeCol = 2
                 val sizeCol = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                 while (cursor.moveToNext() && result.size < maxFiles) {
-                    val id = cursor.getString(idCol) ?: continue
+                    val docId = cursor.getString(idCol) ?: continue
                     val name = cursor.getString(nameCol) ?: ""
                     val mime = cursor.getString(mimeCol) ?: ""
-                    val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else -1L
+                    val size = if (sizeCol >= 0 && !cursor.isNull(sizeCol)) cursor.getLong(sizeCol) else 0L
                     if (name.startsWith(".")) continue
-                    val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
+                    val documentUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, docId)
                     if (mime == DocumentsContract.Document.MIME_TYPE_DIR) {
                         if (includeSubfolders) {
-                            val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, id)
-                            walk(childUri)
+                            val childUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, docId)
+                            walk(childUri, name.ifBlank { currentFolderName })
                         }
                     } else if (
-                        size != 0L &&
                         !mime.startsWith("image/", ignoreCase = true) &&
                         !mime.startsWith("video/", ignoreCase = true) &&
                         (mime.startsWith("audio/", ignoreCase = true) ||
                             mime.equals("application/ogg", ignoreCase = true) ||
+                            mime.equals("application/x-ogg", ignoreCase = true) ||
+                            mime.equals("application/flac", ignoreCase = true) ||
                             isAudioName(name))
                     ) {
-                        runCatching {
-                            val item = MusicScanner.parsePickedUri(context, documentUri)
-                            val key = "${item.id}|${item.uri}"
-                            if (seenKeys.add(key)) {
-                                result.add(item)
+                        val uriStr = documentUri.toString()
+                        if (seenUris.add(uriStr)) {
+                            val baseName = name.substringBeforeLast('.').trim().ifBlank { name.ifBlank { "Audio Track" } }
+                            val cleanBase = baseName.replace(Regex("^[0-9]+[\\s.\\-_)]+"), "").trim().ifBlank { baseName }
+                            val artist: String
+                            val title: String
+                            if (cleanBase.contains(" - ")) {
+                                artist = cleanBase.substringBefore(" - ").trim().ifBlank { currentFolderName }
+                                title = cleanBase.substringAfter(" - ").trim().ifBlank { cleanBase }
+                            } else {
+                                artist = currentFolderName
+                                title = cleanBase
                             }
+                            result.add(
+                                AudioItem(
+                                    id = uriStr.hashCode().toString(),
+                                    title = title,
+                                    artist = artist,
+                                    album = currentFolderName,
+                                    durationMs = 0L,
+                                    uri = documentUri,
+                                    sizeBytes = size.coerceAtLeast(0L)
+                                )
+                            )
                         }
                     }
                 }
             }
         }
 
-        walk(rootChildren)
-        result
-            .distinctBy { it.id.ifBlank { it.uri.toString() } }
-            .sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
+        walk(rootChildren, rootFolderName)
+        result.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it.title })
     }
 
-    private fun isAudioName(name: String): Boolean = name.substringAfterLast('.', "").lowercase() in supportedExtensions
+    private fun isAudioName(name: String): Boolean =
+        name.substringAfterLast('.', "").lowercase(Locale.ROOT) in supportedExtensions ||
+            MusicScanner.isPlayableAudioName(name)
 }

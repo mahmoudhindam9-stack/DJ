@@ -51,11 +51,36 @@ import java.util.UUID
 import java.util.Locale
 import java.text.Normalizer
 
-private fun addToLibrary(library: SnapshotStateList<AudioItem>, songs: List<AudioItem>, context: Context) {
-    val existing = library.map { it.uri }.toHashSet()
-    songs.forEach { song ->
-        if (existing.add(song.uri)) library.add(song)
+private suspend fun addToLibrary(
+    library: SnapshotStateList<AudioItem>,
+    songs: List<AudioItem>,
+    context: Context
+): List<AudioItem> {
+    if (songs.isEmpty()) return emptyList()
+    val resolved = ArrayList<AudioItem>(songs.size)
+    val byUri = library.associateBy { it.uri.toString() }.toMutableMap()
+    val byId = library.associateBy { it.id }.toMutableMap()
+    var changed = false
+
+    for (song in songs) {
+        val uriKey = song.uri.toString()
+        val existing = byUri[uriKey] ?: byId[song.id]
+        if (existing != null) {
+            resolved.add(existing)
+        } else {
+            library.add(song)
+            byUri[uriKey] = song
+            byId[song.id] = song
+            resolved.add(song)
+            changed = true
+        }
     }
+
+    if (changed) {
+        val snapshot = library.toList()
+        runCatching { PlayerLibraryStore.save(context, snapshot) }
+    }
+    return resolved
 }
 private fun normalizeSmartSearch(value: String): String {
     val withoutMarks = Normalizer.normalize(value, Normalizer.Form.NFD)
@@ -111,6 +136,8 @@ fun PlayerScreenV2(
     
      
 
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
+
     LaunchedEffect(playerController.currentSong?.id) {
         if (playerController.currentSong != null) showNowPlaying = true
     }
@@ -125,7 +152,7 @@ fun PlayerScreenV2(
                 }
             }
             addToLibrary(audioLibrary, songs, context)
-            infoMessage = "Added ${songs.size} song(s)"
+            infoMessage = if (isArabic) "تمت إضافة ${songs.size} مقطع" else "Added ${songs.size} song(s)"
         }
     }
 
@@ -141,13 +168,13 @@ fun PlayerScreenV2(
                 }
                 FolderAudioImporter.scan(context, uri)
             }
-            addToLibrary(audioLibrary, songs, context)
-            if (target != null) {
+            val canonical = addToLibrary(audioLibrary, songs, context)
+            if (target != null && canonical.isNotEmpty()) {
                 playlists.firstOrNull { it.id == target }?.let { playlist ->
-                    repo.updateSongs(playlist.id, (playlist.songIds + songs.map { it.id }).distinct().joinToString(","))
+                    repo.updateSongs(playlist.id, (playlist.songIds + canonical.map { it.id }).distinct().joinToString(","))
                 }
             }
-            infoMessage = "Added ${songs.size} song(s) from folder"
+            infoMessage = if (isArabic) "تمت إضافة ${songs.size} مقطع من المجلد" else "Added ${songs.size} song(s) from folder"
         }
     }
 
@@ -165,9 +192,9 @@ fun PlayerScreenV2(
                 addToLibrary(audioLibrary, songs, context)
                 playerController.playCollection(songs, 0)
                 showNowPlaying = true
-                infoMessage = "Playing ${songs.size} song(s) from folder"
+                infoMessage = if (isArabic) "جاري تشغيل ${songs.size} مقطع من المجلد" else "Playing ${songs.size} song(s) from folder"
             } else {
-                infoMessage = "No playable audio files in selected folder"
+                infoMessage = if (isArabic) "لا توجد ملفات صوتية قابلة للتشغيل في المجلد المحدد" else "No playable audio files in selected folder"
             }
         }
     }
@@ -176,13 +203,13 @@ fun PlayerScreenV2(
         scope.launch {
             val songs = withContext(Dispatchers.IO) { MusicScanner.scanMediaStoreAudio(context) }
             addToLibrary(audioLibrary, songs, context)
-            infoMessage = "Scanned ${songs.size} device song(s)"
+            infoMessage = if (isArabic) "تم فحص وإضافة ${songs.size} مقطع من الجهاز" else "Scanned ${songs.size} device song(s)"
         }
     }
 
     val scanPermissionLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) runDeviceScan()
-        else infoMessage = "Storage permission denied; device music was not scanned"
+        else infoMessage = if (isArabic) "تم رفض إذن التخزين؛ لم يتم فحص ملفات الجهاز" else "Storage permission denied; device music was not scanned"
     }
 
     val scanDevice = {
@@ -210,12 +237,21 @@ fun PlayerScreenV2(
         Column(Modifier.fillMaxSize().padding(horizontal = 12.dp, vertical = 10.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("MUSIC LIBRARY", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("Local audio and playlists", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(
+                        if (isArabic) "مكتبة الموسيقى" else "MUSIC LIBRARY",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = if (isArabic) 0.sp else 2.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        if (isArabic) "الصوتيات المحلية وقوائم التشغيل" else "Local audio and playlists",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 var showLanguageMenu by remember { mutableStateOf(false) }
                 val currentLangMode by com.example.ui.locale.AppLanguageManager.languageMode.collectAsState()
-                val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
                 IconButton(
                     onClick = { navController.navigate("web_access") { launchSingleTop = true } }
                 ) {
@@ -223,11 +259,11 @@ fun PlayerScreenV2(
                 }
                 Box {
                     IconButton(onClick = { showLanguageMenu = true }) {
-                        Icon(Icons.Filled.Language, contentDescription = "Language")
+                        Icon(Icons.Filled.Language, contentDescription = if (isArabic) "اللغة" else "Language")
                     }
                     DropdownMenu(expanded = showLanguageMenu, onDismissRequest = { showLanguageMenu = false }) {
                         DropdownMenuItem(
-                            text = { Text(if (currentLangMode == com.example.ui.locale.LanguageMode.AUTO) "✓ Auto (System)" else "Auto (System)") },
+                            text = { Text(if (currentLangMode == com.example.ui.locale.LanguageMode.AUTO) (if (isArabic) "✓ تلقائي (النظام)" else "✓ Auto (System)") else (if (isArabic) "تلقائي (النظام)" else "Auto (System)")) },
                             onClick = {
                                 showLanguageMenu = false
                                 com.example.ui.locale.AppLanguageManager.setLanguageMode(context, com.example.ui.locale.LanguageMode.AUTO)
@@ -252,7 +288,7 @@ fun PlayerScreenV2(
                 var showThemeMenu by remember { mutableStateOf(false) }
                 Box {
                     IconButton(onClick = { showThemeMenu = true }, modifier = Modifier) {
-                        Icon(androidx.compose.material.icons.Icons.Filled.Palette, contentDescription = "Themes")
+                        Icon(androidx.compose.material.icons.Icons.Filled.Palette, contentDescription = if (isArabic) "المظاهر" else "Themes")
                     }
                     DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
                         com.example.ui.theme.AppThemeOption.values().forEach { themeOpt ->
@@ -267,22 +303,49 @@ fun PlayerScreenV2(
                     }
                 }
                 Box {
-                    IconButton(onClick = { showLibraryMenu = true }, modifier = Modifier) { Icon(Icons.Filled.MoreVert, "Library menu") }
+                    IconButton(onClick = { showLibraryMenu = true }, modifier = Modifier) {
+                        Icon(Icons.Filled.MoreVert, if (isArabic) "قائمة المكتبة" else "Library menu")
+                    }
                     DropdownMenu(expanded = showLibraryMenu, onDismissRequest = { showLibraryMenu = false }) {
-                    DropdownMenuItem(modifier = Modifier, text = { Text("Scan device music") }, onClick = { showLibraryMenu = false; scanDevice() }, leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) })
-                    DropdownMenuItem(modifier = Modifier, text = { Text("Add audio files") }, onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) }, leadingIcon = { Icon(Icons.Filled.Add, null) })
-                    DropdownMenuItem(modifier = Modifier, text = { Text("Play folder") }, onClick = { showLibraryMenu = false; playFolderPicker.launch(null) }, leadingIcon = { Icon(Icons.Filled.FolderOpen, null) })
-                    DropdownMenuItem(modifier = Modifier, text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
                         modifier = Modifier,
-                        text = { Text("Check for updates") },
+                        text = { Text(if (isArabic) "فحص موسيقى الجهاز" else "Scan device music") },
+                        onClick = { showLibraryMenu = false; scanDevice() },
+                        leadingIcon = { Icon(Icons.Filled.LibraryMusic, null) }
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier,
+                        text = { Text(if (isArabic) "إضافة ملفات صوتية" else "Add audio files") },
+                        onClick = { showLibraryMenu = false; filePicker.launch(arrayOf("audio/*")) },
+                        leadingIcon = { Icon(Icons.Filled.Add, null) }
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier,
+                        text = { Text(if (isArabic) "تشغيل مجلد" else "Play folder") },
+                        onClick = { showLibraryMenu = false; playFolderPicker.launch(null) },
+                        leadingIcon = { Icon(Icons.Filled.FolderOpen, null) }
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier,
+                        text = { Text(if (isArabic) "استيراد الموسيقى" else "Import Music") },
+                        onClick = { showLibraryMenu = false; showMusicImport = true },
+                        leadingIcon = { Icon(Icons.Filled.Folder, null) }
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier,
+                        text = { Text(if (isArabic) "البحث عن التحديثات وتنزيلها" else "Check for updates") },
                         onClick = {
                             showLibraryMenu = false
                             scope.launch(Dispatchers.IO) {
                                 try {
                                     val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
                                     val version = pInfo.versionName ?: "1.0"
-                                    GitHubUpdater.checkForUpdates(context, version, showToast = true)
+                                    GitHubUpdater.checkForUpdates(
+                                        context = context,
+                                        currentVersion = version,
+                                        showToast = true,
+                                        autoDownload = true
+                                    )
                                 } catch (e: Exception) {
                                     e.printStackTrace()
                                 }
@@ -296,8 +359,16 @@ fun PlayerScreenV2(
             infoMessage?.let { Text(it, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary) }
             Spacer(Modifier.height(8.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { showCreatePlaylist = true }, Modifier.weight(1f)) { Icon(Icons.Filled.Add, null); Spacer(Modifier.width(5.dp)); Text("New playlist") }
-                OutlinedButton(onClick = { showMixPlaylists = true }, Modifier.weight(1f), enabled = playlists.size >= 2) { Icon(Icons.Filled.Shuffle, null); Spacer(Modifier.width(5.dp)); Text("Mix playlists") }
+                Button(onClick = { showCreatePlaylist = true }, Modifier.weight(1f)) {
+                    Icon(Icons.Filled.Add, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (isArabic) "قائمة تشغيل جديدة" else "New playlist")
+                }
+                OutlinedButton(onClick = { showMixPlaylists = true }, Modifier.weight(1f), enabled = playlists.size >= 2) {
+                    Icon(Icons.Filled.Shuffle, null)
+                    Spacer(Modifier.width(5.dp))
+                    Text(if (isArabic) "دمج القوائم" else "Mix playlists")
+                }
             }
             Spacer(Modifier.height(10.dp))
             var trackSearchQuery by rememberSaveable { mutableStateOf("") }
@@ -310,22 +381,22 @@ fun PlayerScreenV2(
                 onValueChange = { trackSearchQuery = it },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
-                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = "Search") },
+                leadingIcon = { Icon(Icons.Filled.Search, contentDescription = if (isArabic) "بحث" else "Search") },
                 trailingIcon = {
                     if (trackSearchQuery.isNotBlank()) {
                         IconButton(onClick = { trackSearchQuery = "" }) {
-                            Icon(Icons.Filled.Clear, contentDescription = "Clear search")
+                            Icon(Icons.Filled.Clear, contentDescription = if (isArabic) "مسح البحث" else "Clear search")
                         }
                     }
                 },
-                label = { Text("Smart Search") },
-                placeholder = { Text("Song, artist, album, or location") }
+                label = { Text(if (isArabic) "البحث الذكي" else "Smart Search") },
+                placeholder = { Text(if (isArabic) "الأغنية، الفنان، الألبوم، أو المسار" else "Song, artist, album, or location") }
             )
             Spacer(Modifier.height(5.dp))
-            com.example.ui.components.DjSectionHeader("ALL TRACKS")
+            com.example.ui.components.DjSectionHeader(if (isArabic) "جميع المقاطع" else "ALL TRACKS")
             if (trackSearchQuery.isNotBlank()) {
                 Text(
-                    "${visibleTracks.size} result(s)",
+                    if (isArabic) "${visibleTracks.size} نتيجة" else "${visibleTracks.size} result(s)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(start = 4.dp, top = 3.dp)
@@ -336,8 +407,8 @@ fun PlayerScreenV2(
                 Box(Modifier.fillMaxWidth().weight(0.58f), contentAlignment = Alignment.Center) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Filled.LibraryMusic, null, Modifier.size(48.dp)); Spacer(Modifier.height(8.dp))
-                        Text("Your library is empty", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(8.dp))
-                        Button(onClick = { filePicker.launch(arrayOf("audio/*")) }) { Text("Add songs") }
+                        Text(if (isArabic) "مكتبتك فارغة حالياً" else "Your library is empty", fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(8.dp))
+                        Button(onClick = { filePicker.launch(arrayOf("audio/*")) }) { Text(if (isArabic) "إضافة أغاني" else "Add songs") }
                     }
                 }
             } else {
@@ -352,7 +423,7 @@ fun PlayerScreenV2(
                             Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Filled.MusicNote, null); Spacer(Modifier.width(8.dp))
                                 Column(Modifier.weight(1f)) { Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis); Text(song.artist, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                IconButton(onClick = { addSongToPlaylist = song }) { Icon(Icons.Filled.Add, "Add to playlist") }
+                                IconButton(onClick = { addSongToPlaylist = song }) { Icon(Icons.Filled.Add, if (isArabic) "إضافة لقائمة التشغيل" else "Add to playlist") }
                                 FilledIconButton(onClick = {
                                     if (isCurrentSong) {
                                         playerController.togglePlayPause()
@@ -364,7 +435,7 @@ fun PlayerScreenV2(
                                 }) {
                                     Icon(
                                         if (showPause) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                                        if (showPause) "Pause" else "Play"
+                                        if (showPause) (if (isArabic) "إيقاف مؤقت" else "Pause") else (if (isArabic) "تشغيل" else "Play")
                                     )
                                 }
                             }
@@ -375,7 +446,7 @@ fun PlayerScreenV2(
 
             Spacer(Modifier.height(8.dp))
             if (playlists.isNotEmpty()) {
-                com.example.ui.components.DjSectionHeader("PLAYLISTS")
+                com.example.ui.components.DjSectionHeader(if (isArabic) "قوائم التشغيل" else "PLAYLISTS")
                 Spacer(Modifier.height(5.dp))
                 Column(
                     Modifier
@@ -401,7 +472,7 @@ fun PlayerScreenV2(
                                                 modifier = Modifier.fillMaxWidth()
                                             )
                                             Text(
-                                                "${songs.size} song(s)",
+                                                if (isArabic) "${songs.size} مقطع" else "${songs.size} song(s)",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -415,7 +486,7 @@ fun PlayerScreenV2(
                                                         }
                                                     },
                                                     modifier = Modifier.size(34.dp)
-                                                ) { Icon(Icons.Filled.PlayArrow, "Play", Modifier.size(20.dp)) }
+                                                ) { Icon(Icons.Filled.PlayArrow, if (isArabic) "تشغيل" else "Play", Modifier.size(20.dp)) }
                                                 IconButton(
                                                     onClick = {
                                                         if (songs.isNotEmpty()) {
@@ -425,21 +496,21 @@ fun PlayerScreenV2(
                                                         }
                                                     },
                                                     modifier = Modifier.size(34.dp)
-                                                ) { Icon(Icons.Filled.Shuffle, "Shuffle", Modifier.size(20.dp)) }
+                                                ) { Icon(Icons.Filled.Shuffle, if (isArabic) "عشوائي" else "Shuffle", Modifier.size(20.dp)) }
                                                 IconButton(
                                                     onClick = { addSongsPlaylistId = playlist.id },
                                                     modifier = Modifier.size(34.dp)
-                                                ) { Icon(Icons.Filled.Add, "Add songs", Modifier.size(20.dp)) }
+                                                ) { Icon(Icons.Filled.Add, if (isArabic) "إضافة أغاني" else "Add songs", Modifier.size(20.dp)) }
                                             }
                                             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                                                 IconButton(
                                                     onClick = { addFolderPlaylistId = playlist.id; folderPicker.launch(null) },
                                                     modifier = Modifier.size(34.dp)
-                                                ) { Icon(Icons.Filled.Folder, "Add folder", Modifier.size(20.dp)) }
+                                                ) { Icon(Icons.Filled.Folder, if (isArabic) "إضافة مجلد" else "Add folder", Modifier.size(20.dp)) }
                                                 IconButton(
                                                     onClick = { scope.launch { repo.delete(playlist.id) } },
                                                     modifier = Modifier.size(34.dp)
-                                                ) { Icon(Icons.Filled.Delete, "Delete", Modifier.size(20.dp)) }
+                                                ) { Icon(Icons.Filled.Delete, if (isArabic) "حذف" else "Delete", Modifier.size(20.dp)) }
                                             }
                                         }
                                     }
@@ -479,28 +550,40 @@ fun PlayerScreenV2(
         MusicImportDialog(
             onDismiss = { showMusicImport = false },
             playlists = playlists,
+            onImportToLibrary = { items ->
+                scope.launch {
+                    val canonical = addToLibrary(audioLibrary, items, context)
+                    infoMessage = if (isArabic) "تمت إضافة ${canonical.size} مقطع إلى المكتبة" else "Added ${canonical.size} song(s) to library"
+                }
+            },
             onImportToPlaylist = { items, playlistId ->
                 scope.launch {
-                    addToLibrary(audioLibrary, items, context)
+                    val canonical = addToLibrary(audioLibrary, items, context)
                     playlists.firstOrNull { it.id == playlistId }?.let { playlist ->
-                        repo.updateSongs(playlistId, (playlist.songIds + items.map { it.id }).distinct().joinToString(","))
+                        repo.updateSongs(playlistId, (playlist.songIds + canonical.map { it.id }).distinct().joinToString(","))
                     }
-                    infoMessage = "Added ${items.size} song(s)"
+                    infoMessage = if (isArabic) "تمت إضافة ${canonical.size} مقطع" else "Added ${canonical.size} song(s)"
                 }
             },
             onCreatePlaylistAndImport = { items, name ->
                 scope.launch {
-                    addToLibrary(audioLibrary, items, context)
-                    repo.insert(com.example.room.PlaylistEntity(playlistId = java.util.UUID.randomUUID().toString(), name = name, songIdsJson = items.map { it.id }.joinToString(",")))
-                    infoMessage = "Created playlist $name"
+                    val canonical = addToLibrary(audioLibrary, items, context)
+                    repo.insert(
+                        com.example.room.PlaylistEntity(
+                            playlistId = java.util.UUID.randomUUID().toString(),
+                            name = name,
+                            songIdsJson = canonical.map { it.id }.distinct().joinToString(",")
+                        )
+                    )
+                    infoMessage = if (isArabic) "تم إنشاء قائمة التشغيل $name" else "Created playlist $name"
                 }
             },
             onPlayNow = { items, startIndex ->
                 scope.launch {
                     if (items.isNotEmpty()) {
                         onPauseDJ()
-                        addToLibrary(audioLibrary, items, context)
-                        playerController.playCollection(items, startIndex)
+                        val canonical = addToLibrary(audioLibrary, items, context)
+                        playerController.playCollection(canonical, startIndex)
                         showNowPlaying = true
                     }
                 }
@@ -524,20 +607,64 @@ fun PlayerScreenV2(
 
 @Composable
 private fun CreatePlaylistDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var name by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Create playlist") }, text = { OutlinedTextField(name, { name = it }, label = { Text("Playlist name") }, singleLine = true) }, confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onCreate(name.trim()) }) { Text("Create") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isArabic) "إنشاء قائمة تشغيل" else "Create playlist") },
+        text = { OutlinedTextField(name, { name = it }, label = { Text(if (isArabic) "اسم قائمة التشغيل" else "Playlist name") }, singleLine = true) },
+        confirmButton = { TextButton(onClick = { if (name.isNotBlank()) onCreate(name.trim()) }) { Text(if (isArabic) "إنشاء" else "Create") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+    )
 }
 
 @Composable
 private fun PlaylistPickerDialog(song: AudioItem, playlists: List<Playlist>, onDismiss: () -> Unit, onSelect: (Playlist) -> Unit, onCreatePlaylist: (String) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     var name by remember { mutableStateOf("") }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Add ${song.title}") }, text = { Column { if (playlists.isEmpty()) Text("No playlists yet."); playlists.forEach { p -> TextButton(onClick = { onSelect(p) }, Modifier.fillMaxWidth()) { Row(Modifier.fillMaxWidth()) { Text(p.name, Modifier.weight(1f)); if (song.id in p.songIds) Icon(Icons.Filled.Check, null) } } }; OutlinedTextField(name, { name = it }, label = { Text("New playlist") }, singleLine = true); if (name.isNotBlank()) TextButton(onClick = { onCreatePlaylist(name.trim()) }) { Text("Create and add") } } }, confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } })
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isArabic) "إضافة ${song.title}" else "Add ${song.title}") },
+        text = {
+            Column {
+                if (playlists.isEmpty()) Text(if (isArabic) "لا توجد قوائم تشغيل بعد." else "No playlists yet.")
+                playlists.forEach { p ->
+                    TextButton(onClick = { onSelect(p) }, Modifier.fillMaxWidth()) {
+                        Row(Modifier.fillMaxWidth()) {
+                            Text(p.name, Modifier.weight(1f))
+                            if (song.id in p.songIds) Icon(Icons.Filled.Check, null)
+                        }
+                    }
+                }
+                OutlinedTextField(name, { name = it }, label = { Text(if (isArabic) "قائمة تشغيل جديدة" else "New playlist") }, singleLine = true)
+                if (name.isNotBlank()) TextButton(onClick = { onCreatePlaylist(name.trim()) }) { Text(if (isArabic) "إنشاء وإضافة" else "Create and add") }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(if (isArabic) "تم" else "Done") } }
+    )
 }
 
 @Composable
 private fun LibraryMultiSelectDialog(playlist: Playlist, library: List<AudioItem>, onDismiss: () -> Unit, onSave: (List<String>) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val selected = remember { mutableStateMapOf<String, Boolean>().also { map -> playlist.songIds.forEach { map[it] = true } } }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Songs for ${playlist.name}") }, text = { LazyColumn(Modifier.heightIn(max = 500.dp)) { items(library, key = { it.id }) { song -> Row(Modifier.fillMaxWidth().clickable { selected[song.id] = selected[song.id] != true }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) { Checkbox(selected[song.id] == true, { selected[song.id] = it }); Spacer(Modifier.width(6.dp)); Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis) } } } }, confirmButton = { TextButton(onClick = { onSave(library.filter { selected[it.id] == true }.map { it.id }) }) { Text("Save") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isArabic) "مقاطع قائمة ${playlist.name}" else "Songs for ${playlist.name}") },
+        text = {
+            LazyColumn(Modifier.heightIn(max = 500.dp)) {
+                items(library, key = { it.id }) { song ->
+                    Row(Modifier.fillMaxWidth().clickable { selected[song.id] = selected[song.id] != true }.padding(vertical = 3.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(selected[song.id] == true, { selected[song.id] = it })
+                        Spacer(Modifier.width(6.dp))
+                        Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onSave(library.filter { selected[it.id] == true }.map { it.id }) }) { Text(if (isArabic) "حفظ" else "Save") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -549,6 +676,7 @@ private fun NowPlayingFullScreenV2(
     onPauseDJ: () -> Unit,
     navController: NavHostController
 ) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val song = playerController.currentSong ?: return
     val maxPos = playerController.durationMs.coerceAtLeast(1L).toFloat()
     val current = playerController.currentPositionMs.coerceIn(0L, maxPos.toLong()).toFloat()
@@ -559,25 +687,25 @@ private fun NowPlayingFullScreenV2(
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, if (isArabic) "رجوع" else "Back")
             }
             Text(
-                "NOW PLAYING",
+                if (isArabic) "قيد التشغيل الآن" else "NOW PLAYING",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Black,
-                letterSpacing = 2.sp,
+                letterSpacing = if (isArabic) 0.sp else 2.sp,
                 color = MaterialTheme.colorScheme.primary
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onQueue) {
-                    Icon(Icons.AutoMirrored.Filled.QueueMusic, "Queue")
+                    Icon(Icons.AutoMirrored.Filled.QueueMusic, if (isArabic) "قائمة الانتظار" else "Queue")
                 }
                 IconButton(onClick = {
                     navController.navigate("full_player") {
                         launchSingleTop = true
                     }
                 }) {
-                    Icon(Icons.Filled.Fullscreen, "Full screen")
+                    Icon(Icons.Filled.Fullscreen, if (isArabic) "ملء الشاشة" else "Full screen")
                 }
             }
         }
@@ -591,18 +719,35 @@ private fun NowPlayingFullScreenV2(
         Text(song.artist, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
         Slider(current, { playerController.seekTo(it.toLong()) }, valueRange = 0f..maxPos)
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text(MusicScanner.formatMs(playerController.currentPositionMs), style = MaterialTheme.typography.labelSmall); Text(MusicScanner.formatMs(playerController.durationMs), style = MaterialTheme.typography.labelSmall) }
-        Row(verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.playPrevious() }) { Icon(Icons.Filled.SkipPrevious, "Previous") }; FilledIconButton(onClick = { onPauseDJ(); playerController.togglePlayPause() }, Modifier.size(66.dp)) { Icon(if (playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, "Play/Pause", Modifier.size(36.dp)) }; IconButton(onClick = { playerController.playNext() }) { Icon(Icons.Filled.SkipNext, "Next") } }
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) { IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }; OutlinedButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text("Queue") }; if (song.id.startsWith("quran:")) { IconButton(onClick = { navController.navigate("quran_reader") { launchSingleTop = true } }) { Icon(Icons.Filled.MenuBook, contentDescription = "Open Quran", tint = MaterialTheme.colorScheme.primary) } } }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { playerController.playPrevious() }) { Icon(Icons.Filled.SkipPrevious, if (isArabic) "السابق" else "Previous") }
+            FilledIconButton(onClick = { onPauseDJ(); playerController.togglePlayPause() }, Modifier.size(66.dp)) { Icon(if (playerController.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, if (isArabic) "تشغيل/إيقاف" else "Play/Pause", Modifier.size(36.dp)) }
+            IconButton(onClick = { playerController.playNext() }) { Icon(Icons.Filled.SkipNext, if (isArabic) "التالي" else "Next") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(18.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = { playerController.toggleShuffle() }) { Icon(Icons.Filled.Shuffle, if (isArabic) "عشوائي" else "Shuffle", tint = if (playerController.isShuffle) MaterialTheme.colorScheme.primary else LocalContentColor.current) }
+            IconButton(onClick = { playerController.toggleRepeat() }) { Icon(Icons.Filled.Repeat, if (isArabic) "تكرار" else "Repeat", tint = if (playerController.repeatOption != RepeatOption.OFF) MaterialTheme.colorScheme.primary else LocalContentColor.current) }
+            OutlinedButton(onClick = onQueue) { Icon(Icons.AutoMirrored.Filled.QueueMusic, null); Spacer(Modifier.width(5.dp)); Text(if (isArabic) "قائمة الانتظار" else "Queue") }
+            if (song.id.startsWith("quran:")) {
+                IconButton(onClick = { navController.navigate("quran_reader") { launchSingleTop = true } }) {
+                    Icon(Icons.Filled.MenuBook, contentDescription = if (isArabic) "فتح المصحف" else "Open Quran", tint = MaterialTheme.colorScheme.primary)
+                }
+            }
+        }
 
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-            Text("CROSSFADE DURATION: ${playerController.crossfadeDurationMs / 1000}s", style = MaterialTheme.typography.labelSmall)
+            Text(
+                if (isArabic) "مدة التداخل الصوتي (Crossfade): ${playerController.crossfadeDurationMs / 1000} ثانية"
+                else "CROSSFADE DURATION: ${playerController.crossfadeDurationMs / 1000}s",
+                style = MaterialTheme.typography.labelSmall
+            )
             Slider(value = playerController.crossfadeDurationMs.toFloat(), onValueChange = { playerController.crossfadeDurationMs = it.toLong() }, valueRange = 0f..10000f, steps = 9)
         }
 
         Spacer(Modifier.height(16.dp))
         Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
-                                }
+        }
     }
 }
 
@@ -618,6 +763,7 @@ fun QueueSheet(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val isDownloadingQueue by OnlineQueueDownloader.isDownloading.collectAsState()
     val queueDownloadStatus by OnlineQueueDownloader.downloadStatus.collectAsState()
     var message by remember { mutableStateOf<String?>(null) }
@@ -660,7 +806,7 @@ fun QueueSheet(
                     songIdsJson = items.joinToString(",") { it.id }
                 )
             )
-            message = "Playlist saved"
+            message = if (isArabic) "تم حفظ قائمة التشغيل" else "Playlist saved"
         }
     }
 
@@ -671,7 +817,7 @@ fun QueueSheet(
             persistQueueItems()
             val merged = (playlist.songIds + items.map { it.id }).distinct().joinToString(",")
             playlistRepo.updateSongs(playlist.id, merged)
-            message = "Added to ${playlist.name}"
+            message = if (isArabic) "تمت الإضافة إلى ${playlist.name}" else "Added to ${playlist.name}"
         }
     }
 
@@ -679,14 +825,23 @@ fun QueueSheet(
         Column(Modifier.fillMaxWidth().padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("UPCOMING QUEUE", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, letterSpacing = 2.sp, color = MaterialTheme.colorScheme.primary)
-                    Text("${controller.playlist.size} item(s)", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        if (isArabic) "قائمة الانتظار القادمة" else "UPCOMING QUEUE",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Black,
+                        letterSpacing = if (isArabic) 0.sp else 2.sp,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        if (isArabic) "${controller.playlist.size} عنصر" else "${controller.playlist.size} item(s)",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
                 if (hasOnlineSongs || isDownloadingQueue) {
                     Button(onClick = { if (!isDownloadingQueue) folderPicker.launch(null) }, enabled = !isDownloadingQueue) {
                         Icon(Icons.Filled.Download, null)
                         Spacer(Modifier.width(5.dp))
-                        Text(if (isDownloadingQueue) "جاري التنزيل..." else "Download List")
+                        Text(if (isDownloadingQueue) (if (isArabic) "جاري التنزيل..." else "Downloading...") else (if (isArabic) "تنزيل القائمة" else "Download List"))
                     }
                 }
             }
@@ -742,7 +897,7 @@ fun QueueSheet(
                 ) {
                     Icon(Icons.Filled.Save, null)
                     Spacer(Modifier.width(5.dp))
-                    Text("Save Playlist")
+                    Text(if (isArabic) "حفظ كقائمة تشغيل" else "Save Playlist")
                 }
                 OutlinedButton(
                     onClick = { showExistingDialog = true },
@@ -751,7 +906,7 @@ fun QueueSheet(
                 ) {
                     Icon(Icons.Filled.PlaylistAdd, null)
                     Spacer(Modifier.width(5.dp))
-                    Text("Add to Existing")
+                    Text(if (isArabic) "إضافة لقائمة حالية" else "Add to Existing")
                 }
             }
         }
@@ -760,22 +915,22 @@ fun QueueSheet(
     if (showSaveDialog) {
         AlertDialog(
             onDismissRequest = { showSaveDialog = false },
-            title = { Text("Save Playlist") },
-            text = { OutlinedTextField(value = playlistName, onValueChange = { playlistName = it }, label = { Text("Playlist name") }, singleLine = true) },
+            title = { Text(if (isArabic) "حفظ قائمة التشغيل" else "Save Playlist") },
+            text = { OutlinedTextField(value = playlistName, onValueChange = { playlistName = it }, label = { Text(if (isArabic) "اسم قائمة التشغيل" else "Playlist name") }, singleLine = true) },
             confirmButton = {
                 TextButton(onClick = {
                     val name = playlistName.trim()
                     if (name.isNotBlank()) { showSaveDialog = false; saveCurrentQueue(name) }
-                }) { Text("Save") }
+                }) { Text(if (isArabic) "حفظ" else "Save") }
             },
-            dismissButton = { TextButton(onClick = { showSaveDialog = false }) { Text("Cancel") } }
+            dismissButton = { TextButton(onClick = { showSaveDialog = false }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
         )
     }
 
     if (showExistingDialog) {
         AlertDialog(
             onDismissRequest = { showExistingDialog = false },
-            title = { Text("Add to Existing Playlist") },
+            title = { Text(if (isArabic) "إضافة إلى قائمة تشغيل حالية" else "Add to Existing Playlist") },
             text = {
                 LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(playlists, key = { it.id }) { playlist ->
@@ -785,13 +940,42 @@ fun QueueSheet(
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = { showExistingDialog = false }) { Text("Cancel") } }
+            confirmButton = { TextButton(onClick = { showExistingDialog = false }) { Text(if (isArabic) "إلغاء" else "Cancel") } }
         )
     }
 }
+
 @Composable
 private fun MixPlaylistsDialog(playlists: List<Playlist>, library: List<AudioItem>, onDismiss: () -> Unit, onPlay: (List<AudioItem>, Boolean) -> Unit) {
+    val isArabic by com.example.ui.locale.AppLanguageManager.isArabicFlow.collectAsState()
     val selected = remember { mutableStateMapOf<String, Boolean>() }
     var shuffle by remember { mutableStateOf(true) }
-    AlertDialog(onDismissRequest = onDismiss, title = { Text("Mix playlists") }, text = { Column { Text("Choose playlists to combine into one queue.", style = MaterialTheme.typography.bodySmall); playlists.forEach { p -> Row(Modifier.fillMaxWidth().clickable { selected[p.id] = selected[p.id] != true }, verticalAlignment = Alignment.CenterVertically) { Checkbox(selected[p.id] == true, { selected[p.id] = it }); Text(p.name) } }; Row(verticalAlignment = Alignment.CenterVertically) { Switch(shuffle, { shuffle = it }); Spacer(Modifier.width(7.dp)); Text("Shuffle combined queue") } } }, confirmButton = { TextButton(onClick = { val songs = playlists.filter { selected[it.id] == true }.flatMap { p -> p.songIds.mapNotNull { id -> library.firstOrNull { it.id == id } } }.distinctBy { it.id }; onPlay(songs, shuffle) }) { Text("Play") } }, dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } })
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (isArabic) "دمج قوائم التشغيل" else "Mix playlists") },
+        text = {
+            Column {
+                Text(if (isArabic) "اختر قوائم التشغيل لدمجها في قائمة انتظار واحدة." else "Choose playlists to combine into one queue.", style = MaterialTheme.typography.bodySmall)
+                playlists.forEach { p ->
+                    Row(Modifier.fillMaxWidth().clickable { selected[p.id] = selected[p.id] != true }, verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(selected[p.id] == true, { selected[p.id] = it })
+                        Text(p.name)
+                    }
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Switch(shuffle, { shuffle = it })
+                    Spacer(Modifier.width(7.dp))
+                    Text(if (isArabic) "تشغيل عشوائي للقائمة المدمجة" else "Shuffle combined queue")
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                val songs = playlists.filter { selected[it.id] == true }.flatMap { p -> p.songIds.mapNotNull { id -> library.firstOrNull { it.id == id } } }.distinctBy { it.id }
+                onPlay(songs, shuffle)
+            }) { Text(if (isArabic) "تشغيل" else "Play") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(if (isArabic) "إلغاء" else "Cancel") } }
+    )
 }
+

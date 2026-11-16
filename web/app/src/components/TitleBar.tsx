@@ -45,14 +45,14 @@ export const TitleBar: React.FC<TitleBarProps> = ({
 }) => {
   const tabs: Array<{ id: TabType; labelEn: string; labelAr: string; icon: React.ReactNode }> = [
     { id: 'LIBRARY', labelEn: 'Library', labelAr: 'المكتبة', icon: <Music className="w-4 h-4" /> },
-    { id: 'DJ_MIXER', labelEn: 'DJ Studio', labelAr: 'دي جي ميكسر', icon: <Disc className="w-4 h-4" /> },
-    { id: 'EQUALIZER', labelEn: 'Equalizer', labelAr: 'المعادل الصوتي', icon: <Sliders className="w-4 h-4" /> },
-    { id: 'KARAOKE', labelEn: 'Karaoke', labelAr: 'كاريوكي استوديو', icon: <Mic className="w-4 h-4" /> },
-    { id: 'RADIO', labelEn: 'Radio FM', labelAr: 'راديو مباشر', icon: <Radio className="w-4 h-4" /> },
-    { id: 'ONLINE_MUSIC', labelEn: 'Online Music', labelAr: 'موسيقى أونلاين', icon: <Globe className="w-4 h-4" /> },
+    { id: 'EQUALIZER', labelEn: 'Equalizer', labelAr: 'الإيكولايزر', icon: <Sliders className="w-4 h-4" /> },
+    { id: 'ONLINE_MUSIC', labelEn: 'Online Music', labelAr: 'أونلاين', icon: <Globe className="w-4 h-4" /> },
+    { id: 'RADIO', labelEn: 'Radio FM', labelAr: 'الراديو', icon: <Radio className="w-4 h-4" /> },
     { id: 'QURAN', labelEn: 'Holy Quran', labelAr: 'القرآن الكريم', icon: <BookOpen className="w-4 h-4" /> },
+    { id: 'DJ_MIXER', labelEn: 'DJ Studio', labelAr: 'الدي جي', icon: <Disc className="w-4 h-4" /> },
+    { id: 'KARAOKE', labelEn: 'Karaoke', labelAr: 'مايك', icon: <Mic className="w-4 h-4" /> },
     { id: 'VIDEO', labelEn: 'Video', labelAr: 'فيديو', icon: <Film className="w-4 h-4" /> },
-    { id: 'AI_STUDIO', labelEn: 'AI Studio', labelAr: 'استوديو الذكاء الاصطناعي', icon: <Sparkles className="w-4 h-4" /> },
+    { id: 'AI_STUDIO', labelEn: 'AI Studio', labelAr: 'الذكاء الاصطناعي', icon: <Sparkles className="w-4 h-4" /> },
     { id: 'SETTINGS', labelEn: 'Settings', labelAr: 'الإعدادات', icon: <Settings className="w-4 h-4" /> },
   ];
 
