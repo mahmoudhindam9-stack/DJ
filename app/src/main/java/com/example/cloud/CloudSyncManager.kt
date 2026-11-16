@@ -276,6 +276,11 @@ object CloudSyncManager {
         if (!normalizedEmail.contains("@")) {
             return Result.failure(IllegalArgumentException("Valid Google account email is required"))
         }
+        if (idToken.isNullOrBlank()) {
+            return Result.failure(
+                SecurityException("Google sign-in requires a verified Google OAuth ID token. Email-only account selection is not sufficient for cloud authentication.")
+            )
+        }
 
         val registry = context.getSharedPreferences(PREFS_ACCOUNTS_REGISTRY, Context.MODE_PRIVATE)
         val userId = registry.getString("uid_$normalizedEmail", null)
