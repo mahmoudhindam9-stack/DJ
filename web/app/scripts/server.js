@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { NEON_CLOUD_CONFIG, neonCloudStore } from './neon-cloud.js';
+import { NEON_CLOUD_CONFIG, neonCloudStore, verifySessionToken, checkNeonConnection } from './neon-cloud.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1813,8 +1813,19 @@ async function handleApi(req, res) {
           jwksUrl: NEON_CLOUD_CONFIG.jwksUrl,
           realtimeUrl: NEON_CLOUD_CONFIG.realtimeUrl,
           databaseConnected: NEON_CLOUD_CONFIG.hasDatabaseUrl,
+          googleSignInConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_IDS),
         },
       });
+      return true;
+    }
+
+    if (requestUrl.pathname === '/api/cloud/health' && req.method === 'GET') {
+      try {
+        const health = await checkNeonConnection();
+        sendJson(res, 200, { ok: true, databaseConnected: true, ...health });
+      } catch (err) {
+        sendJson(res, 503, { ok: false, databaseConnected: false, error: err?.message || 'Neon connection failed.' });
+      }
       return true;
     }
 
@@ -1860,16 +1871,20 @@ async function handleApi(req, res) {
           return true;
         }
         const decodedJson = JSON.parse(Buffer.from(handoffRaw, 'base64url').toString('utf8'));
-        const email = String(decodedJson.email || '').trim().toLowerCase();
-        if (!email.includes('@')) {
-          sendJson(res, 400, { ok: false, error: 'Invalid handoff payload' });
+        const verified = verifySessionToken(decodedJson?.sessionToken);
+        const email = String(decodedJson?.email || '').trim().toLowerCase();
+        if (!verified?.userId || verified.userId !== decodedJson?.userId ||
+            !email || email !== String(verified.email || '').trim().toLowerCase()) {
+          sendJson(res, 401, { ok: false, error: 'The Android handoff does not contain a valid signed session.' });
           return true;
         }
-        const user = await neonCloudStore.signInGoogle({
-          email,
-          displayName: decodedJson.displayName || email.split('@')[0],
-          idToken: decodedJson.sessionToken || '',
-        });
+        const user = {
+          userId: verified.userId,
+          email: verified.email,
+          displayName: verified.displayName || verified.email.split('@')[0],
+          authProvider: verified.authProvider || 'email',
+          sessionToken: decodedJson.sessionToken
+        };
         sendJson(res, 200, { ok: true, ...user, data: user });
       } catch (err) {
         sendJson(res, 400, { ok: false, error: err?.message || 'Invalid handoff token' });
@@ -1881,12 +1896,12 @@ async function handleApi(req, res) {
       try {
         if (req.method === 'GET') {
           const requestedUserId = requestUrl.searchParams.get('userId') || '';
-          const userId = neonCloudStore.resolveAuthorizedUserId(req, requestedUserId);
+          const userId = await neonCloudStore.resolveAuthorizedUserId(req, requestedUserId);
           const state = await neonCloudStore.getUserState(userId);
           sendJson(res, 200, { ok: true, ...state, data: state });
         } else {
           const body = await readJsonBody(req, 512000);
-          const userId = neonCloudStore.resolveAuthorizedUserId(req, body.userId);
+          const userId = await neonCloudStore.resolveAuthorizedUserId(req, body.userId);
           const state = await neonCloudStore.updateUserState(userId, body);
           sendJson(res, 200, { ok: true, ...state, data: state });
         }

@@ -8,7 +8,8 @@
     "build": "vite build && node -e \"const fs=require('fs'); try { if (fs.existsSync('dist')) fs.cpSync('dist', '../dist', {recursive:true, force:true}); } catch(e){}\"",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "test:cloud": "node --test scripts/neon-cloud.test.js"
   },
   "dependencies": {
     "@tailwindcss/oxide": "4.0.9",

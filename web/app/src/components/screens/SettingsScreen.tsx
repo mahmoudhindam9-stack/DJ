@@ -96,20 +96,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
   };
 
   const handleGoogleSignIn = async () => {
-    setAuthError(null);
-    const email =
-      emailInput.trim() ||
-      window.prompt(
-        isArabic ? 'أدخل بريد Google للمزامنة مع Neon Cloud:' : 'Enter your Google email for Neon Cloud Sync:',
-        'user@gmail.com'
-      ) ||
-      '';
-    if (!email.trim()) return;
-    try {
-      await cloudSyncService.signInWithGoogle(email.trim(), displayNameInput.trim() || undefined);
-    } catch (err: any) {
-      setAuthError(err?.message || 'Google Sign-In failed');
-    }
+    setAuthError(
+      isArabic
+        ? 'تسجيل Google السحابي يحتاج إعداد OAuth حقيقي (Client ID) في Vercel. استخدم البريد وكلمة المرور حاليًا.'
+        : 'Google Cloud sign-in requires a verified OAuth Client ID configured in Vercel. Use email and password for now.'
+    );
   };
 
   return (

@@ -79,6 +79,28 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
   const [newPlaylistName, setNewPlaylistName] = useState('');
   const [readerSurah, setReaderSurah] = useState<QuranSurah | null>(null);
 
+  const openMushaf = (surah: QuranSurah) => {
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        void document.documentElement.requestFullscreen({ navigationUI: 'hide' }).catch(() => {});
+      }
+    } catch {
+      // The fixed full-viewport reader remains available when native fullscreen is unsupported.
+    }
+    setReaderSurah(surah);
+  };
+
+  const closeMushaf = () => {
+    setReaderSurah(null);
+    try {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        void document.exitFullscreen().catch(() => {});
+      }
+    } catch {
+      // Ignore unsupported fullscreen exit.
+    }
+  };
+
   // Dynamic viewport pagination so zero scrolling is required
   const gridContainerRef = useRef<HTMLDivElement | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
@@ -447,7 +469,7 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
           )}
 
           <button
-            onClick={() => setReaderSurah(availableSurahs[0] || suwar[0] || { id: 1, name: 'سورة الفاتحة', makkia: true })}
+            onClick={() => openMushaf(availableSurahs[0] || suwar[0] || { id: 1, name: 'سورة الفاتحة', makkia: true })}
             data-testid="open-quran-mushaf-button"
             className="px-2.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 border shrink-0"
             style={{
@@ -682,7 +704,7 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
                       <button
                         onClick={() => {
                           handlePlaySurah(surah);
-                          setReaderSurah(surah);
+                          openMushaf(surah);
                         }}
                         className="p-1.5 rounded-lg border"
                         style={{
@@ -914,7 +936,7 @@ export const QuranScreen: React.FC<QuranScreenProps> = ({
         initialSurahName={readerSurah?.name || (isArabic ? 'سورة الفاتحة' : 'Al-Fatihah')}
         reciterName={selectedReciter?.name}
         isArabic={isArabic}
-        onClose={() => setReaderSurah(null)}
+        onClose={closeMushaf}
       />
     </div>
   );
