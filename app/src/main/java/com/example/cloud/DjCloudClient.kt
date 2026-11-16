@@ -4,6 +4,7 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import com.example.model.AudioItem
 import okhttp3.Cookie
 import okhttp3.CookieJar
 import okhttp3.HttpUrl
@@ -178,6 +179,39 @@ class DjCloudClient(context: Context) {
     suspend fun publishPlayback(snapshot: JSONObject) = withContext(Dispatchers.IO) {
         snapshot.put("device_id", deviceId)
         apiRequest("state", "PUT", snapshot)
+    }
+
+    suspend fun fetchLibrary(): List<JSONObject> = withContext(Dispatchers.IO) {
+        val rows = apiRequest("library", "GET").optJSONArray("data") ?: JSONArray()
+        buildList {
+            for (index in 0 until rows.length()) {
+                rows.optJSONObject(index)?.let(::add)
+            }
+        }
+    }
+
+    suspend fun saveLibrary(tracks: List<AudioItem>) = withContext(Dispatchers.IO) {
+        tracks.distinctBy { it.id }.chunked(500).forEach { batch ->
+            val rows = JSONArray()
+            batch.forEach { song ->
+                rows.put(
+                    JSONObject()
+                        .put("track_id", song.id)
+                        .put(
+                            "track",
+                            JSONObject()
+                                .put("id", song.id)
+                                .put("title", song.title)
+                                .put("artist", song.artist)
+                                .put("album", song.album)
+                                .put("duration", song.durationMs)
+                                .put("uri", song.uri.toString())
+                        )
+                        .put("is_favorite", false)
+                )
+            }
+            apiRequest("library", "PUT", JSONObject().put("tracks", rows))
+        }
     }
 
     private fun fetchSessionUser(): DjCloudUser? =
