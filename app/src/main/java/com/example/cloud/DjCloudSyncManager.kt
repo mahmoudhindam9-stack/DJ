@@ -3,6 +3,7 @@ package com.example.cloud
 import android.content.Context
 import android.net.Uri
 import com.example.model.AudioItem
+import com.example.model.Playlist
 import com.example.player.AudioPlayerController
 import com.example.player.RepeatOption
 import kotlinx.coroutines.CoroutineScope
@@ -176,6 +177,37 @@ class DjCloudSyncManager(
 
     suspend fun uploadLibrary(localSongs: List<AudioItem>) {
         if (localSongs.isNotEmpty()) client.saveLibrary(localSongs)
+    }
+
+    suspend fun mergeCloudPlaylists(localPlaylists: List<Playlist>): List<Playlist> {
+        val remoteRows = client.fetchPlaylists()
+        val localIds = localPlaylists.map { it.id }.toSet()
+        val remoteAdditions = remoteRows.mapNotNull { row ->
+            val id = row.optString("playlist_id")
+            if (id.isBlank() || id in localIds) return@mapNotNull null
+            val items = row.optJSONArray("items") ?: JSONArray()
+            val songIds = buildList {
+                for (index in 0 until items.length()) {
+                    val item = items.optJSONObject(index) ?: continue
+                    val trackId = item.optString("track_id")
+                    if (trackId.isNotBlank()) add(trackId)
+                }
+            }
+            Playlist(id = id, name = row.optString("name", "DJ Cloud Playlist"), songIds = songIds)
+        }
+
+        uploadPlaylists(localPlaylists)
+        return remoteAdditions
+    }
+
+    suspend fun uploadPlaylists(localPlaylists: List<Playlist>) {
+        localPlaylists.forEach { playlist ->
+            if (playlist.id.isBlank() || playlist.name.isBlank()) return@forEach
+            client.savePlaylist(playlist.id, playlist.name)
+            playlist.songIds.distinct().forEachIndexed { index, trackId ->
+                client.savePlaylistItem(playlist.id, trackId, index)
+            }
+        }
     }
 
     suspend fun takeControl() {
