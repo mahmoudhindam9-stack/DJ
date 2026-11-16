@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createRealtimeClient, type SealedLiveQuery } from '@neon/realtime/client';
+import {
+  createRealtimeClient,
+  type SealedLiveQuery,
+  type RawLiveQueryUpdate,
+} from '@neon/realtime/client';
 import { cloudAuthClient, type CloudUser } from './cloudAuth';
 
 export interface CloudDevice {
@@ -96,13 +100,11 @@ function describeLocalDevice(): { name: string; platform: CloudDevice['platform'
 
 async function getBearerToken(): Promise<string> {
   if (!cloudAuthClient) throw new Error('DJ Cloud authentication is not configured.');
-  // getSession().session.token is the Better Auth session cookie token. The API
-  // expects the short-lived EdDSA JWT issued by Neon Auth.
-  const result = await cloudAuthClient.token();
-  if (result.error || !result.data?.token) {
+  const result = await cloudAuthClient.getSession();
+  if (result.error || !result.data?.session?.token) {
     throw new Error(result.error?.message || 'Your DJ Cloud session has expired. Please sign in again.');
   }
-  return result.data.token;
+  return result.data.session.token;
 }
 
 async function cloudRequest<T>(route: string, method = 'GET', body?: unknown): Promise<T> {
@@ -235,15 +237,20 @@ export function useCloudSync(
         const sealed = await cloudRequest<SealedLiveQuery<CloudPlaybackState>>('state/live', 'POST');
         if (disposed) return;
         subscription = realtimeClient.subscribe(sealed);
-        subscription.onChange((snapshot) => {
-          const row = snapshot.data?.[0] || null;
-          applyState(row);
-          if (snapshot.state.status === 'live') setStatus('live');
-          else if (snapshot.state.status === 'stale' || snapshot.state.status === 'connecting') setStatus('connecting');
-          else if (snapshot.state.status === 'error') {
-            setStatus('error');
-            setError(snapshot.state.error?.message || 'Live sync stopped.');
+        const liveRows = new Map<string, CloudPlaybackState>();
+        subscription.onUpdate((update: RawLiveQueryUpdate<CloudPlaybackState>) => {
+          if (update.type === 'rows') {
+            liveRows.clear();
+            for (const entry of update.rows) {
+              liveRows.set(entry.rowId, entry.row);
+            }
+          } else {
+            for (const change of update.changes) {
+              if (change.type === 'upsert') liveRows.set(change.rowId, change.row);
+              else liveRows.delete(change.rowId);
+            }
           }
+          applyState(liveRows.values().next().value || null);
         });
         subscription.onStateChange((nextState) => {
           if (nextState.status === 'live') {
