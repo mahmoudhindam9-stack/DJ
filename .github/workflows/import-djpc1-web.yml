@@ -1,0 +1,45 @@
+name: One-time DJ-PC-1 web import
+on:
+  push:
+    branches:
+      - web-integration
+    paths:
+      - ".github/workflows/import-djpc1-web.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import-web:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout DJ repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Copy the complete DJ-PC-1 repository into web/
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/DJ-PC-1 web
+          git clone --depth 1 --branch main https://github.com/mahmoudhindam9-stack/DJ-PC-1.git /tmp/DJ-PC-1
+          mkdir -p web
+          git -C /tmp/DJ-PC-1 archive --format=tar HEAD | tar -xf - -C web
+          test -f web/package.json
+          test -f web/package-lock.json
+          test -f web/vercel.json
+          test -f web/app/package.json
+          test -f web/app/index.html
+
+      - name: Commit imported web project and remove this temporary workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          rm -f .github/workflows/import-djpc1-web.yml
+          git add -A web .github/workflows/import-djpc1-web.yml
+          git commit -m "feat(monorepo): import DJ-PC-1 web project under web/"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
