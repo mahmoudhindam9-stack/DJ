@@ -1,22 +1,26 @@
-import { createAuthClient } from '@neon/auth';
-import { BetterAuthReactAdapter } from '@neon/auth/react/adapters';
+import { createAuthClient } from 'better-auth/react';
+import { jwtClient } from 'better-auth/client/plugins';
 
 const authUrl = import.meta.env.VITE_NEON_AUTH_URL;
 
 export const cloudAuthEnabled = typeof authUrl === 'string' && authUrl.length > 0;
+
+/**
+ * Use the native Better Auth client API against Neon's Managed Auth endpoint.
+ * The JWT plugin supplies token() for our authenticated DJ Cloud API requests.
+ * We use email/password auth and do not need migration adapters.
+ */
 export const cloudAuthClient = cloudAuthEnabled
-  ? createAuthClient(authUrl, {
-      adapter: BetterAuthReactAdapter({
-        fetchOptions: { credentials: 'include' },
-      }),
+  ? createAuthClient({
+      baseURL: authUrl,
+      plugins: [jwtClient()],
+      fetchOptions: {
+        credentials: 'include',
+      },
     })
   : null;
 
- // The default Neon client exposes token(), which returns the short-lived
- // JWT used by the authenticated DJ Cloud API. Keep the React adapter for UI auth.
-export const cloudTokenClient = cloudAuthEnabled
-  ? createAuthClient(authUrl)
-  : null;
+export const cloudTokenClient = cloudAuthClient;
 
 export interface CloudUser {
   id: string;
