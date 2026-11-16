@@ -214,6 +214,31 @@ class DjCloudClient(context: Context) {
         }
     }
 
+    suspend fun fetchPlaylists(): List<JSONObject> = withContext(Dispatchers.IO) {
+        val rows = apiRequest("playlists", "GET").optJSONArray("data") ?: JSONArray()
+        buildList {
+            for (index in 0 until rows.length()) {
+                rows.optJSONObject(index)?.let(::add)
+            }
+        }
+    }
+
+    suspend fun savePlaylist(playlistId: String, name: String) = withContext(Dispatchers.IO) {
+        apiRequest(
+            "playlists",
+            "POST",
+            JSONObject().put("playlist_id", playlistId).put("name", name)
+        )
+    }
+
+    suspend fun savePlaylistItem(playlistId: String, trackId: String, position: Int) = withContext(Dispatchers.IO) {
+        apiRequest(
+            "playlists/$playlistId/items",
+            "POST",
+            JSONObject().put("track_id", trackId).put("position", position)
+        )
+    }
+
     private fun fetchSessionUser(): DjCloudUser? =
         userFrom(authRequest("get-session", "GET"))
 
