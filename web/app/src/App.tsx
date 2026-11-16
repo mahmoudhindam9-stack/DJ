@@ -34,7 +34,7 @@ import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, writeFile } from '@tauri-apps/plugin-fs';
 import { getOnlineDownloadEndpoint, onlineMusicService } from './services/OnlineMusicService';
 import { cloudAuthClient, cloudAuthEnabled, type CloudUser } from './services/cloudAuth';
-import { useCloudSync, type CloudPlaybackState, type CloudPlaybackUpdate } from './services/cloudSync';
+import { useCloudSync, type CloudPlaybackState, type CloudPlaybackUpdate, type CloudDeviceCommand } from './services/cloudSync';
 import { CloudSignIn } from './components/CloudSignIn';
 import { CloudDevicesPanel } from './components/CloudDevicesPanel';
 import { CONTROL_CHANNEL_NAME, type DesktopControlCommand, type DesktopControlMessage, type ControlPlayerState } from './services/ControlChannel';
@@ -150,6 +150,7 @@ export const App: React.FC = () => {
   const [cloudSyncNotice, setCloudSyncNotice] = useState<string | null>(null);
   const cloudPlaybackStateRef = useRef<CloudPlaybackState | null>(null);
   const hadCloudPlaybackControlRef = useRef(false);
+  const pendingCloudHandoffRef = useRef(false);
   const cloudLibrarySyncReadyRef = useRef(false);
 
   const themeColors = THEMES[currentTheme] || THEMES.DJ_BLUE;
@@ -157,7 +158,16 @@ export const App: React.FC = () => {
   const handleCloudPlaybackState = useCallback((state: CloudPlaybackState | null) => {
     cloudPlaybackStateRef.current = state;
   }, []);
-  const cloudSync = useCloudSync(cloudUser, handleCloudPlaybackState);
+  const handleCloudDeviceCommand = useCallback(async (command: CloudDeviceCommand) => {
+    if (command.command_type !== 'pause') return currentTimeMs;
+    const stopPosition = Math.max(0, Number(mainAudioEngine.currentTimeMs) || currentTimeMs);
+    mainAudioEngine.pause();
+    setIsPlaying(false);
+    setCurrentTimeMs(stopPosition);
+    setCloudSyncNotice('Stopping audio here before transferring playback…');
+    return stopPosition;
+  }, [currentTimeMs]);
+  const cloudSync = useCloudSync(cloudUser, handleCloudPlaybackState, handleCloudDeviceCommand);
   const playbackSyncSnapshotRef = useRef<CloudPlaybackUpdate>({
     current_track: null,
     queue: [],
@@ -222,6 +232,60 @@ export const App: React.FC = () => {
     const timer = window.setInterval(publish, 3000);
     return () => window.clearInterval(timer);
   }, [cloudUser?.id, cloudSync.deviceRegistered, cloudSync.isOwner, cloudSync.publishPlayback]);
+
+  useEffect(() => {
+    if (!pendingCloudHandoffRef.current || !cloudUser || !cloudSync.isOwner) return;
+    const remote = cloudSync.state;
+    if (!remote || remote.active_device_id !== cloudSync.deviceId) return;
+
+    pendingCloudHandoffRef.current = false;
+    const remoteQueue = Array.isArray(remote.queue)
+      ? remote.queue.map(hydrateCloudTrack).filter((item): item is AudioItem => Boolean(item))
+      : [];
+    setQueue(remoteQueue);
+    setPlaybackMode(
+      ['NORMAL', 'REPEAT_ONE', 'REPEAT_ALL', 'SHUFFLE'].includes(remote.playback_mode)
+        ? remote.playback_mode as PlaybackMode
+        : 'NORMAL'
+    );
+
+    const track = hydrateCloudTrack(remote.current_track);
+    if (!track) {
+      mainAudioEngine.pause();
+      setCurrentSong(null);
+      setCurrentTimeMs(0);
+      setCloudSyncNotice(
+        remote.current_track
+          ? 'Playback moved here, but this track is local-only on the other device. Choose a track available on this device.'
+          : 'This device now controls playback.'
+      );
+      return;
+    }
+
+    setCurrentSong(track);
+    setCurrentRadioStationId(null);
+    const position = Math.max(0, Number(remote.position_ms) || 0);
+    setCurrentTimeMs(position);
+    setDurationMs(track.duration || Number(remote.duration_ms) || 0);
+    void (async () => {
+      await mainAudioEngine.loadTrack(track);
+      if (position > 0) mainAudioEngine.seekTo(position);
+      try {
+        await mainAudioEngine.play();
+        setCloudSyncNotice('Playback moved to this device.');
+      } catch {
+        setCloudSyncNotice('Track is ready on this device. Press Play to resume.');
+      }
+    })().catch((error) => {
+      setCloudSyncNotice(error instanceof Error ? error.message : 'Could not load the transferred track.');
+    });
+  }, [
+    cloudUser?.id,
+    cloudSync.isOwner,
+    cloudSync.deviceId,
+    cloudSync.state?.active_device_id,
+    cloudSync.state?.current_track?.id,
+  ]);
 
   useEffect(() => {
     if (!cloudUser || !cloudSync.deviceRegistered || cloudSync.status !== 'live' || !appDataLoaded) {
@@ -464,7 +528,17 @@ export const App: React.FC = () => {
   };
 
   const handleCloudTakeControl = async () => {
-    const remote = await cloudSync.claimPlayback();
+    const claim = await cloudSync.claimPlayback();
+    if (claim.status === 'handoff_pending') {
+      pendingCloudHandoffRef.current = true;
+      setCloudSyncNotice('Waiting for the current device to stop playback before switching output…');
+      return;
+    }
+    const remote = claim.player;
+    if (!remote) {
+      setCloudSyncNotice('The cloud player did not return a playback state. Refresh and try again.');
+      return;
+    }
     const remoteQueue = Array.isArray(remote.queue)
       ? remote.queue.map(hydrateCloudTrack).filter((item): item is AudioItem => Boolean(item))
       : [];
@@ -481,20 +555,24 @@ export const App: React.FC = () => {
       setCurrentTimeMs(0);
       setCloudSyncNotice(
         remote.current_track
-          ? 'The current track is stored only on the other device. Choose an online track or a track available on this device.'
+          ? 'This track is local-only on the other device. Choose an online track or a track available on this device.'
           : 'This device now controls playback.'
       );
       return;
     }
     setCurrentSong(track);
     setCurrentRadioStationId(null);
-    setCurrentTimeMs(Math.max(0, Number(remote.position_ms) || 0));
+    const position = Math.max(0, Number(remote.position_ms) || 0);
+    setCurrentTimeMs(position);
     setDurationMs(track.duration || Number(remote.duration_ms) || 0);
     await mainAudioEngine.loadTrack(track);
-    if (Number(remote.position_ms) > 0) mainAudioEngine.seekTo(Number(remote.position_ms));
-    if (remote.is_playing) await mainAudioEngine.play();
-    else mainAudioEngine.pause();
-    setCloudSyncNotice('Playback moved to this device.');
+    if (position > 0) mainAudioEngine.seekTo(position);
+    if (remote.is_playing) {
+      try { await mainAudioEngine.play(); } catch { setCloudSyncNotice('Track is ready. Press Play to resume.'); }
+    } else {
+      mainAudioEngine.pause();
+      setCloudSyncNotice('This device now controls playback. Press Play to start.');
+    }
   };
 
   // Pick the next random track without repeating until the current queue cycle is exhausted.
