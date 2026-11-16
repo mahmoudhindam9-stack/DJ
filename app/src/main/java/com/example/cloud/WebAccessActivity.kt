@@ -1,17 +1,12 @@
 package com.example.cloud
 
-import android.accounts.AccountManager
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -92,71 +87,6 @@ fun WebAccessScreen(
     var passwordInput by remember { mutableStateOf("") }
     var displayNameInput by remember { mutableStateOf("") }
     var authError by remember { mutableStateOf<String?>(null) }
-
-    // Native Android System Account Chooser for Google Accounts ("com.google")
-    val googleAccountPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        val chosenEmail = result.data?.getStringExtra(AccountManager.KEY_ACCOUNT_NAME)?.trim().orEmpty()
-        if (chosenEmail.isNotBlank()) {
-            val formattedName = chosenEmail.substringBefore("@")
-                .replace('.', ' ')
-                .replace('_', ' ')
-                .split(" ")
-                .filter { it.isNotBlank() }
-                .joinToString(" ") { part -> part.replaceFirstChar { it.uppercase() } }
-                .ifBlank { chosenEmail.substringBefore("@") }
-
-            CloudSyncManager.signInWithGoogle(
-                context = context,
-                googleEmail = chosenEmail,
-                displayName = formattedName
-            ).onSuccess {
-                authError = null
-                Toast.makeText(
-                    context,
-                    if (isArabic) "تم تسجيل الدخول بحساب Google: $chosenEmail" else "Signed in with Google: $chosenEmail",
-                    Toast.LENGTH_SHORT
-                ).show()
-            }.onFailure { err ->
-                authError = err.message
-            }
-        } else if (result.resultCode == Activity.RESULT_OK) {
-            authError = if (isArabic) "لم يتم استلام بريد حساب Google من الهاتف." else "Could not read selected Google account from device."
-        }
-    }
-
-    val launchPhoneGoogleAccountPicker = {
-        authError = null
-        val chooseAccountIntent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            AccountManager.newChooseAccountIntent(
-                null,
-                null,
-                arrayOf("com.google"),
-                null,
-                null,
-                null,
-                null
-            )
-        } else {
-            @Suppress("DEPRECATION")
-            AccountManager.newChooseAccountIntent(
-                null,
-                null,
-                arrayOf("com.google"),
-                false,
-                null,
-                null,
-                null,
-                null
-            )
-        }
-        runCatching {
-            googleAccountPickerLauncher.launch(chooseAccountIntent)
-        }.onFailure { err ->
-            authError = err.message ?: if (isArabic) "تعذر فتح حسابات Google على الهاتف." else "Could not open Google accounts on phone."
-        }
-    }
 
     Scaffold(
         containerColor = Color.Transparent,
@@ -352,7 +282,7 @@ fun WebAccessScreen(
                 }
             }
 
-            // Authentication Card (Email/Password + Phone Google Account Chooser)
+            // Authentication Card (secure email/password cloud authentication)
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(20.dp),
@@ -425,6 +355,16 @@ fun WebAccessScreen(
                             },
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
+                        )
+
+                        Text(
+                            text = if (isArabic) {
+                                "استخدم البريد الإلكتروني وكلمة المرور لمزامنة مكتبتك بين الهاتف والويب."
+                            } else {
+                                "Use your email and password to securely sync your library between Android and web."
+                            },
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
                         if (authError != null) {
@@ -529,22 +469,6 @@ fun WebAccessScreen(
                             }
                         }
 
-                        HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
-                        OutlinedButton(
-                            onClick = { launchPhoneGoogleAccountPicker() },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(50.dp)
-                                .testTag("auth_google_signin_button")
-                        ) {
-                            Icon(Icons.Filled.AccountCircle, contentDescription = null)
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = if (isArabic) "اختيار حساب Google من الهاتف" else "Choose Google Account from Phone",
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
                     }
                 }
             }

@@ -95,14 +95,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setAuthError(
-      isArabic
-        ? 'تسجيل Google السحابي يحتاج إعداد OAuth حقيقي (Client ID) في Vercel. استخدم البريد وكلمة المرور حاليًا.'
-        : 'Google Cloud sign-in requires a verified OAuth Client ID configured in Vercel. Use email and password for now.'
-    );
-  };
-
   return (
     <div
       id="settings-screen"
@@ -212,6 +204,11 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
           </div>
         ) : (
           <div className="flex flex-col gap-2.5 pt-1">
+            <p className="text-[11px] opacity-70">
+              {isArabic
+                ? 'استخدم البريد الإلكتروني وكلمة المرور لمزامنة مكتبتك بين الهاتف والويب.'
+                : 'Use your email and password to securely sync your library between Android and web.'}
+            </p>
             {authError && (
               <div className="text-xs text-red-400 font-semibold">{authError}</div>
             )}
@@ -271,17 +268,6 @@ export const SettingsScreen: React.FC<SettingsScreenProps> = ({
                   : isArabic
                   ? 'تسجيل الدخول'
                   : 'Sign In'}
-              </button>
-              <button
-                onClick={() => void handleGoogleSignIn()}
-                data-testid="web-auth-google-btn"
-                className="px-4 py-2 rounded-xl border text-xs font-bold"
-                style={{
-                  backgroundColor: themeColors.surfaceVariant,
-                  borderColor: themeColors.border,
-                }}
-              >
-                {isArabic ? 'الدخول بحساب Google' : 'Continue with Google'}
               </button>
               <button
                 onClick={() => setIsSignUp(!isSignUp)}
