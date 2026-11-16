@@ -302,6 +302,194 @@ export async function handleCloudApi(req, res, url, sendJson) {
       return true;
     }
 
+    if (route === 'library' && method === 'GET') {
+      const result = await db.query(
+        `SELECT track_id, track, is_favorite, added_at, updated_at
+         FROM public.dj_library_tracks
+         WHERE user_id = $1
+         ORDER BY updated_at DESC
+         LIMIT 5000`,
+        [user.id]
+      );
+      sendJson(res, 200, { ok: true, data: result.rows });
+      return true;
+    }
+
+    if (route === 'library' && method === 'PUT') {
+      const body = await readJsonBody(req);
+      if (!Array.isArray(body.tracks) || body.tracks.length > 500) {
+        sendError(sendJson, res, 400, 'Send between 1 and 500 tracks per batch.');
+        return true;
+      }
+      const client = await db.connect();
+      try {
+        await client.query('BEGIN');
+        for (const entry of body.tracks) {
+          const track = cleanTrack(entry?.track);
+          const trackId = String(entry?.track_id || track?.id || '').trim().slice(0, 300);
+          if (!track || !trackId) continue;
+          await client.query(
+            `INSERT INTO public.dj_library_tracks (user_id, track_id, track, is_favorite, added_at, updated_at)
+             VALUES ($1, $2, $3::jsonb, $4, COALESCE($5::timestamptz, now()), now())
+             ON CONFLICT (user_id, track_id) DO UPDATE
+             SET track = EXCLUDED.track,
+                 is_favorite = EXCLUDED.is_favorite,
+                 updated_at = now()`,
+            [
+              user.id,
+              trackId,
+              JSON.stringify(track),
+              Boolean(entry.is_favorite ?? track.isFavorite),
+              entry.added_at || null,
+            ]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
+      sendJson(res, 200, { ok: true, data: { saved: body.tracks.length } });
+      return true;
+    }
+
+    if (route.startsWith('library/') && method === 'DELETE') {
+      const trackId = decodeURIComponent(route.slice('library/'.length));
+      const result = await db.query(
+        'DELETE FROM public.dj_library_tracks WHERE user_id = $1 AND track_id = $2 RETURNING track_id',
+        [user.id, trackId]
+      );
+      sendJson(res, 200, { ok: true, data: { deleted: result.rowCount > 0 } });
+      return true;
+    }
+
+    if (route === 'library/favorite' && method === 'PATCH') {
+      const body = await readJsonBody(req);
+      const trackId = String(body.track_id || '').trim().slice(0, 300);
+      if (!trackId || typeof body.is_favorite !== 'boolean') {
+        sendError(sendJson, res, 400, 'A track_id and boolean is_favorite are required.');
+        return true;
+      }
+      const result = await db.query(
+        `UPDATE public.dj_library_tracks
+         SET is_favorite = $3, updated_at = now()
+         WHERE user_id = $1 AND track_id = $2
+         RETURNING track_id, is_favorite`,
+        [user.id, trackId, body.is_favorite]
+      );
+      if (!result.rowCount) {
+        sendError(sendJson, res, 404, 'Track not found in your DJ Cloud library.');
+        return true;
+      }
+      sendJson(res, 200, { ok: true, data: result.rows[0] });
+      return true;
+    }
+
+    if (route === 'playlists' && method === 'GET') {
+      const result = await db.query(
+        `SELECT p.playlist_id, p.name, p.created_at, p.updated_at,
+                COALESCE(jsonb_agg(
+                  jsonb_build_object(
+                    'track_id', i.track_id,
+                    'position', i.position,
+                    'track', l.track,
+                    'is_favorite', l.is_favorite
+                  ) ORDER BY i.position, i.added_at
+                ) FILTER (WHERE i.track_id IS NOT NULL), '[]'::jsonb) AS items
+         FROM public.dj_playlists p
+         LEFT JOIN public.dj_playlist_items i
+           ON i.user_id = p.user_id AND i.playlist_id = p.playlist_id
+         LEFT JOIN public.dj_library_tracks l
+           ON l.user_id = i.user_id AND l.track_id = i.track_id
+         WHERE p.user_id = $1
+         GROUP BY p.user_id, p.playlist_id
+         ORDER BY p.updated_at DESC`,
+        [user.id]
+      );
+      sendJson(res, 200, { ok: true, data: result.rows });
+      return true;
+    }
+
+    if (route === 'playlists' && method === 'POST') {
+      const body = await readJsonBody(req);
+      const name = String(body.name || '').trim().slice(0, 120);
+      const playlistId = String(body.playlist_id || `pl_${crypto.randomUUID()}`).slice(0, 160);
+      if (!name) {
+        sendError(sendJson, res, 400, 'Playlist name is required.');
+        return true;
+      }
+      const result = await db.query(
+        `INSERT INTO public.dj_playlists (user_id, playlist_id, name, updated_at)
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT (user_id, playlist_id) DO UPDATE
+         SET name = EXCLUDED.name, updated_at = now()
+         RETURNING playlist_id, name, created_at, updated_at`,
+        [user.id, playlistId, name]
+      );
+      sendJson(res, 200, { ok: true, data: result.rows[0] });
+      return true;
+    }
+
+    if (route.startsWith('playlists/') && method === 'DELETE') {
+      const playlistId = decodeURIComponent(route.slice('playlists/'.length));
+      if (playlistId.includes('/')) {
+        sendError(sendJson, res, 400, 'Invalid playlist identifier.');
+        return true;
+      }
+      const result = await db.query(
+        'DELETE FROM public.dj_playlists WHERE user_id = $1 AND playlist_id = $2 RETURNING playlist_id',
+        [user.id, playlistId]
+      );
+      sendJson(res, 200, { ok: true, data: { deleted: result.rowCount > 0 } });
+      return true;
+    }
+
+    if (route.startsWith('playlists/') && route.endsWith('/items') && method === 'POST') {
+      const body = await readJsonBody(req);
+      const playlistId = decodeURIComponent(route.slice('playlists/'.length, -'/items'.length));
+      const trackId = String(body.track_id || '').trim().slice(0, 300);
+      const position = Math.max(0, Math.min(100_000, Math.floor(Number(body.position) || 0)));
+      if (!trackId || !playlistId) {
+        sendError(sendJson, res, 400, 'Playlist and track identifiers are required.');
+        return true;
+      }
+      const result = await db.query(
+        `INSERT INTO public.dj_playlist_items (user_id, playlist_id, track_id, position)
+         SELECT $1, p.playlist_id, $3, $4
+         FROM public.dj_playlists p
+         WHERE p.user_id = $1 AND p.playlist_id = $2
+         ON CONFLICT (user_id, playlist_id, track_id) DO UPDATE
+         SET position = EXCLUDED.position
+         RETURNING playlist_id, track_id, position`,
+        [user.id, playlistId, trackId, position]
+      );
+      if (!result.rowCount) {
+        sendError(sendJson, res, 404, 'Playlist not found in your DJ Cloud account.');
+        return true;
+      }
+      await db.query(
+        'UPDATE public.dj_playlists SET updated_at = now() WHERE user_id = $1 AND playlist_id = $2',
+        [user.id, playlistId]
+      );
+      sendJson(res, 200, { ok: true, data: result.rows[0] });
+      return true;
+    }
+
+    if (route.startsWith('playlists/') && route.includes('/items/') && method === 'DELETE') {
+      const [, rest] = route.split('playlists/');
+      const [playlistPart, trackPart] = rest.split('/items/');
+      const playlistId = decodeURIComponent(playlistPart || '');
+      const trackId = decodeURIComponent(trackPart || '');
+      const result = await db.query(
+        'DELETE FROM public.dj_playlist_items WHERE user_id = $1 AND playlist_id = $2 AND track_id = $3 RETURNING track_id',
+        [user.id, playlistId, trackId]
+      );
+      sendJson(res, 200, { ok: true, data: { deleted: result.rowCount > 0 } });
+      return true;
+    }
+
     sendError(sendJson, res, 404, 'DJ Cloud endpoint not found.');
     return true;
   } catch (error) {
