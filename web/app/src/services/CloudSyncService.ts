@@ -375,6 +375,7 @@ class CloudSyncService {
         return;
       }
       const json = await resp.json();
+      if (this.currentUser?.userId !== user.userId) return;
       if (json?.userId && json.userId === user.userId) {
         if (json.playbackState) {
           const remotePb: CloudPlaybackState = json.playbackState;
@@ -386,7 +387,7 @@ class CloudSyncService {
             remotePb.activeDeviceId &&
             remotePb.activeDeviceId !== this.getDeviceId() &&
             remotePb.isPlaying &&
-            remotePb.updatedAt >= prevUpdatedAt
+            remotePb.updatedAt > prevUpdatedAt
           ) {
             this.status = `Audio active on ${remotePb.activeDevicePlatform.toUpperCase()}`;
             this.onRemoteClaimedOutput?.(remotePb);

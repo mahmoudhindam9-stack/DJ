@@ -246,6 +246,7 @@ export const App: React.FC = () => {
             db.getAllSongs(),
             db.getPlaylists(),
           ]);
+          if (cloudSyncService.getUser()?.userId !== nextId) return;
           setLibrary(scopedTracks);
           setPlaylists(scopedPlaylists);
         }

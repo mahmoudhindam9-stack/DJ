@@ -1799,23 +1799,40 @@ async function handleApi(req, res) {
 
     // Neon Cloud Config, Auth (Email/Password + Google), User Isolation, and Single-Output Playback Sync
     if (requestUrl.pathname === '/api/cloud/config' && req.method === 'GET') {
-      sendJson(res, 200, {
-        ok: true,
-        data: {
-          project: NEON_CLOUD_CONFIG.projectName,
-          projectId: NEON_CLOUD_CONFIG.projectId,
-          organizationId: NEON_CLOUD_CONFIG.organizationId,
-          branch: NEON_CLOUD_CONFIG.branchName,
-          branchId: NEON_CLOUD_CONFIG.branchId,
-          region: NEON_CLOUD_CONFIG.region,
-          database: NEON_CLOUD_CONFIG.database,
-          authBaseUrl: NEON_CLOUD_CONFIG.authBaseUrl,
-          jwksUrl: NEON_CLOUD_CONFIG.jwksUrl,
-          realtimeUrl: NEON_CLOUD_CONFIG.realtimeUrl,
-          databaseConnected: NEON_CLOUD_CONFIG.hasDatabaseUrl,
-          googleSignInConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_IDS),
-        },
-      });
+      try {
+        const database = await checkNeonConnection();
+        sendJson(res, 200, {
+          ok: true,
+          data: {
+            project: NEON_CLOUD_CONFIG.projectName,
+            projectId: NEON_CLOUD_CONFIG.projectId,
+            organizationId: NEON_CLOUD_CONFIG.organizationId,
+            branch: NEON_CLOUD_CONFIG.branchName,
+            branchId: NEON_CLOUD_CONFIG.branchId,
+            region: NEON_CLOUD_CONFIG.region,
+            database: NEON_CLOUD_CONFIG.database,
+            authBaseUrl: NEON_CLOUD_CONFIG.authBaseUrl,
+            jwksUrl: NEON_CLOUD_CONFIG.jwksUrl,
+            realtimeUrl: NEON_CLOUD_CONFIG.realtimeUrl,
+            databaseConnected: true,
+            databaseCheckedAt: database.checkedAt,
+            googleSignInConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_IDS),
+          },
+        });
+      } catch (err) {
+        sendJson(res, 503, {
+          ok: false,
+          data: {
+            project: NEON_CLOUD_CONFIG.projectName,
+            projectId: NEON_CLOUD_CONFIG.projectId,
+            branchId: NEON_CLOUD_CONFIG.branchId,
+            database: NEON_CLOUD_CONFIG.database,
+            databaseConnected: false,
+            googleSignInConfigured: Boolean(process.env.GOOGLE_OAUTH_CLIENT_IDS),
+          },
+          error: err?.message || 'Could not connect to Neon Cloud.'
+        });
+      }
       return true;
     }
 
