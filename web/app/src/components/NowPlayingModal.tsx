@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ChevronDown,
   Play,
@@ -63,38 +63,149 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
   onSendToDeckB,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [visualizerMode, setVisualizerMode] = useState<
+    'OFF' | 'SPECTRUM' | 'CIRCULAR' | 'WAVE' | 'AURORA' | 'GALAXY' | 'TUNNEL'
+  >('SPECTRUM');
 
   useEffect(() => {
-    let animId: number;
+    let animId = 0;
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas || visualizerMode === 'OFF') return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const render = () => {
+    const width = canvas.width;
+    const height = canvas.height;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const primary = themeColors.primary;
+    const secondary = themeColors.secondary;
+    const tertiary = themeColors.tertiary || themeColors.primary;
+
+    const drawSmoothWave = (data: Uint8Array, yBase: number, amplitude: number, phase: number) => {
+      ctx.beginPath();
+      for (let i = 0; i < data.length; i++) {
+        const x = (i / Math.max(1, data.length - 1)) * width;
+        const signal = (data[i] / 255 - 0.5) * 2;
+        const y = yBase + Math.sin((i / data.length) * Math.PI * 4 + phase) * amplitude * 0.22
+          + signal * amplitude;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    };
+
+    const render = (time: number) => {
       const freqData = mainAudioEngine.getVisualizerData();
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, width, height);
+      const energy = freqData.length
+        ? freqData.reduce((sum, value) => sum + value, 0) / (freqData.length * 255)
+        : 0;
+      const phase = time * 0.0012;
 
-      const barWidth = (canvas.width / freqData.length) * 1.5;
-      let x = 0;
-
-      for (let i = 0; i < freqData.length; i++) {
-        const barHeight = (freqData[i] / 255) * canvas.height * 0.9;
-        const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
-        gradient.addColorStop(0, themeColors.primary);
-        gradient.addColorStop(1, themeColors.secondary);
-
+      if (visualizerMode === 'SPECTRUM') {
+        const barWidth = (width / Math.max(1, freqData.length)) * 1.5;
+        let x = 0;
+        const gradient = ctx.createLinearGradient(0, height, 0, 0);
+        gradient.addColorStop(0, primary);
+        gradient.addColorStop(1, secondary);
         ctx.fillStyle = gradient;
-        ctx.fillRect(x, canvas.height - barHeight, barWidth - 2, barHeight);
-        x += barWidth;
+        for (let i = 0; i < freqData.length; i++) {
+          const barHeight = (freqData[i] / 255) * height * 0.9;
+          ctx.fillRect(x, height - barHeight, Math.max(1, barWidth - 2), barHeight);
+          x += barWidth;
+        }
+      } else if (visualizerMode === 'CIRCULAR') {
+        const maxRadius = Math.min(width, height) * 0.34;
+        const bars = Math.min(freqData.length, 48);
+        for (let i = 0; i < bars; i++) {
+          const angle = (i / bars) * Math.PI * 2 + phase * 0.2;
+          const magnitude = (freqData[i] / 255) * height * 0.42;
+          const inner = maxRadius;
+          const outer = inner + magnitude;
+          ctx.beginPath();
+          ctx.moveTo(centerX + Math.cos(angle) * inner, centerY + Math.sin(angle) * inner);
+          ctx.lineTo(centerX + Math.cos(angle) * outer, centerY + Math.sin(angle) * outer);
+          ctx.strokeStyle = i % 2 ? secondary : primary;
+          ctx.lineWidth = 2.2;
+          ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, maxRadius * 0.72, 0, Math.PI * 2);
+        ctx.strokeStyle = tertiary;
+        ctx.globalAlpha = 0.35 + energy * 0.4;
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (visualizerMode === 'WAVE') {
+        ctx.lineWidth = 2.3;
+        const gradient = ctx.createLinearGradient(0, 0, width, 0);
+        gradient.addColorStop(0, primary);
+        gradient.addColorStop(0.5, secondary);
+        gradient.addColorStop(1, tertiary);
+        ctx.strokeStyle = gradient;
+        drawSmoothWave(freqData, centerY, height * 0.42, phase);
+        ctx.globalAlpha = 0.25;
+        ctx.lineWidth = 5;
+        drawSmoothWave(freqData, centerY, height * 0.42, phase);
+        ctx.globalAlpha = 1;
+      } else if (visualizerMode === 'AURORA') {
+        for (let layer = 0; layer < 4; layer++) {
+          const yOffset = height * (0.2 + layer * 0.17);
+          ctx.beginPath();
+          ctx.moveTo(0, height);
+          for (let i = 0; i <= 60; i++) {
+            const x = (i / 60) * width;
+            const wave = Math.sin(i * 0.19 + phase * (0.55 + layer * 0.12)) * (height * 0.13)
+              + Math.sin(i * 0.07 - phase * 0.7) * (height * 0.08);
+            const amp = (freqData[(i * 3 + layer * 7) % Math.max(1, freqData.length)] || 0) / 255;
+            const y = yOffset + wave - amp * height * 0.18;
+            ctx.lineTo(x, y);
+          }
+          ctx.lineTo(width, height);
+          ctx.closePath();
+          ctx.fillStyle = [primary, secondary, tertiary, primary][layer];
+          ctx.globalAlpha = 0.12 + energy * 0.14;
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      } else if (visualizerMode === 'GALAXY') {
+        const particles = 70;
+        for (let i = 0; i < particles; i++) {
+          const orbit = 8 + ((i * 17) % 55) + energy * 18;
+          const angle = phase * (0.12 + (i % 5) * 0.035) + i * 2.399;
+          const wobble = Math.sin(phase + i) * 3;
+          const x = centerX + Math.cos(angle) * (orbit + wobble);
+          const y = centerY + Math.sin(angle) * (orbit + wobble) * 0.62;
+          const radius = 0.7 + ((freqData[i % Math.max(1, freqData.length)] || 0) / 255) * 2.1;
+          ctx.beginPath();
+          ctx.arc(x, y, radius, 0, Math.PI * 2);
+          ctx.fillStyle = i % 3 === 0 ? tertiary : i % 2 ? primary : secondary;
+          ctx.globalAlpha = 0.35 + energy * 0.55;
+          ctx.fill();
+        }
+        ctx.globalAlpha = 1;
+      } else if (visualizerMode === 'TUNNEL') {
+        const rings = 9;
+        for (let i = rings; i >= 1; i--) {
+          const pulse = (time * 0.035 + i * 7) % 70;
+          const radius = 5 + pulse * (0.55 + energy * 0.35);
+          ctx.beginPath();
+          ctx.ellipse(centerX, centerY, radius * 1.9, radius * 0.62, phase * 0.08, 0, Math.PI * 2);
+          ctx.strokeStyle = i % 2 ? primary : secondary;
+          ctx.globalAlpha = 0.2 + (1 - i / rings) * 0.5;
+          ctx.lineWidth = 1.2 + energy * 1.4;
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
       }
 
       animId = requestAnimationFrame(render);
     };
 
-    render();
+    render(0);
     return () => cancelAnimationFrame(animId);
-  }, [themeColors]);
+  }, [themeColors, visualizerMode]);
 
   const formatTime = (ms: number) => {
     if (!ms || isNaN(ms)) return '0:00';
@@ -182,13 +293,33 @@ export const NowPlayingModal: React.FC<NowPlayingModalProps> = ({
           )}
         </div>
 
-        {/* Live FFT Visualizer Canvas */}
-        <canvas
-          ref={canvasRef}
-          width={480}
-          height={48}
-          className="w-full max-w-md h-10 rounded-lg opacity-80 shrink-0"
-        />
+        {/* Android-matched six visualizer modes plus artwork-only mode */}
+        <div className="w-full max-w-md shrink-0">
+          <canvas
+            ref={canvasRef}
+            width={480}
+            height={112}
+            className={`w-full h-20 rounded-lg opacity-90 transition-opacity ${visualizerMode === 'OFF' ? 'opacity-0 h-0' : ''}`}
+            aria-label="Live audio visualizer"
+          />
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-1">
+            {(['OFF', 'SPECTRUM', 'CIRCULAR', 'WAVE', 'AURORA', 'GALAXY', 'TUNNEL'] as const).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setVisualizerMode(mode)}
+                className="rounded-full border px-2 py-1 text-[9px] font-bold tracking-wide transition-colors"
+                style={{
+                  borderColor: visualizerMode === mode ? themeColors.primary : themeColors.border,
+                  color: visualizerMode === mode ? '#fff' : themeColors.textMuted,
+                  backgroundColor: visualizerMode === mode ? themeColors.primary : themeColors.surfaceVariant,
+                }}
+                aria-pressed={visualizerMode === mode}
+              >
+                {mode === 'OFF' ? (isArabic ? 'الغلاف' : 'ART') : mode}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {/* Song Info & Favorite Button */}
         <div className="flex items-center justify-between w-full px-2 shrink-0">
