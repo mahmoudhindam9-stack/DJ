@@ -2,9 +2,6 @@ package com.example.player
 
 import android.content.Context
 import android.content.Intent
-import com.example.widget.DJMixerWidgetProvider
-import com.example.widget.MusicWidgetProvider
-import com.example.widget.QuickPlayerWidgetProvider
 
 /** One source of truth for the active playback shown by notifications and home-screen widgets. */
 object PlaybackNotificationRouter {
@@ -63,9 +60,6 @@ object PlaybackNotificationRouter {
             context.getSharedPreferences("dj_player_session", Context.MODE_PRIVATE).edit()
                 .putString(AudioPlayerController.KEY_TITLE, title).putString(AudioPlayerController.KEY_ARTIST, artist).putBoolean("playing", isPlaying).apply()
         }
-        MusicWidgetProvider.requestAllUpdates(context)
-        QuickPlayerWidgetProvider.requestAllUpdates(context)
-        DJMixerWidgetProvider.requestAllUpdates(context)
         com.example.widget.TimeWeatherWidgetProvider.requestAllUpdates(context)
     }
 
