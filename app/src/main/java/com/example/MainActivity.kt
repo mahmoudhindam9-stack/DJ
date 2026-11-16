@@ -176,6 +176,16 @@ fun MainApp() {
     val micController = remember { MicController(context) }
     val djFxController = remember { com.example.djfx.DjFxController(context) }
 
+    // The cloud coordinator lives at app scope, so it keeps handling device handoffs
+    // even after the user closes the Cloud screen and returns to the player.
+    val cloudSyncManager = remember(playerController) {
+        com.example.cloud.DjCloudSyncManager(context, playerController)
+    }
+    DisposableEffect(cloudSyncManager) {
+        cloudSyncManager.start()
+        onDispose { cloudSyncManager.stop() }
+    }
+
     LaunchedEffect(OnlineDjBridge.request?.id) {
         val request = OnlineDjBridge.request ?: return@LaunchedEffect
         playerController.pause()
@@ -471,6 +481,12 @@ fun MainApp() {
                     audioLibrary = audioLibrary,
                     playlists = playlists,
                     playlistRepo = playlistRepo
+                )
+            }
+            composable("cloud_sync") {
+                com.example.cloud.DjCloudSyncScreen(
+                    manager = cloudSyncManager,
+                    onBack = { navController.popBackStack() }
                 )
             }
             composable("online_music") {
