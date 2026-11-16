@@ -17,17 +17,6 @@ jobs:
         with:
           persist-credentials: true
 
-      - name: Verify retired backend references are absent
-        shell: bash
-        run: |
-          set -euo pipefail
-          retired_term="$(printf '%s' 'c3VwYWJhc2U=' | base64 --decode)"
-          if git grep -n -i "$retired_term" -- .; then
-            echo "A retired backend reference remains in the repository."
-            exit 1
-          fi
-          echo "Repository source and configuration are clear of retired backend references."
-
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
@@ -40,6 +29,17 @@ jobs:
         run: |
           rm -f package-lock.json
           npm install --include=dev
+
+      - name: Verify retired backend references are absent
+        shell: bash
+        run: |
+          set -euo pipefail
+          retired_term="$(printf '%s' 'c3VwYWJhc2U=' | base64 --decode)"
+          if git grep -n -i "$retired_term" -- .; then
+            echo "A retired backend reference remains in the repository."
+            exit 1
+          fi
+          echo "Repository source and configuration are clear of retired backend references."
 
       - name: TypeScript validation
         working-directory: web/app
