@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
+import { handleCloudApi } from './cloud-sync-api.js';
 import { randomUUID } from 'node:crypto';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -1198,6 +1199,10 @@ async function handleApi(req, res) {
   const requestUrl = new URL(req.url || '/', `http://127.0.0.1:${PORT}`);
 
   if (!requestUrl.pathname.startsWith('/api/')) return false;
+
+  if (requestUrl.pathname.startsWith('/api/cloud/')) {
+    return handleCloudApi(req, res, requestUrl, sendJson);
+  }
 
   try {
     if (requestUrl.pathname === '/api/window/always-on-top' && req.method === 'POST') {
