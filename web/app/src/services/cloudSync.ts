@@ -78,11 +78,11 @@ function describeLocalDevice(): { name: string; platform: CloudDevice['platform'
 
 async function getBearerToken(): Promise<string> {
   if (!cloudAuthClient) throw new Error('DJ Cloud authentication is not configured.');
-  const result = await cloudAuthClient.token();
-  if (result.error || !result.data?.token) {
+  const result = await cloudAuthClient.getSession();
+  if (result.error || !result.data?.session?.token) {
     throw new Error(result.error?.message || 'Your DJ Cloud session has expired. Please sign in again.');
   }
-  return result.data.token;
+  return result.data.session.token;
 }
 
 async function cloudRequest<T>(route: string, method = 'GET', body?: unknown): Promise<T> {
@@ -259,6 +259,68 @@ export function useCloudSync(
     };
   }, [user?.id, deviceId, applyState, refreshDevices]);
 
+  const fetchLibrary = useCallback(async () => {
+    return cloudRequest<Array<{ track_id: string; track: any; is_favorite: boolean; added_at: string; updated_at: string }>>('library');
+  }, []);
+
+  const publishLibrary = useCallback(async (tracks: Array<{ id: string; [key: string]: any }>) => {
+    const batches = [];
+    for (let index = 0; index < tracks.length; index += 500) {
+      batches.push(tracks.slice(index, index + 500));
+    }
+    for (const batch of batches) {
+      await cloudRequest('library', 'PUT', {
+        tracks: batch.map((track) => ({
+          track_id: track.id,
+          track,
+          is_favorite: Boolean(track.isFavorite),
+          added_at: new Date(track.addedDate || Date.now()).toISOString(),
+        })),
+      });
+    }
+    return tracks.length;
+  }, []);
+
+  const deleteLibraryTrack = useCallback(async (trackId: string) => {
+    return cloudRequest<{ deleted: boolean }>('library/' + encodeURIComponent(trackId), 'DELETE');
+  }, []);
+
+  const fetchPlaylists = useCallback(async () => {
+    return cloudRequest<Array<{
+      playlist_id: string;
+      name: string;
+      created_at: string;
+      updated_at: string;
+      items: Array<{ track_id: string; position: number; track: any; is_favorite: boolean | null }>;
+    }>>('playlists');
+  }, []);
+
+  const createCloudPlaylist = useCallback(async (name: string, playlistId?: string) => {
+    return cloudRequest<{ playlist_id: string; name: string; created_at: string; updated_at: string }>(
+      'playlists',
+      'POST',
+      { name, playlist_id: playlistId }
+    );
+  }, []);
+
+  const deleteCloudPlaylist = useCallback(async (playlistId: string) => {
+    return cloudRequest<{ deleted: boolean }>('playlists/' + encodeURIComponent(playlistId), 'DELETE');
+  }, []);
+
+  const addCloudPlaylistTrack = useCallback(async (playlistId: string, trackId: string, position = 0) => {
+    return cloudRequest('playlists/' + encodeURIComponent(playlistId) + '/items', 'POST', {
+      track_id: trackId,
+      position,
+    });
+  }, []);
+
+  const removeCloudPlaylistTrack = useCallback(async (playlistId: string, trackId: string) => {
+    return cloudRequest(
+      'playlists/' + encodeURIComponent(playlistId) + '/items/' + encodeURIComponent(trackId),
+      'DELETE'
+    );
+  }, []);
+
   const isOwner = Boolean(state?.active_device_id && state.active_device_id === deviceId);
   const activeDevice = devices.find((item) => item.device_id === state?.active_device_id) || null;
 
@@ -274,5 +336,13 @@ export function useCloudSync(
     refreshDevices,
     publishPlayback,
     claimPlayback,
+    fetchLibrary,
+    publishLibrary,
+    deleteLibraryTrack,
+    fetchPlaylists,
+    createCloudPlaylist,
+    deleteCloudPlaylist,
+    addCloudPlaylistTrack,
+    removeCloudPlaylistTrack,
   };
 }
