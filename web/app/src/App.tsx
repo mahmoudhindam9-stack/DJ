@@ -1319,7 +1319,7 @@ export const App: React.FC = () => {
           crossfadeDurationSeconds={crossfadeDurationSeconds}
           themeColors={themeColors}
           isArabic={isArabic}
-          compact={activeTab === 'EQUALIZER'}
+          compact={true}
           onCrossfadeDurationChange={handleCrossfadeDurationChange}
           onPlayPause={handlePlayPause}
           onNext={handleNext}
