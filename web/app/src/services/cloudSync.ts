@@ -33,6 +33,24 @@ export interface CloudPlaybackUpdate {
   playback_mode: string;
 }
 
+export interface CloudDeviceCommand {
+  command_id: string;
+  target_device_id: string;
+  source_device_id: string;
+  command_type: 'pause' | 'switch';
+  payload: { next_device_id?: string };
+  created_at: string;
+}
+
+export interface CloudClaimResult {
+  status: 'active' | 'handoff_pending';
+  player?: CloudPlaybackState;
+  command_id?: string;
+  active_device_id?: string;
+}
+
+type CloudDeviceCommandHandler = (command: CloudDeviceCommand) => Promise<number | void>;
+
 interface ApiResult<T> {
   ok: boolean;
   data?: T;
@@ -78,11 +96,13 @@ function describeLocalDevice(): { name: string; platform: CloudDevice['platform'
 
 async function getBearerToken(): Promise<string> {
   if (!cloudAuthClient) throw new Error('DJ Cloud authentication is not configured.');
-  const result = await cloudAuthClient.getSession();
-  if (result.error || !result.data?.session?.token) {
+  // getSession().session.token is the Better Auth session cookie token. The API
+  // expects the short-lived EdDSA JWT issued by Neon Auth.
+  const result = await cloudAuthClient.token();
+  if (result.error || !result.data?.token) {
     throw new Error(result.error?.message || 'Your DJ Cloud session has expired. Please sign in again.');
   }
-  return result.data.session.token;
+  return result.data.token;
 }
 
 async function cloudRequest<T>(route: string, method = 'GET', body?: unknown): Promise<T> {
@@ -111,11 +131,14 @@ async function cloudRequest<T>(route: string, method = 'GET', body?: unknown): P
 
 export function useCloudSync(
   user: CloudUser | null,
-  onPlaybackState?: (state: CloudPlaybackState | null) => void
+  onPlaybackState?: (state: CloudPlaybackState | null) => void,
+  onDeviceCommand?: CloudDeviceCommandHandler
 ) {
   const deviceId = useMemo(() => getLocalDeviceId(), []);
   const callbackRef = useRef(onPlaybackState);
   callbackRef.current = onPlaybackState;
+  const commandHandlerRef = useRef(onDeviceCommand);
+  commandHandlerRef.current = onDeviceCommand;
   const [devices, setDevices] = useState<CloudDevice[]>([]);
   const [state, setState] = useState<CloudPlaybackState | null>(null);
   const [status, setStatus] = useState<'disabled' | 'connecting' | 'live' | 'offline' | 'error'>(
@@ -152,10 +175,10 @@ export function useCloudSync(
   }, [deviceId, deviceRegistered]);
 
   const claimPlayback = useCallback(async () => {
-    const next = await cloudRequest<CloudPlaybackState>('claim', 'POST', { device_id: deviceId });
-    applyState(next);
+    const result = await cloudRequest<CloudClaimResult>('claim', 'POST', { device_id: deviceId });
+    if (result.status === 'active' && result.player) applyState(result.player);
     await refreshDevices();
-    return next;
+    return result;
   }, [applyState, deviceId, refreshDevices]);
 
   useEffect(() => {
@@ -172,6 +195,8 @@ export function useCloudSync(
     let renewalTimer: ReturnType<typeof setTimeout> | null = null;
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
     let devicesTimer: ReturnType<typeof setInterval> | null = null;
+    let commandsTimer: ReturnType<typeof setInterval> | null = null;
+    const processingCommands = new Set<string>();
 
     const scheduleRenewal = (sealed: SealedLiveQuery<CloudPlaybackState>) => {
       if (renewalTimer) clearTimeout(renewalTimer);
@@ -242,6 +267,37 @@ export function useCloudSync(
         devicesTimer = setInterval(() => {
           void refreshDevices().catch(() => {});
         }, 15_000);
+
+        const processCommands = async () => {
+          if (disposed || processingCommands.size > 0) return;
+          try {
+            const pending = await cloudRequest<CloudDeviceCommand[]>(
+              'commands?device_id=' + encodeURIComponent(deviceId)
+            );
+            for (const command of pending) {
+              if (disposed || processingCommands.has(command.command_id)) continue;
+              if (command.command_type !== 'pause') continue;
+              const handler = commandHandlerRef.current;
+              if (!handler) continue;
+              processingCommands.add(command.command_id);
+              try {
+                // The old output must stop before the server grants control to the next device.
+                const positionMs = await handler(command);
+                await cloudRequest('commands/ack', 'POST', {
+                  device_id: deviceId,
+                  command_id: command.command_id,
+                  position_ms: Number.isFinite(positionMs) ? Math.max(0, Math.floor(Number(positionMs))) : 0,
+                });
+              } finally {
+                processingCommands.delete(command.command_id);
+              }
+            }
+          } catch (err) {
+            if (!disposed) setError(err instanceof Error ? err.message : 'Could not process playback handoff.');
+          }
+        };
+        void processCommands();
+        commandsTimer = setInterval(() => { void processCommands(); }, 1_500);
       } catch (err) {
         if (disposed) return;
         setStatus('offline');
@@ -255,6 +311,7 @@ export function useCloudSync(
       if (renewalTimer) clearTimeout(renewalTimer);
       if (heartbeatTimer) clearInterval(heartbeatTimer);
       if (devicesTimer) clearInterval(devicesTimer);
+      if (commandsTimer) clearInterval(commandsTimer);
       subscription?.unsubscribe();
     };
   }, [user?.id, deviceId, applyState, refreshDevices]);
