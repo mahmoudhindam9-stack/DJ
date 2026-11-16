@@ -239,6 +239,15 @@ fun PlayerScreenV2(
                     DropdownMenuItem(modifier = Modifier, text = { Text("Import Music") }, onClick = { showLibraryMenu = false; showMusicImport = true }, leadingIcon = { Icon(Icons.Filled.Folder, null) })
                     DropdownMenuItem(
                         modifier = Modifier,
+                        text = { Text("DJ Cloud Sync") },
+                        onClick = {
+                            showLibraryMenu = false
+                            navController.navigate("cloud_sync") { launchSingleTop = true }
+                        },
+                        leadingIcon = { Icon(Icons.Filled.Cloud, null) }
+                    )
+                    DropdownMenuItem(
+                        modifier = Modifier,
                         text = { Text("Check for updates") },
                         onClick = {
                             showLibraryMenu = false
