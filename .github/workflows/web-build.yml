@@ -1,0 +1,56 @@
+name: DJ Web Build Verification
+
+on:
+  push:
+    branches:
+      - feature/android-web-parity-cloud-sync
+
+permissions:
+  contents: write
+
+jobs:
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/app/package-lock.json
+
+      - name: Install web dependencies and refresh lockfile
+        working-directory: web/app
+        run: npm install --include=dev
+
+      - name: TypeScript validation
+        working-directory: web/app
+        run: npm run lint
+
+      - name: Build Vite web application
+        working-directory: web/app
+        run: npm run build
+
+      - name: Validate Vercel server handlers
+        working-directory: web/app
+        run: |
+          node --check scripts/server.js
+          node --check scripts/cloud-sync-api.js
+          node -e "import('./scripts/cloud-sync-api.js').then(() => console.log('DJ Cloud API module loaded'))"
+
+      - name: Commit refreshed lockfile when dependencies changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- web/app/package-lock.json; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add web/app/package-lock.json
+            git commit -m "build(web): refresh locked Neon cloud dependencies"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
