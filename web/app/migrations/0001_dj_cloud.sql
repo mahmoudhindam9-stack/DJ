@@ -69,3 +69,19 @@ CREATE TABLE IF NOT EXISTS public.dj_playlist_items (
 
 CREATE INDEX IF NOT EXISTS dj_playlist_items_order_idx
   ON public.dj_playlist_items (user_id, playlist_id, position);
+
+CREATE TABLE IF NOT EXISTS public.dj_device_commands (
+  user_id text NOT NULL,
+  command_id uuid NOT NULL DEFAULT gen_random_uuid(),
+  target_device_id uuid NOT NULL,
+  source_device_id uuid NOT NULL,
+  command_type text NOT NULL CHECK (command_type IN ('pause', 'switch')),
+  payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  acknowledged_at timestamptz,
+  PRIMARY KEY (user_id, command_id)
+);
+
+CREATE INDEX IF NOT EXISTS dj_commands_pending_idx
+  ON public.dj_device_commands (user_id, target_device_id, created_at)
+  WHERE acknowledged_at IS NULL;
