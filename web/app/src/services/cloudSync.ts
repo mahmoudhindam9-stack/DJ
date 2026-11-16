@@ -238,14 +238,15 @@ export function useCloudSync(
         if (disposed) return;
         subscription = realtimeClient.subscribe(sealed);
         const liveRows = new Map<string, CloudPlaybackState>();
-        subscription.onUpdate((update: RawLiveQueryUpdate<CloudPlaybackState>) => {
-          if (update.type === 'rows') {
+        subscription.onUpdate((update) => {
+          const typedUpdate = update as RawLiveQueryUpdate<CloudPlaybackState>;
+          if (typedUpdate.type === 'rows') {
             liveRows.clear();
-            for (const entry of update.rows) {
+            for (const entry of typedUpdate.rows) {
               liveRows.set(entry.rowId, entry.row);
             }
           } else {
-            for (const change of update.changes) {
+            for (const change of typedUpdate.changes) {
               if (change.type === 'upsert') liveRows.set(change.rowId, change.row);
               else liveRows.delete(change.rowId);
             }
