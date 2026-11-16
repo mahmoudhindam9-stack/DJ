@@ -12,6 +12,12 @@ export const cloudAuthClient = cloudAuthEnabled
     })
   : null;
 
+ // The default Neon client exposes token(), which returns the short-lived
+ // JWT used by the authenticated DJ Cloud API. Keep the React adapter for UI auth.
+export const cloudTokenClient = cloudAuthEnabled
+  ? createAuthClient(authUrl)
+  : null;
+
 export interface CloudUser {
   id: string;
   name?: string;
