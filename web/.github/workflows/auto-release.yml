@@ -1,0 +1,125 @@
+name: Auto Build & Release APK
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'legacy/android/app/**'
+      - 'legacy/android/build.gradle.kts'
+      - 'legacy/android/settings.gradle.kts'
+      - 'legacy/android/gradle.properties'
+      - 'legacy/android/gradle/**'
+      - 'legacy/android/gradlew'
+      - 'legacy/android/gradlew.bat'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GRADLE_OPTS: "-Dorg.gradle.caching=true -Dorg.gradle.parallel=true -Dorg.gradle.configureondemand=true"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v5
+
+      - name: Locate Android Project
+        id: locate_android
+        shell: bash
+        run: |
+          if [ -d "legacy/android/app" ] && [ -f "legacy/android/gradlew" ]; then
+            echo "dir=legacy/android" >> "$GITHUB_OUTPUT"
+          elif [ -d "android/app" ] && [ -f "android/gradlew" ]; then
+            echo "dir=android" >> "$GITHUB_OUTPUT"
+          elif [ -d "app" ] && [ -f "gradlew" ] && [ -f "app/build.gradle.kts" ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            echo "No valid Android project found." >&2
+            exit 1
+          fi
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
+      - name: Grant execute permission for gradlew
+        shell: bash
+        run: |
+          ANDROID_DIR="${{ steps.locate_android.outputs.dir }}"
+          test -f "$ANDROID_DIR/gradlew"
+          chmod +x "$ANDROID_DIR/gradlew"
+
+      - name: Read Version Name
+        id: version
+        shell: bash
+        run: |
+          ANDROID_DIR="${{ steps.locate_android.outputs.dir }}"
+          GRADLE_FILE="$ANDROID_DIR/app/build.gradle.kts"
+          VERSION_NAME="$(grep -oP 'versionName\s*=\s*"\K[^"]+' "$GRADLE_FILE" 2>/dev/null || true)"
+          if [ -z "$VERSION_NAME" ]; then VERSION_NAME="3.6.7"; fi
+          echo "version=v$VERSION_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Production Keystore
+        shell: bash
+        run: |
+          KEYSTORE_PATH="${{ github.workspace }}/my-upload-key.jks"
+          if [ -n "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.RELEASE_KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
+          elif [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 --decode > "$KEYSTORE_PATH"
+          elif [ -n "${{ secrets.SIGNING_KEY }}" ]; then
+            echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > "$KEYSTORE_PATH"
+          else
+            echo "No release keystore secret is configured." >&2
+            exit 1
+          fi
+          echo "KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+
+      - name: Build Release APK
+        shell: bash
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/my-upload-key.jks
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD || secrets.KEYSTORE_PASSWORD || secrets.RELEASE_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS || secrets.RELEASE_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD || secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ANDROID_DIR="${{ steps.locate_android.outputs.dir }}"
+          "$ANDROID_DIR/gradlew" :app:assembleRelease --stacktrace --warning-mode none
+
+      - name: Prepare Release APKs
+        shell: bash
+        run: |
+          APK_FILE=$(find "${{ steps.locate_android.outputs.dir }}" -path "*/outputs/apk/release/*.apk" | head -n 1)
+          test -n "$APK_FILE"
+          cp "$APK_FILE" app-update.apk
+          cp "$APK_FILE" app-release.apk
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DJ-APK-Release
+          path: |
+            app-update.apk
+            app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Create Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if gh release view "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            gh release upload "${{ steps.version.outputs.version }}" app-update.apk app-release.apk --clobber
+          else
+            gh release create "${{ steps.version.outputs.version }}" app-update.apk app-release.apk --title "Release ${{ steps.version.outputs.version }}" --notes "Automated Android release."
+          fi

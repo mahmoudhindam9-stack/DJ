@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capability for DJ Desktop main window",
+  "windows": [
+    "main",
+    "dj-control-panel"
+  ],
+  "permissions": [
+    "core:default",
+    "shell:allow-open",
+    "dialog:default",
+    "fs:default",
+    "core:webview:allow-create-webview-window",
+    "core:window:allow-set-always-on-top",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "fs:allow-write-file",
+    "fs:allow-exists"
+  ]
+}

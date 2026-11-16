@@ -1,0 +1,37 @@
+{
+  "name": "dj-desktop",
+  "version": "3.14.5",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node app/scripts/dev.js",
+    "start": "node app/scripts/dev.js",
+    "build": "npm --prefix app install --include=dev && npm --prefix app run build && node -e \"const fs=require('fs'); fs.cpSync('app/dist', 'dist', {recursive:true, force:true});\"",
+    "postinstall": "npm --prefix app install --include=dev",
+    "preview": "npm --prefix app run preview",
+    "lint": "npm --prefix app run lint"
+  },
+  "dependencies": {
+    "@tailwindcss/oxide": "4.0.9",
+    "@tailwindcss/vite": "4.0.9",
+    "@tauri-apps/api": "^2.2.0",
+    "@tauri-apps/cli": "^2.2.0",
+    "@tauri-apps/plugin-dialog": "^2.2.0",
+    "@tauri-apps/plugin-fs": "^2.2.0",
+    "@tauri-apps/plugin-shell": "^2.2.0",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "lucide-react": "^1.16.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwindcss": "4.0.9",
+    "typescript": "^5.7.3",
+    "vite": "^6.2.0",
+    "vite-plugin-pwa": "^2.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  }
+}
