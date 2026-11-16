@@ -94,14 +94,34 @@ function validDeviceId(value) {
 function cleanTrack(value) {
   if (value == null) return null;
   if (typeof value !== 'object' || Array.isArray(value)) throw new Error('Invalid track payload.');
-  const track = { ...value };
-  delete track.audioBlob;
-  const uri = String(track.uri || '');
-  if (/^(blob:|file:|content:|filesystem:)/i.test(uri)) {
-    track.unavailableOnOtherDevices = true;
-    track.uri = '';
+
+  const source = value;
+  const text = (input, max = 2048) => typeof input === 'string' ? input.slice(0, max) : '';
+  const track = {};
+  for (const key of ['id', 'title', 'artist', 'album', 'onlineSource', 'sourceUrl', 'downloadUri']) {
+    const item = text(source[key], key === 'id' ? 512 : 2048);
+    if (item) track[key] = item;
   }
-  return track;
+  for (const key of ['duration', 'addedDate', 'playCount', 'lastPlayed']) {
+    if (Number.isFinite(source[key])) track[key] = Number(source[key]);
+  }
+  if (typeof source.isFavorite === 'boolean') track.isFavorite = source.isFavorite;
+
+  const rawUri = text(source.uri);
+  const isLocalUri = /^(blob:|file:|content:|filesystem:)/i.test(rawUri);
+  const isSafeUri = /^https?:\/\//i.test(rawUri) || rawUri.startsWith('/api/');
+  track.uri = isLocalUri || !isSafeUri ? '' : rawUri;
+  if (isLocalUri || !isSafeUri) track.unavailableOnOtherDevices = true;
+
+  const cover = text(source.coverUri);
+  if (/^https?:\/\//i.test(cover)) track.coverUri = cover;
+  if (Array.isArray(source.fallbackUris)) {
+    track.fallbackUris = source.fallbackUris
+      .filter((item) => typeof item === 'string' && /^https?:\/\//i.test(item))
+      .slice(0, 5)
+      .map((item) => item.slice(0, 2048));
+  }
+  return track.id ? track : null;
 }
 
 function cleanQueue(value) {
