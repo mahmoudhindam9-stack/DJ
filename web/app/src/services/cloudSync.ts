@@ -100,15 +100,7 @@ function describeLocalDevice(): { name: string; platform: CloudDevice['platform'
 
 async function getBearerToken(): Promise<string> {
   if (!cloudTokenClient) throw new Error('DJ Cloud authentication is not configured.');
-  // Neon Managed Auth's public client exposes token() at runtime; the
-  // published React client typings currently omit this JWT helper.
-  const jwtClient = cloudTokenClient as unknown as {
-    token: () => Promise<{
-      data?: { token?: string };
-      error?: { message?: string } | null;
-    }>;
-  };
-  const result = await jwtClient.token();
+  const result = await cloudTokenClient.token();
   if (result.error || !result.data?.token) {
     throw new Error(result.error?.message || 'Your DJ Cloud session has expired. Please sign in again.');
   }
