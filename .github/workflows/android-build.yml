@@ -2,7 +2,9 @@ name: Android Build Verification
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - feature/android-web-parity-cloud-sync
   pull_request:
     branches: [ main ]
 
