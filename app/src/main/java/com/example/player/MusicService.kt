@@ -1,7 +1,6 @@
 package com.example.player
 
 import android.app.*
-import android.content.ComponentName
 import android.content.Intent
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -12,8 +11,6 @@ import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
 import com.example.MainActivity
-import com.example.widget.MusicWidgetProvider
-import android.appwidget.AppWidgetManager
 import kotlinx.coroutines.*
 
 
@@ -160,9 +157,8 @@ class MusicService : Service() {
     }
 
     private fun updateWidget(title: String, artist: String, isPlaying: Boolean) {
-        val widgetManager = AppWidgetManager.getInstance(this)
-        val widgetComponent = ComponentName(this, MusicWidgetProvider::class.java)
-        widgetManager.getAppWidgetIds(widgetComponent).forEach { id -> MusicWidgetProvider.updateAppWidget(this, widgetManager, id, title, artist, isPlaying) }
+        // The retained Time & Weather widget owns the combined weather/music preview.
+        com.example.widget.TimeWeatherWidgetProvider.requestAllUpdates(this)
     }
 
     private fun refreshWidgetFromStoredState() {
