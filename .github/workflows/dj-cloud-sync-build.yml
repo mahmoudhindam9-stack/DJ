@@ -1,0 +1,45 @@
+name: DJ Cloud Sync Build
+on:
+  push:
+    branches:
+      - feature/android-web-parity-cloud-sync
+    paths:
+      - "web/app/package.json"
+      - "web/app/package-lock.json"
+      - "web/app/src/**"
+      - "web/app/scripts/**"
+      - "web/app/db/**"
+      - "web/app/components/**"
+      - "web/app/services/**"
+      - ".github/workflows/dj-cloud-sync-build.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/app/package-lock.json
+      - name: Install and build web
+        working-directory: web/app
+        run: |
+          npm install
+          npm run lint
+          npm run build
+      - name: Commit refreshed lockfile
+        if: always()
+        run: |
+          if git diff --quiet -- web/app/package-lock.json; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add web/app/package-lock.json
+          git commit -m "chore(web): update DJ Cloud Sync dependency lockfile"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
