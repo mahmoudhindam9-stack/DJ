@@ -32,7 +32,11 @@ import { isTauri } from '@tauri-apps/api/core';
 import { join } from '@tauri-apps/api/path';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { exists, writeFile } from '@tauri-apps/plugin-fs';
-import { getOnlineDownloadEndpoint } from './services/OnlineMusicService';
+import { getOnlineDownloadEndpoint, onlineMusicService } from './services/OnlineMusicService';
+import { cloudAuthClient, cloudAuthEnabled, type CloudUser } from './services/cloudAuth';
+import { useCloudSync, type CloudPlaybackState, type CloudPlaybackUpdate } from './services/cloudSync';
+import { CloudSignIn } from './components/CloudSignIn';
+import { CloudDevicesPanel } from './components/CloudDevicesPanel';
 import { CONTROL_CHANNEL_NAME, type DesktopControlCommand, type DesktopControlMessage, type ControlPlayerState } from './services/ControlChannel';
 
 
@@ -46,6 +50,47 @@ type BrowserDownloadFile = {
 type BrowserDownloadDirectory = {
   getFileHandle: (name: string, options?: { create?: boolean }) => Promise<BrowserDownloadFile>;
 };
+
+function hydrateCloudTrack(value: unknown): AudioItem | null {
+  if (!value || typeof value !== 'object') return null;
+  const raw = value as Partial<AudioItem> & { unavailableOnOtherDevices?: boolean };
+  const sourceUrl = String(raw.sourceUrl || '');
+  let uri = String(raw.uri || '');
+  if (!uri || /^(blob:|file:|content:|filesystem:)/i.test(uri)) {
+    switch (raw.onlineSource) {
+      case 'ALBUMATY':
+        if (sourceUrl) uri = onlineMusicService.getAlbumatyStreamEndpoint(sourceUrl);
+        break;
+      case 'OLDIES':
+        if (sourceUrl) uri = onlineMusicService.getOldiesStreamEndpoint(sourceUrl);
+        break;
+      case 'AUDIUS':
+        if (sourceUrl) uri = onlineMusicService.getAudiusStreamEndpoint(sourceUrl);
+        break;
+      case 'QURAN':
+        if (sourceUrl) uri = '/api/quran/stream?url=' + encodeURIComponent(sourceUrl);
+        break;
+    }
+  }
+  if (!uri || /^(blob:|file:|content:|filesystem:)/i.test(uri)) return null;
+  return {
+    id: String(raw.id || sourceUrl),
+    title: String(raw.title || 'Unknown track'),
+    artist: String(raw.artist || 'Unknown artist'),
+    album: String(raw.album || ''),
+    duration: Number(raw.duration) || 0,
+    uri,
+    coverUri: raw.coverUri,
+    addedDate: Number(raw.addedDate) || Date.now(),
+    onlineSource: raw.onlineSource,
+    sourceUrl: raw.sourceUrl,
+    downloadUri: raw.downloadUri,
+    fallbackUris: raw.fallbackUris,
+    isFavorite: Boolean(raw.isFavorite),
+    playCount: Number(raw.playCount) || 0,
+    lastPlayed: Number(raw.lastPlayed) || 0,
+  };
+}
 
 function safeDownloadName(value: string): string {
   const safe = value
@@ -98,7 +143,137 @@ export const App: React.FC = () => {
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle');
   const [updateMessage, setUpdateMessage] = useState<string | null>(null);
 
+  // DJ Cloud identity and the shared single-output device session.
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [cloudAuthChecking, setCloudAuthChecking] = useState(true);
+  const [showCloudSignIn, setShowCloudSignIn] = useState(false);
+  const [cloudSyncNotice, setCloudSyncNotice] = useState<string | null>(null);
+  const cloudPlaybackStateRef = useRef<CloudPlaybackState | null>(null);
+  const hadCloudPlaybackControlRef = useRef(false);
+  const cloudLibrarySyncReadyRef = useRef(false);
+
   const themeColors = THEMES[currentTheme] || THEMES.DJ_BLUE;
+
+  const handleCloudPlaybackState = useCallback((state: CloudPlaybackState | null) => {
+    cloudPlaybackStateRef.current = state;
+  }, []);
+  const cloudSync = useCloudSync(cloudUser, handleCloudPlaybackState);
+  const playbackSyncSnapshotRef = useRef<CloudPlaybackUpdate>({
+    current_track: null,
+    queue: [],
+    is_playing: false,
+    position_ms: 0,
+    duration_ms: 0,
+    playback_mode: 'NORMAL',
+  });
+  playbackSyncSnapshotRef.current = {
+    current_track: currentSong,
+    queue,
+    is_playing: isPlaying,
+    position_ms: Math.max(0, currentTimeMs),
+    duration_ms: Math.max(0, durationMs),
+    playback_mode: playbackMode,
+  };
+
+  useEffect(() => {
+    let active = true;
+    if (!cloudAuthEnabled || !cloudAuthClient) {
+      setCloudAuthChecking(false);
+      return () => { active = false; };
+    }
+    cloudAuthClient.getSession()
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (!error && data?.user) setCloudUser(data.user as CloudUser);
+      })
+      .catch((error) => {
+        if (active) console.warn('DJ Cloud session check failed:', error);
+      })
+      .finally(() => {
+        if (active) setCloudAuthChecking(false);
+      });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!cloudUser || !cloudSync.deviceRegistered) {
+      if (hadCloudPlaybackControlRef.current) {
+        mainAudioEngine.pause();
+        hadCloudPlaybackControlRef.current = false;
+      }
+      return;
+    }
+    if (cloudSync.isOwner) {
+      hadCloudPlaybackControlRef.current = true;
+    } else if (hadCloudPlaybackControlRef.current) {
+      // Another signed-in device claimed playback; never keep two audio outputs active.
+      mainAudioEngine.pause();
+      hadCloudPlaybackControlRef.current = false;
+      setCloudSyncNotice('Playback moved to another device.');
+    }
+  }, [cloudUser?.id, cloudSync.deviceRegistered, cloudSync.isOwner]);
+
+  useEffect(() => {
+    if (!cloudUser || !cloudSync.deviceRegistered || !cloudSync.isOwner) return;
+    const publish = () => {
+      void cloudSync.publishPlayback(playbackSyncSnapshotRef.current);
+    };
+    publish();
+    const timer = window.setInterval(publish, 3000);
+    return () => window.clearInterval(timer);
+  }, [cloudUser?.id, cloudSync.deviceRegistered, cloudSync.isOwner, cloudSync.publishPlayback]);
+
+  useEffect(() => {
+    if (!cloudUser || !cloudSync.deviceRegistered || cloudSync.status !== 'live' || !appDataLoaded) {
+      cloudLibrarySyncReadyRef.current = false;
+      return;
+    }
+    let disposed = false;
+    const initialSync = async () => {
+      try {
+        const remoteRows = await cloudSync.fetchLibrary();
+        if (disposed) return;
+        const localItems = await db.getAllSongs();
+        const localIds = new Set(localItems.map((item) => item.id));
+        const remoteItems = remoteRows
+          .map((row) => {
+            const item = hydrateCloudTrack({ ...row.track, isFavorite: row.is_favorite });
+            return item;
+          })
+          .filter((item): item is AudioItem => Boolean(item));
+        const missingLocal = remoteItems.filter((item) => !localIds.has(item.id));
+        if (missingLocal.length) {
+          await db.addSongs(missingLocal);
+          setLibrary((current) => {
+            const known = new Set(current.map((item) => item.id));
+            return [...current, ...missingLocal.filter((item) => !known.has(item.id))];
+          });
+          setQueue((current) => {
+            const known = new Set(current.map((item) => item.id));
+            return [...current, ...missingLocal.filter((item) => !known.has(item.id))];
+          });
+        }
+        const merged = [...localItems, ...missingLocal];
+        await cloudSync.publishLibrary(merged);
+        cloudLibrarySyncReadyRef.current = true;
+      } catch (error) {
+        console.warn('DJ Cloud library sync failed:', error);
+        setCloudSyncNotice(error instanceof Error ? error.message : 'Library sync failed.');
+      }
+    };
+    void initialSync();
+    return () => { disposed = true; };
+  }, [cloudUser?.id, cloudSync.deviceRegistered, cloudSync.status, cloudSync.fetchLibrary, cloudSync.publishLibrary, appDataLoaded]);
+
+  useEffect(() => {
+    if (!cloudUser || !cloudLibrarySyncReadyRef.current) return;
+    const timer = window.setTimeout(() => {
+      void cloudSync.publishLibrary(library).catch((error) => {
+        setCloudSyncNotice(error instanceof Error ? error.message : 'Library sync failed.');
+      });
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [library, cloudUser?.id, cloudSync.publishLibrary]);
 
   const crossfadeTrack: AudioItem | null = (() => {
     if (!currentSong || queue.length === 0 || playbackMode === 'SHUFFLE' || playbackMode === 'REPEAT_ONE') return null;
@@ -269,6 +444,59 @@ export const App: React.FC = () => {
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
   }, [activeTab, isPlaying, currentSong, volume, queue]);
 
+  const handleCloudAuthenticated = async () => {
+    if (!cloudAuthClient) return;
+    const result = await cloudAuthClient.getSession();
+    if (result.error || !result.data?.user) {
+      throw new Error(result.error?.message || 'DJ Cloud sign-in did not return a valid session.');
+    }
+    setCloudUser(result.data.user as CloudUser);
+    setShowCloudSignIn(false);
+    setCloudSyncNotice(null);
+  };
+
+  const handleCloudSignOut = async () => {
+    await cloudAuthClient?.signOut();
+    setCloudUser(null);
+    setShowCloudSignIn(false);
+    cloudLibrarySyncReadyRef.current = false;
+    setCloudSyncNotice(null);
+  };
+
+  const handleCloudTakeControl = async () => {
+    const remote = await cloudSync.claimPlayback();
+    const remoteQueue = Array.isArray(remote.queue)
+      ? remote.queue.map(hydrateCloudTrack).filter((item): item is AudioItem => Boolean(item))
+      : [];
+    setQueue(remoteQueue);
+    setPlaybackMode(
+      ['NORMAL', 'REPEAT_ONE', 'REPEAT_ALL', 'SHUFFLE'].includes(remote.playback_mode)
+        ? remote.playback_mode as PlaybackMode
+        : 'NORMAL'
+    );
+    const track = hydrateCloudTrack(remote.current_track);
+    if (!track) {
+      mainAudioEngine.pause();
+      setCurrentSong(null);
+      setCurrentTimeMs(0);
+      setCloudSyncNotice(
+        remote.current_track
+          ? 'The current track is stored only on the other device. Choose an online track or a track available on this device.'
+          : 'This device now controls playback.'
+      );
+      return;
+    }
+    setCurrentSong(track);
+    setCurrentRadioStationId(null);
+    setCurrentTimeMs(Math.max(0, Number(remote.position_ms) || 0));
+    setDurationMs(track.duration || Number(remote.duration_ms) || 0);
+    await mainAudioEngine.loadTrack(track);
+    if (Number(remote.position_ms) > 0) mainAudioEngine.seekTo(Number(remote.position_ms));
+    if (remote.is_playing) await mainAudioEngine.play();
+    else mainAudioEngine.pause();
+    setCloudSyncNotice('Playback moved to this device.');
+  };
+
   // Pick the next random track without repeating until the current queue cycle is exhausted.
   const pickNextShuffleTrack = useCallback((tracks: AudioItem[], currentId?: string): AudioItem | null => {
     if (tracks.length === 0) return null;
@@ -318,6 +546,10 @@ export const App: React.FC = () => {
 
   // Play Song
   const handlePlaySong = (song: AudioItem, customQueue?: AudioItem[], recordShuffleHistory = true) => {
+    if (cloudUser && cloudSync.deviceRegistered && !cloudSync.isOwner) {
+      setCloudSyncNotice('Playback is active on another device. Use “Move playback to this device” first.');
+      return;
+    }
     if (customQueue && customQueue.length > 0) {
       setQueue(customQueue);
       const validIds = new Set(customQueue.map((track) => track.id));
@@ -349,6 +581,10 @@ export const App: React.FC = () => {
 
   // Play / Pause Toggle
   const handlePlayPause = () => {
+    if (cloudUser && cloudSync.deviceRegistered && !cloudSync.isOwner) {
+      setCloudSyncNotice('Playback is active on another device. Move playback here before controlling it.');
+      return;
+    }
     if (!currentSong) {
       if (queue.length > 0) {
         handlePlaySong(queue[0]);
@@ -366,6 +602,7 @@ export const App: React.FC = () => {
   };
 
   const handleNext = () => {
+    if (cloudUser && cloudSync.deviceRegistered && !cloudSync.isOwner) return;
     if (queue.length === 0) return;
     if (playbackMode === 'SHUFFLE') {
       const randomTrack = pickNextShuffleTrack(queue, currentSong?.id);
@@ -378,6 +615,7 @@ export const App: React.FC = () => {
   };
 
   const handlePrev = () => {
+    if (cloudUser && cloudSync.deviceRegistered && !cloudSync.isOwner) return;
     if (queue.length === 0) return;
     if (currentTimeMs > 3000) {
       mainAudioEngine.seekTo(0);
@@ -410,6 +648,7 @@ export const App: React.FC = () => {
   };
 
   const handleSeek = (positionMs: number) => {
+    if (cloudUser && cloudSync.deviceRegistered && !cloudSync.isOwner) return;
     const engineDuration = mainAudioEngine.durationMs;
     const safeDuration = engineDuration > 0 ? engineDuration : durationMs;
     const safePosition = Math.max(0, safeDuration > 0 ? Math.min(safeDuration, positionMs) : positionMs);
@@ -456,6 +695,9 @@ export const App: React.FC = () => {
 
   const handleDeleteSong = async (id: string) => {
     await db.deleteSong(id);
+    if (cloudUser) void cloudSync.deleteLibraryTrack(id).catch((error) => {
+      setCloudSyncNotice(error instanceof Error ? error.message : 'Could not sync library deletion.');
+    });
     const updated = library.filter((s) => s.id !== id);
     setLibrary(updated);
     setQueue(queue.filter((s) => s.id !== id));
@@ -492,17 +734,29 @@ export const App: React.FC = () => {
   // Playlists
   const handleCreatePlaylist = async (name: string): Promise<Playlist> => {
     const created = await db.createPlaylist(name);
+    if (cloudUser) {
+      void cloudSync.createCloudPlaylist(created.name, created.id).catch((error) => {
+        setCloudSyncNotice(error instanceof Error ? error.message : 'Could not sync playlist.');
+      });
+    }
     setPlaylists((current) => [...current.filter((playlist) => playlist.id !== created.id), created]);
     return created;
   };
 
   const handleDeletePlaylist = async (id: string) => {
     await db.deletePlaylist(id);
+    if (cloudUser) void cloudSync.deleteCloudPlaylist(id).catch((error) => {
+      setCloudSyncNotice(error instanceof Error ? error.message : 'Could not sync playlist deletion.');
+    });
     setPlaylists(playlists.filter((p) => p.id !== id));
   };
 
   const handleAddSongToPlaylist = async (playlistId: string, song: AudioItem) => {
     await db.addSongToPlaylist(playlistId, song);
+    if (cloudUser) {
+      void cloudSync.publishLibrary([song]).then(() => cloudSync.addCloudPlaylistTrack(playlistId, song.id))
+        .catch((error) => setCloudSyncNotice(error instanceof Error ? error.message : 'Could not sync playlist item.'));
+    }
     const refreshed = await db.getPlaylists();
     setPlaylists(refreshed);
   };
@@ -962,6 +1216,47 @@ export const App: React.FC = () => {
       } as React.CSSProperties}
     >
       {/* Top Windows Native Desktop Title Bar */}
+      <div className="fixed right-3 top-3 z-[110] sm:right-5">
+        {!cloudUser ? (
+          <button
+            onClick={() => setShowCloudSignIn(true)}
+            disabled={cloudAuthChecking || !cloudAuthEnabled}
+            className="rounded-full border px-3 py-2 text-xs font-bold shadow-xl backdrop-blur-xl disabled:opacity-50"
+            style={{ background: 'rgba(10,20,34,.94)', borderColor: 'rgba(83,153,230,.45)', color: '#eaf4ff' }}
+            title={cloudAuthEnabled ? 'Sign in to DJ Cloud' : 'DJ Cloud authentication is not configured'}
+          >
+            ☁ DJ Cloud
+          </button>
+        ) : (
+          <CloudDevicesPanel
+            deviceId={cloudSync.deviceId}
+            devices={cloudSync.devices}
+            state={cloudSync.state}
+            status={cloudSync.status}
+            error={cloudSync.error}
+            onTakeControl={handleCloudTakeControl}
+            onRefresh={cloudSync.refreshDevices}
+            onSignOut={handleCloudSignOut}
+          />
+        )}
+      </div>
+      {cloudSyncNotice && (
+        <div className="fixed bottom-20 left-1/2 z-[120] -translate-x-1/2 rounded-xl border px-4 py-2 text-xs shadow-xl"
+             style={{ background: 'rgba(10,20,34,.96)', borderColor: 'rgba(83,153,230,.4)', color: '#eaf4ff' }}>
+          {cloudSyncNotice}
+          <button className="ml-3 opacity-70" onClick={() => setCloudSyncNotice(null)} aria-label="Dismiss">×</button>
+        </div>
+      )}
+      {showCloudSignIn && cloudAuthEnabled && (
+        <div className="fixed inset-0 z-[200]">
+          <CloudSignIn onAuthenticated={handleCloudAuthenticated} />
+          <button
+            onClick={() => setShowCloudSignIn(false)}
+            className="absolute right-4 top-4 rounded-full bg-black/40 px-3 py-2 text-sm font-bold text-white"
+            aria-label="Close DJ Cloud sign in"
+          >×</button>
+        </div>
+      )}
       <TitleBar
         activeTab={activeTab}
         onTabChange={setActiveTab}
