@@ -1,0 +1,187 @@
+.dj-platter-stage {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0;
+}
+.dj-turntable-base {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  width: min(100%, 260px);
+  height: clamp(110px, 16vh, 148px);
+  padding-left: 7%;
+  overflow: hidden;
+  border: 1px solid;
+  border-radius: 14px;
+  background:
+    linear-gradient(145deg, rgba(255,255,255,.13), transparent 28%),
+    linear-gradient(145deg, #3b3f47 0%, #24272e 44%, #17191e 100%);
+  box-shadow: 0 8px 18px rgba(0,0,0,.24), inset 0 1px 1px rgba(255,255,255,.16), inset 0 -3px 6px rgba(0,0,0,.42);
+}
+.dj-turntable-base::before {
+  content: "";
+  position: absolute;
+  inset: 6px;
+  border: 1px solid rgba(255,255,255,.055);
+  border-radius: 10px;
+  pointer-events: none;
+}
+.dj-turntable-light {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.dj-vinyl-shadow {
+  position: absolute;
+  z-index: 1;
+  left: 6%;
+  top: 50%;
+  height: 82%;
+  aspect-ratio: 1;
+  transform: translateY(-47%) scale(.96);
+  border-radius: 50%;
+  background: #050608;
+  filter: blur(8px);
+  opacity: .95;
+  pointer-events: none;
+}
+.dj-vinyl-disc {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 auto;
+  height: 82%;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 4px solid #0a0b0d;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 50%, #050608 0 7%, transparent 7.5%),
+    repeating-radial-gradient(circle at 50% 50%, #121418 0 1.4px, #2d3036 1.7px 2.3px, #111317 2.6px 4.7px);
+  box-shadow: 0 6px 14px rgba(0,0,0,.64), inset 0 0 0 2px rgba(255,255,255,.09), 0 0 0 2px #50545d;
+  cursor: grab;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  will-change: transform;
+}
+.dj-vinyl-disc.is-scratching {
+  cursor: grabbing;
+}
+.dj-vinyl-disc.is-empty {
+  cursor: default;
+  opacity: .78;
+}
+.dj-vinyl-highlight {
+  position: absolute;
+  inset: -18%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(from 18deg, transparent 0deg 36deg, rgba(255,255,255,.085) 51deg, transparent 74deg 176deg, rgba(255,255,255,.055) 198deg, transparent 222deg 360deg);
+  mix-blend-mode: screen;
+}
+.dj-vinyl-label {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  width: 34%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid;
+  border-radius: 50%;
+  color: #f7f8fa;
+  text-align: center;
+  box-shadow: inset 0 0 0 2px rgba(0,0,0,.36), 0 2px 5px rgba(0,0,0,.5);
+  pointer-events: none;
+}
+.dj-vinyl-label-top {
+  font-size: 6px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: .08em;
+}
+.dj-vinyl-label-deck {
+  margin: 1px 0;
+  font-size: 13px;
+  font-weight: 950;
+  line-height: .95;
+  text-shadow: 0 1px 2px #000;
+}
+.dj-vinyl-label-bottom {
+  font-size: 5px;
+  font-weight: 800;
+  opacity: .9;
+}
+.dj-vinyl-spindle {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  width: 4px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border: 1px solid #e8e9ed;
+  border-radius: 50%;
+  background: #9499a4;
+  pointer-events: none;
+}
+.dj-tonearm {
+  position: absolute;
+  z-index: 4;
+  right: 8%;
+  top: 14%;
+  width: 28%;
+  height: 15%;
+  pointer-events: none;
+}
+.dj-tonearm-pivot {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  width: 18px;
+  height: 18px;
+  transform: translate(30%, -50%);
+  border: 2px solid #9a9eaa;
+  border-radius: 50%;
+  background: radial-gradient(circle, #4b4f59 0 25%, #16181d 30% 100%);
+}
+.dj-tonearm-shaft {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  width: 75%;
+  height: 4px;
+  transform: translateY(-50%) rotate(28deg);
+  transform-origin: right center;
+  border-radius: 99px;
+  background: linear-gradient(180deg, #e1e3e8, #696e78 48%, #2a2d34);
+}
+.dj-tonearm-head {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 14px;
+  height: 9px;
+  transform: translateY(-50%) rotate(28deg);
+  border-radius: 2px;
+  background: linear-gradient(135deg, #c6cad2, #3d414a);
+}
+.dj-turntable-led {
+  position: absolute;
+  z-index: 5;
+  left: 7%;
+  bottom: 9px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  box-shadow: 0 0 8px currentColor;
+  pointer-events: none;
+}

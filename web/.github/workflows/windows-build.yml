@@ -1,0 +1,174 @@
+name: Windows PC Build
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'app/**'
+      - 'setup.bat'
+      - 'uninstall.bat'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'app/**'
+      - 'setup.bat'
+      - 'uninstall.bat'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Verify package root
+        shell: powershell
+        run: |
+          $required = @('setup.bat', 'uninstall.bat', 'package.json', 'metadata.json')
+          foreach ($file in $required) {
+            if (-not (Test-Path $file)) {
+              Write-Error "Missing required root file: $file"
+              exit 1
+            }
+          }
+          $allowed = @(
+            'setup.bat',
+            'uninstall.bat',
+            'package.json',
+            'metadata.json',
+            'vercel.json',
+            'bun.lock',
+            'bun.lockb',
+            'package-lock.json',
+            '.gitignore',
+            '.gitattributes',
+            'README.md',
+            'LICENSE',
+            'tsconfig.json'
+          )
+          $unexpected = Get-ChildItem -Path . -File | Where-Object {
+            $_.Name -notin $allowed -and
+            $_.Name -notmatch '^\.(git|env)' -and
+            $_.Extension -notin @('.md', '.txt', '.lock', '.json')
+          }
+          if ($unexpected) {
+            $unexpected | ForEach-Object { Write-Error "Unexpected root file: $($_.Name)" }
+            exit 1
+          }
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Read app version
+        id: version
+        shell: powershell
+        run: |
+          $version = node -p "require('./app/package.json').version"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building PC release v$version"
+
+      - name: Install dependencies
+        shell: powershell
+        run: |
+          npm install --include=dev --no-audit --no-fund
+          Push-Location app
+          npm install --include=dev --no-audit --no-fund
+          Pop-Location
+
+      - name: Build production app
+        working-directory: app
+        run: npm run build
+
+      - name: Verify PC installer, updater, and online music
+        shell: powershell
+        run: |
+          $required = @(
+            'setup.bat',
+            'uninstall.bat',
+            'app/scripts/setup.ps1',
+            'app/scripts/uninstall.ps1',
+            'app/scripts/run-dj-desktop.bat',
+            'app/scripts/run-dj-desktop.vbs',
+            'app/scripts/server.js',
+            'app/scripts/apply-update.ps1',
+            'app/scripts/set-window-always-on-top.ps1',
+            'app/src/services/UpdateService.ts',
+            'app/scripts/apply-update.ps1',
+            'app/src/services/LocalMusicService.ts',
+            'app/src/components/screens/AIMusicStudioScreen.tsx',
+            'app/scripts/setup-local-music-ai.ps1',
+            'app/src/components/screens/OnlineMusicScreen.tsx',
+            'app/src/services/OnlineMusicService.ts',
+            'app/dist/index.html'
+          )
+          foreach ($path in $required) {
+            if (-not (Test-Path $path)) {
+              Write-Error "Missing required file: $path"
+              exit 1
+            }
+          }
+
+          node --check app/scripts/server.js
+          if ($LASTEXITCODE -ne 0) { throw "The update/search server failed its syntax check." }
+          $tokens = $null
+          $parseErrors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'app/scripts/apply-update.ps1'), [ref]$tokens, [ref]$parseErrors) | Out-Null
+          if ($parseErrors.Count -gt 0) {
+            $parseErrors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          $mediaSource = Get-Content 'app/src/App.tsx' -Raw
+          foreach ($action in @('nexttrack', 'previoustrack', 'seekto')) {
+            if (-not $mediaSource.Contains($action)) { throw "Missing Media Session action: $action" }
+          }
+          $updateSource = Get-Content 'app/scripts/apply-update.ps1' -Raw
+          foreach ($requiredText in @('Downloads', 'DJ-Desktop-PC-v$TargetVersion.zip', 'Expand-And-VerifyPackage')) {
+            if (-not $updateSource.Contains($requiredText)) { throw "Missing updater behavior: $requiredText" }
+          }
+
+      - name: Package Windows PC release
+        id: package
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        shell: powershell
+        run: |
+          $stage = Join-Path $env:RUNNER_TEMP 'DJ-Desktop-PC-Package'
+          New-Item -ItemType Directory -Path (Join-Path $stage 'app') -Force | Out-Null
+          robocopy app (Join-Path $stage 'app') /E /XD node_modules .git
+          if ($LASTEXITCODE -ge 8) {
+            throw "Copying the production app into the PC release package failed (robocopy exit $LASTEXITCODE)."
+          }
+          # Robocopy returns 1 when files are copied successfully; clear it so GitHub Actions does not mark packaging as failed.
+          $global:LASTEXITCODE = 0
+          Copy-Item setup.bat, uninstall.bat -Destination $stage -Force
+          $zipName = "DJ-Desktop-PC-v${{ steps.version.outputs.version }}.zip"
+          $zipPath = Join-Path $env:GITHUB_WORKSPACE $zipName
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zipPath -Force
+          if (-not (Test-Path $zipPath)) { throw "The Windows PC release ZIP was not created." }
+          $latestZipPath = Join-Path $env:GITHUB_WORKSPACE 'DJ-Desktop-PC-Latest.zip'
+          Copy-Item -LiteralPath $zipPath -Destination $latestZipPath -Force
+          Write-Host "Created $zipName and stable latest-package alias"
+
+      - name: Publish PC release
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: DJ Desktop Studio v${{ steps.version.outputs.version }}
+          body: |
+            Automated Windows PC release v${{ steps.version.outputs.version }}.
+            Includes full Hiba Music (hibamusic.com) Oldies & Classics integration, direct audio streaming & download proxies, pure ASCII Windows setup engine (setup.bat & setup.ps1), and Vercel dual-root deployment support.
+            Preserves audio-engine behavior, crossfade, playlists, downloads, radio playback, desktop control center, and self-update flow.
+          files: |
+            DJ-Desktop-PC-v${{ steps.version.outputs.version }}.zip
+            DJ-Desktop-PC-Latest.zip
+          overwrite_files: true
+          make_latest: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
